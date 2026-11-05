@@ -7,6 +7,17 @@
 
 ## River cross-port research and PON correlation candidate (2026-11-05)
 
+The exact River Android kernel at e098be34e94ab00ad922803492995eef75017d78
+defines QG offset 0xbf as QG_SOC_MONOTONIC_REG. Its qg-soc.c computes and
+updates msoc in software, then qg-util.c writes the scaled value to this
+register (msoc * 255 / 100). Thus the River survey's raw soc= field is a
+software-maintained monotonic estimate, not an independently live hardware
+percentage; iOS has not implemented that update path. It may retain an old
+value or be uninitialized. This is separate from intermittent observer data
+failures. Sources: https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/e098be34e94ab00ad922803492995eef75017d78/drivers/power/supply/qcom/qg-soc.c
+and https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/e098be34e94ab00ad922803492995eef75017d78/drivers/power/supply/qcom/qg-util.c
+The previous 0261 CI run 42115681088 completed successfully for fed652f.
+
 The MSM8953 mainline port at 770e10fa15a00051eaef862e4cb2724f2f8fa568
 contains both sdm632-motorola-river.dts and sdm632-motorola-ocean.dts.
 Neither device tree nor that revision's pmi632.dtsi describes an active
@@ -32,8 +43,13 @@ identify other actors. The experiment tests a concrete shared-arbiter
 contention hypothesis, not whether a global lock is sufficient. Sanitizer
 tests cover PON success/error/timeout and balanced counters, overlap cases,
 busy/output failure; ARM64 object compile passed. Signed reader staged at
-/tmp/river-pon-reader-1105. Full build and phone test remain pending. CI
-42115681088 for prior 0261 still running at last check.
+/tmp/river-pon-reader-1105. Full local build a46263ab63a9488f030be2300f6172df20e4b3e0 succeeded;
+source matches tested candidate and host tests passed. Kernel SHA256
+1f20d8e6bfb52131760bdb577e6e868ea6784c9d2613ca79ced460ddba98b451;
+temporary image SHA256 d21b991e0c2c3295376a647880c8251c9cd705e07744a328b9f76bc4aadff266
+preserves golden shim, DTB, firmware and backlight. Fastboot handoff
+requested; phone test pending. CI 42118664964 for this commit is in progress.
+Prior CI 42115681088 completed successfully for 0261.
 
 ## River observer status correlation hardware result (2026-11-05)
 
