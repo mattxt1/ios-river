@@ -5,6 +5,30 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River QG diagnostic build and gate soak (2026-11-05)
+
+On the existing 0264 RAM boot, 128 alternating surveys completed 16,384
+identity transactions with 8,192 expected types and 8,192 expected subtypes,
+no unexpected values or reported transaction errors. Gate counters moved from
+acquired=43588 busy=14 poisoned=0 at an earlier check to acquired=72847
+busy=42 poisoned=0 after the workload. Other activity ran between snapshots;
+these counters do not identify affected callers. Results saved outside Git at
+/Users/matttyson/Documents/Codex/2026-11-05/river-battery-implementation/work/gate-soak.txt.
+This is not a timeout or key-poison test.
+
+Commit ac82534b11fe4a1384f59cd3ba975c9c08aeb900 built locally with Xcode
+beta and KDK 13.5; patched source matched the candidate. Kernel SHA256
+ec9e4f51d352945734c577c63b2fcb1be579cf78e5115abb96fb33b00833df01.
+ASan/UBSan arithmetic boundary check and signed iOS reader compilation passed.
+Temporary diagnostic image SHA256
+d2611f97faa38fa8870fdc2d0172dc0b35c01af81487ed5fb2a992e83621b1f1;
+golden payload reconstructed, firmware, shim, DTB and backlight preserved.
+Image is /Users/matttyson/Documents/Codex/2026-11-05/river-battery-implementation/work/river-qg-survey-boot.img.
+No partition was flashed. User asked to enter fastboot for the temporary test;
+boot, actual measurements and independent comparison remain pending. CI
+42127748140 cancelled before starting: GitHub reports macos-14-arm64-us-default
+unsupported. Retry 42127927283 on macos-15 is queued at this writing.
+
 ## River read-only QG diagnostic candidate (2026-11-05)
 
 Phone reachable over USB; existing 0264 gate reported acquired=43588 busy=14
