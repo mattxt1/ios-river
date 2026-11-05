@@ -1,0 +1,70 @@
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -52,6 +52,7 @@
+ static int ri_vib_request = -1; /* sysctl mailbox; only input worker touches QUP2 */
+ void river_haptics_init(void);
+ void river_vibrate(unsigned ms);
++static uint32_t ri_pon_started, ri_pon_finished;
+ static int ri_chan;
+ static char ri_rtc_note[96] = "RIVER RTC: not read";
+ static char ri_perf_note[1024];
+@@ -227,14 +228,18 @@
+ ri_pon(uint8_t *v)
+ {
+  if (!ri_pon_ok) return false;
++ __atomic_add_fetch(&ri_pon_started,1,__ATOMIC_SEQ_CST);
+  ri_wr(ri_obs, 0, (1u << 27) | 0x100); /* EXT_READL of SID0 0x810 */
++ bool ok=false;
+  for (unsigned i = 0; i < 1000; i++) {
+   unsigned s = ri_rd(ri_obs, 8);
+-  if (s & 1) { if (s & 14) return false; *v = (uint8_t)ri_rd(ri_obs,0x18); return true; }
++  if (s & 1) { if (!(s & 14)) { *v = (uint8_t)ri_rd(ri_obs,0x18); ok=true; } break; }
+   delay(1);
+  }
+- return false;
++ __atomic_add_fetch(&ri_pon_finished,1,__ATOMIC_SEQ_CST);
++ return ok;
+ }
++
+ /*
+  * Boot-arg rivergpu=1: read-only Adreno 506 power/clock survey (river DT:
+  * kgsl-3d0 0x1c00000, chipid 0x05000600; gdsc_oxili_cx 0x185904c,
+@@ -3456,6 +3461,38 @@
+ SYSCTL_PROC(_debug, OID_AUTO, river_charge_status, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
+             NULL, 0, river_charge_status_sysctl, "A", "River observer status and data survey");
+ 
++/* Correlate PON traffic with data changes; counters are observations, not a lock.
++ * A poll that begins and ends between snapshots is detected by its start count. */
++static int
++river_charge_pon_sysctl SYSCTL_HANDLER_ARGS
++{
++ if (!__atomic_load_n(&ri_power_ready,__ATOMIC_ACQUIRE) || !ri_charge_chgr) return ENXIO;
++ int expected=0;
++ if (!__atomic_compare_exchange_n(&ri_power_busy,&expected,1,false,__ATOMIC_ACQ_REL,__ATOMIC_ACQUIRE)) return EBUSY;
++ unsigned errors=0,zero=0,two=0,other=0,c10=0,c100=0,over10=0,over100=0,co10=0,co100=0;
++ uint32_t last_error=0;
++ for (unsigned i=0;i<64;i++) {
++  uint32_t ps=__atomic_load_n(&ri_pon_started,__ATOMIC_SEQ_CST);
++  uint32_t pf=__atomic_load_n(&ri_pon_finished,__ATOMIC_SEQ_CST), status=0,first=0;
++  if (!ri_charge_alt_read(ri_charge_chgr,4,&status,&first)) { errors++; last_error=status; continue; }
++  delay(10); uint32_t d10=ri_rd(ri_charge_chgr,0x18)&0xffu;
++  uint32_t p10=__atomic_load_n(&ri_pon_started,__ATOMIC_SEQ_CST);
++  delay(90); uint32_t d100=ri_rd(ri_charge_chgr,0x18)&0xffu;
++  uint32_t p100=__atomic_load_n(&ri_pon_started,__ATOMIC_SEQ_CST);
++  bool o10=(ps!=pf)||(p10!=ps), o100=(ps!=pf)||(p100!=ps);
++  bool x10=first!=d10, x100=first!=d100;
++  if (first==0) zero++; else if (first==2) two++; else other++;
++  c10+=x10; c100+=x100; over10+=o10; over100+=o100; co10+=x10&&o10; co100+=x100&&o100;
++ }
++ char note[384];
++ snprintf(note,sizeof(note),"trials=64 zero=%u two=%u other=%u errors=%u last_error=%#x changed10=%u changed100=%u pon10=%u pon100=%u change_pon10=%u change_pon100=%u",zero,two,other,errors,last_error,c10,c100,over10,over100,co10,co100);
++ int error=sysctl_handle_string(oidp,note,0,req);
++ __atomic_store_n(&ri_power_busy,0,__ATOMIC_RELEASE);
++ return error;
++}
++SYSCTL_PROC(_debug, OID_AUTO, river_charge_pon, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
++            NULL, 0, river_charge_pon_sysctl, "A", "River PON traffic correlation survey");
++
+ static vm_offset_t
+ ri_spmi_chnl(vm_offset_t core, unsigned ppid)
+ {

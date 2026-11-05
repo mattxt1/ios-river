@@ -5,6 +5,36 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River cross-port research and PON correlation candidate (2026-11-05)
+
+The MSM8953 mainline port at 770e10fa15a00051eaef862e4cb2724f2f8fa568
+contains both sdm632-motorola-river.dts and sdm632-motorola-ocean.dts.
+Neither device tree nor that revision's pmi632.dtsi describes an active
+QG/battery node; absence is not proof of overall project feature status.
+Source: https://github.com/msm8953-mainline/linux/tree/770e10fa15a00051eaef862e4cb2724f2f8fa568/arch/arm64/boot/dts/qcom
+A separate Samsung PMI632 port reports battery and charging; its pinned
+kernel bfc65082a3642a2f1448e942e573fea4f51518d9 qcom_smbx.c uses QG
+last ADC voltage/current at offsets c0/c2, signed/scaled samples, current
+integration, OCV and battery-specific capacity information. Its Linux
+SPMI driver serializes command through data under a controller IRQ-safe
+spinlock. Source: https://github.com/yarons/linux_msm89x7/blob/bfc65082a3642a2f1448e942e573fea4f51518d9/drivers/power/supply/qcom_smbx.c
+This is not proof its algorithm or charge control is appropriate for River.
+Do not treat a raw QG byte as validated battery percentage.
+
+River's input worker polls PON via SPMI throughout operation, separately
+from power surveys and outside their busy gate. Patch 0262 instruments PON
+starts and completions and correlates possible overlaps with delayed charger
+data changes without blocking the input worker, disabling interrupts or
+changing PMIC controls. Samples and counter reads are not simultaneous;
+counts are conservative candidates, not proof of bus-level overlap. They
+can include a poll ending/starting during the snapshot window and cannot
+identify other actors. The experiment tests a concrete shared-arbiter
+contention hypothesis, not whether a global lock is sufficient. Sanitizer
+tests cover PON success/error/timeout and balanced counters, overlap cases,
+busy/output failure; ARM64 object compile passed. Signed reader staged at
+/tmp/river-pon-reader-1105. Full build and phone test remain pending. CI
+42115681088 for prior 0261 still running at last check.
+
 ## River observer status correlation hardware result (2026-11-05)
 
 Fastboot identified product river; temporary boot of local 0261 image
