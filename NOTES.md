@@ -5,6 +5,42 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River observer data-register diagnostic candidate (2026-11-05)
+
+On the same live diagnostic boot, an additional eight timing runs of 64
+transactions per phase yielded immediate zero counts 0,3,2,2,1,1,1,0 and
+one transaction error; delayed zero counts 5,1,2,2,1,3,3,2. This confirms
+intermittent identity failures, not their root cause. In the existing River
+source, the RTC, haptic reset, and wireless survey use other PPIDs, so a
+controller-wide lock is only a hypothesis; same-channel interference has not
+been demonstrated. Android's IRQ-safe controller lock and read sequence were
+compared with the pinned Motorola kernel; do not infer that copying its lock is
+a safe or sufficient fix.
+
+Patch 0258 adds an opt-in read-only sysctl that compares the first data-register
+value after DONE with two immediate reads of that same register, without issuing
+a new PMIC transaction. It records the number of changed and zero-containing
+triples, plus transaction failures; stable incorrect values are still possible
+and not evidence of correctness. It shares the existing survey-only busy gate,
+not a global arbiter lock. The diagnostic must not drive battery properties,
+charging, or torch. The survey reader adds `--rdata`. A targeted sanitizer host
+test covers stable values, inconsistent data register reads, transaction
+errors, unavailable/busy and output errors; both new and prior timing tests
+pass. The exact patched XNU source compiled locally to an ARM64 object using
+the run 41093918442 build tree, and the patch applied cleanly to that exact
+source. The iOS reader built and was ad-hoc signed. Neither a complete kernel
+link/CI build nor hardware execution of patch 0258 has occurred; this is a
+candidate diagnostic, not a battery-reading fix.
+
+The GitHub workflow needs a remote ref containing patch 0258. This checkout's
+commits are local and have not been published. The saved GitHub build artifact
+includes headers and link intermediates but not all CI link libraries; local
+object compilation does not substitute for a kernel link. Next, use an
+approved remote branch and dispatch `xnu.yml` with `board=river`, verify its
+exact commit and artifact, package against the known-good image, then only RAM
+boot after checking device state. Compare repeated RDATA values before choosing
+a targeted correction; never infer actual charge percentage from this test.
+
 ## River power-observer timing hardware test (2026-11-05)
 
 At the user's direction, with USB connected, verified `product: river` and image

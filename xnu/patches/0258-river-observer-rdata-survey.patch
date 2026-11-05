@@ -1,0 +1,40 @@
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+index b77784f..8503d1b 100644
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -3321,6 +3321,35 @@ river_charge_timing_sysctl SYSCTL_HANDLER_ARGS
+ SYSCTL_PROC(_debug, OID_AUTO, river_charge_timing, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
+             NULL, 0, river_charge_timing_sysctl, "A", "River SPMI observer timing survey");
+ 
++/* Compare repeated reads of the SAME completed transaction's RDATA register.
++ * This is an opt-in diagnostic, not a source of trusted power information. */
++static int
++river_charge_rdata_sysctl SYSCTL_HANDLER_ARGS
++{
++ if (!__atomic_load_n(&ri_power_ready, __ATOMIC_ACQUIRE) || !ri_charge_chgr) return ENXIO;
++ int expected = 0;
++ if (!__atomic_compare_exchange_n(&ri_power_busy, &expected, 1, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) return EBUSY;
++ unsigned zero=0, two=0, other=0, errors=0, changed=0, mismatch_zero=0;
++ for (unsigned i=0; i<64; i++) {
++  uint32_t st=0, value=0;
++  if (!ri_charge_timing_read(ri_charge_chgr, 0, &st, &value)) { errors++; continue; }
++  uint32_t second=ri_rd(ri_charge_chgr, 0x18)&0xffu;
++  uint32_t third=ri_rd(ri_charge_chgr, 0x18)&0xffu;
++  if (value==0) zero++; else if (value==2) two++; else other++;
++  if (value!=second || value!=third) {
++   changed++;
++   if (value==0 || second==0 || third==0) mismatch_zero++;
++  }
++ }
++ char note[224];
++ snprintf(note, sizeof(note), "trials=64 first_zero=%u first_two=%u first_other=%u errors=%u changed=%u changed_includes_zero=%u", zero,two,other,errors,changed,mismatch_zero);
++ int error=sysctl_handle_string(oidp,note,0,req);
++ __atomic_store_n(&ri_power_busy,0,__ATOMIC_RELEASE);
++ return error;
++}
++SYSCTL_PROC(_debug, OID_AUTO, river_charge_rdata, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
++            NULL, 0, river_charge_rdata_sysctl, "A", "River repeated observer data survey");
++
+ static vm_offset_t
+ ri_spmi_chnl(vm_offset_t core, unsigned ppid)
+ {
