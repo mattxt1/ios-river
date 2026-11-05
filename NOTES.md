@@ -5,6 +5,40 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River power-observer timing hardware test (2026-11-05)
+
+At the user's direction, with USB connected, verified `product: river` and image
+SHA256 b34d68ec3a834e6741a99dd0bdc39fd387836d6e93ed2f54a8f61ee9be947a53;
+`fastboot boot` send and boot succeeded. No partition was flashed. The USB ECM
+interface enumerated and root SSH worked. The user reported a responsive lock
+screen; wallpaper had not yet appeared during startup. The diagnostic reader
+was copied to `/tmp/river-timing-reader-1105` on the phone's writable root.
+USB log is in this session's work/river-timing-live.log, outside Git.
+
+Three timing samples, each 64 immediate and 64 delayed transactions reading
+charger type, returned immediate zero/two/error counts of 10/54/0, 5/59/0,
+1/63/0; delayed counts were 4/60/0, 6/58/0, 1/63/0. The immediate first
+status was DONE in 0, 1, 1 trials; delayed first status was DONE in all 64
+trials in each sample. A 10 us delay therefore did not eliminate zero reads;
+this comparison does not establish why they occur or whether either value is
+fresh. Two charge samples returned type/subtype 0x2/0x80, state 0x47, errors
+0x8, command 0, path 0x95. Live samples differed: cfg 0 then 0xff, USB IRQ
+0x10 then 0, and one individually read voltage byte was 0 despite matching
+nonzero two-byte reads. The values are untrusted; charging and SOC remain
+unknown. No charger control or torch output was requested. The first retry of
+SSH timed out during banner exchange, and a later connection succeeded.
+
+Offline comparison to the pinned LineageOS Motorola `spmi-pmic-arb.c` shows
+that Android serializes arbiter commands and data reads with a controller-wide
+IRQ-safe spin lock. River's power survey gate only serializes its own survey
+sysctls; other SPMI operations do not share that gate. This difference is a
+lead, not proof of a race or of the zero-read cause. The Android read path
+also issues EXT_READL and checks DONE and error flags, so the similarity of
+those steps alone does not establish fidelity. Audit controller ownership,
+channel mapping and lock/interrupt context before designing a controlled
+comparison; do not add a lock that could deadlock boot-time or interrupt paths.
+The phone was left booted in the survey image, with USB connected as requested.
+
 ## River power-observer test preparation (2026-11-05)
 
 The phone was detected in fastboot and `product` returned `river`. Fastboot did
