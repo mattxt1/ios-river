@@ -5,6 +5,47 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River 0260 post-DONE survey result (2026-11-05)
+
+User restored the Mac USB alias after re-enumeration; USB and SSH returned
+on the 0260 temporary boot. A private follow receiver is active at
+work/river-settle-live-2.log. Sixteen --settle runs of 64 transactions
+produced 1,024 attempts: 27 initial zeroes, 995 initial twos, no other initial
+values, and two transaction errors, both status 0x9 (DONE | DROPPED per
+the pinned Motorola arbiter source). The 10 us sample differed from the
+first in 21 transactions; the 100 us sample differed in 63. No initial zero
+changed to two at either time; 63 transactions initially reading two had
+zero at one or both delayed samples. Counts overlap and are not independent.
+The survey issues no second command within a sampled transaction, but the
+busy gate covers only these diagnostics: another actor, arbiter behavior,
+MMIO semantics or other causes remain possible. Repeated reads and values
+matching the expected type do not establish freshness. This result argues
+against simply waiting 10 or 100 us after DONE to repair initial zeroes,
+and exposes later two-to-zero changes; it is not a root-cause fix.
+
+No partition was flashed and no charge or torch control was changed. Battery
+charge, charging and percentage remain unverified. Phone remains on the
+0260 RAM boot over USB. Next investigate status/data ownership and competing
+transactions with a targeted, read-only diagnostic before proposing a fix.
+
+## River 0260 CI and temporary boot (2026-11-05)
+
+CI run 42111857626 succeeded for exact commit
+deb17a943d52be1045ae285cd64b8ca207d4e327. Downloaded build-tree and
+kernel artifact ZIP SHA256 values matched GitHub's recorded digests
+008ac0599c9ab8be4fe03a550eb8363d74d888a7d6cf2d56ef6cfb292c4ceec5
+and 624c7bc53015618581005182a0609095cf1d177c6b4d2de612688d4772f8ad00.
+Kernel SHA256 98aebc931b8e8d72a4ef43381c209069bf4163dabe75a7593e4bb763370213b9
+matched its bundled checksum; CI sweet_keys.c matched the candidate and
+passed test-river-charge-settle.py. Golden backlight payload reconstructed
+exactly; shim, DTB, firmware blobs and riverbl preserved. Temporary image
+SHA256 1fe3da76e70bbb655265d77a2d62ec85debcb22d0a467d8c56147dc582df6971.
+Fastboot product river confirmed and RAM-only boot send and boot succeeded;
+no flash. USB interface re-enumerated without the host alias, and the
+receiver could not reassign it without macOS administrator authorization.
+The user restored 192.168.7.1 on en6; USB and SSH returned and the
+settle survey was run. See the newer result above.
+
 ## River 0260 local build and test preparation (2026-11-05)
 
 Clean local build of commit 74bb0d2fd4bbf2b9ccaf27eef72a915e75e96193
