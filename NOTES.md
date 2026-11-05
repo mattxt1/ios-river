@@ -27,7 +27,7 @@ USB interface is inactive, and its IP alias disappeared; the log has not been
 retrieved and the screen state is unknown. User reports the screen remains responsive; a second cable reconnection did
 not restore USB, and no alternate port is available. The log remains in /tmp;
 rebooting would likely lose it. No safe retrieval path is currently known. Logger writes QG, charger and gate sysctls sequentially, not atomically.
-CI 42127927283 was in progress at last check.
+CI 42127927283 passed for the diagnostic commit ac82534 on macos-15.
 
 ## River QG diagnostic build and gate soak (2026-11-05)
 
