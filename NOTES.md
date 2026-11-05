@@ -5,6 +5,34 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River alternating observer diagnostic and Wi-Fi investigation (2026-11-05)
+
+Patch 0259 adds an opt-in survey alternating 64 reads each of charger type and
+subtype. It counts correct, zero, previous nonzero successful value, other, and
+transaction error categories independently and records the last full error
+status for each register. A matching preceding value is a lead, not proof of
+stale data. A zero following a zero is counted as zero. Failed transactions
+clear the preceding-value association. The test does not write PMIC control
+registers or publish power state. It uses the existing survey-only busy gate,
+not a global arbiter lock. Sanitizer tests cover expected, repeated-prior,
+zero, error status, unavailable, busy, and output failures. Patch applied to
+the exact 0258 CI source and the result compiled locally to an ARM64 object;
+the iOS reader was built and signed. Full CI and device test remain pending.
+
+The user reported Wi-Fi unavailable on the 0258 survey boot. On-device
+`netprobe` listed USB but no `wl0` interface. The boot log showed WCNSS control
+startup and NV download; this does not establish association. The packaged
+survey image has no `riverwifi` target boot argument and its payload contains no
+`RiverWiFiPMK` blob, unlike the separately configured historical browsing test.
+The kernel's target configuration returns without `riverwifi`; the standard iOS
+Wi-Fi settings UI remains unintegrated. The missing configuration explains
+why this boot cannot attempt the previous targeted WPA2 setup. The historical
+private configuration must not be placed in Git or logs. Current survey cmdline
+is 604 bytes of the 608-byte field; blindly appending the old network target
+would overflow it. Restoring Wi-Fi requires a reviewed private image configuration,
+PMK, and network setup helper; do not assume a configuration will work on the
+current AP or weaken command-length validation.
+
 ## River repeated observer data hardware test (2026-11-05)
 
 User authorized pushing branch `codex/river-spmi-rdata`, building and testing.

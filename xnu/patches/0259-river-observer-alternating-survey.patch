@@ -1,0 +1,57 @@
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+index 8503d1b..3982f86 100644
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -3350,6 +3350,52 @@ river_charge_rdata_sysctl SYSCTL_HANDLER_ARGS
+ SYSCTL_PROC(_debug, OID_AUTO, river_charge_rdata, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
+             NULL, 0, river_charge_rdata_sysctl, "A", "River repeated observer data survey");
+ 
++/* Diagnostic transactions only: alternate stable charger type/subtype and
++ * count values matching the preceding successful transaction. No PMIC writes. */
++static bool
++ri_charge_alt_read(vm_offset_t obs, unsigned addr, uint32_t *status, uint32_t *value)
++{
++ ri_wr(obs, 0, (1u << 27) | ((addr & 0xffu) << 4));
++ *status=0;
++ for (unsigned i=0; i<1000; i++) {
++  *status=ri_rd(obs,8);
++  if (*status & 1u) {
++   if (*status & 14u) return false;
++   *value=ri_rd(obs,0x18)&0xffu;
++   return true;
++  }
++  delay(1);
++ }
++ return false;
++}
++static int
++river_charge_alt_sysctl SYSCTL_HANDLER_ARGS
++{
++ if (!__atomic_load_n(&ri_power_ready,__ATOMIC_ACQUIRE) || !ri_charge_chgr) return ENXIO;
++ int expected=0;
++ if (!__atomic_compare_exchange_n(&ri_power_busy,&expected,1,false,__ATOMIC_ACQ_REL,__ATOMIC_ACQUIRE)) return EBUSY;
++ unsigned ok[2]={0,0}, zero[2]={0,0}, prior[2]={0,0}, other[2]={0,0}, errors[2]={0,0};
++ uint32_t error_status[2]={0,0}, last=0; bool have_last=false;
++ for (unsigned i=0;i<64;i++) for (unsigned phase=0;phase<2;phase++) {
++  uint32_t status=0,value=0, want=phase ? 0x80u : 2u;
++  if (!ri_charge_alt_read(ri_charge_chgr,phase ? 5 : 4,&status,&value)) {
++   errors[phase]++; error_status[phase]=status; have_last=false; continue;
++  }
++  if (value==want) ok[phase]++;
++  else if (have_last && last!=0 && value==last) prior[phase]++;
++  else if (value==0) zero[phase]++;
++  else other[phase]++;
++  last=value; have_last=true;
++ }
++ char note[384];
++ snprintf(note,sizeof(note),"pairs=64 type_ok=%u type_zero=%u type_prior=%u type_other=%u type_errors=%u type_last_error=%#x subtype_ok=%u subtype_zero=%u subtype_prior=%u subtype_other=%u subtype_errors=%u subtype_last_error=%#x",ok[0],zero[0],prior[0],other[0],errors[0],error_status[0],ok[1],zero[1],prior[1],other[1],errors[1],error_status[1]);
++ int error=sysctl_handle_string(oidp,note,0,req);
++ __atomic_store_n(&ri_power_busy,0,__ATOMIC_RELEASE);
++ return error;
++}
++SYSCTL_PROC(_debug, OID_AUTO, river_charge_alt, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
++            NULL, 0, river_charge_alt_sysctl, "A", "River alternating SPMI identity survey");
++
+ static vm_offset_t
+ ri_spmi_chnl(vm_offset_t core, unsigned ppid)
+ {
