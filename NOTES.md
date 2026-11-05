@@ -5,6 +5,67 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River post-DONE data-delay diagnostic candidate (2026-11-05)
+
+The alternating survey did not observe the prior nonzero register value, but
+35 of 2,048 identity reads returned zero. The earlier 10 us experiment delayed
+before the first status read; it did not wait after observing DONE. Patch 0260
+therefore compares the same type-register RDATA immediately after DONE and
+again 10 and 100 us later, counting transitions and errors. It is an opt-in
+read-only survey and does not enable power controls or publish battery values.
+Repeated agreement still cannot prove freshness. The sanitizer model covers
+stable values, zero-to-two at 10 or 100 us, two-to-zero, transaction errors,
+unavailable/busy and output failure. It applies cleanly after the exact CI
+0259 source and compiles as an arm64 object; no complete 0260 kernel or device
+test has yet been performed. Commit deb17a9 is pushed to the authorized
+codex/river-spmi-rdata branch; CI 42111857626 is running for that commit with
+board=river and runner=macos-15-intel. Check its final status before using an
+artifact. The signed reader exists in this session's work/observer-settle. The
+phone remained reachable over USB on the 0259 survey boot at handoff.
+
+## River alternating observer hardware result and local build (2026-11-05)
+
+Branch `codex/river-spmi-rdata` commit 03076c1 built successfully in GitHub
+Actions run 42108125157 with `board=river`, `runner=macos-15-intel`. Earlier
+macos-15 attempts queued without a runner; macos-14 was cancelled immediately
+with an unsupported runner configuration. The CI kernel SHA256 was
+34d33f6dda821b04de1c1336321a634ac0251509fe754a6ba35a4a003b33d5d4;
+CI source sweet_keys.c matched the locally compiled diagnostic and passed the
+alternating survey sanitizer tests. The temporary boot image SHA256 was
+f507aa0e5f8d1eb935c64cedcd7b50c8302e99c47ecca3c9978039a5f9239673.
+It preserved the verified baseline shim, DTB, firmware and backlight option.
+Verified product river; fastboot send and temporary boot succeeded; no partition
+was flashed. The previously staged `/tmp/river-alt-reader-1105` was used.
+
+Sixteen surveys of 64 alternating pairs measured 2,048 total transactions:
+15 type zeroes, 20 subtype zeroes, zero prior-nonzero matches, zero other
+values and zero reported transaction errors. A result matching the preceding
+nonzero successful value is a heuristic; zero following zero remains counted as
+zero, so this does not rule out stale zeroes or all freshness failures. Results
+weaken the hypothesis that the observed zeroes simply repeat the other
+register's nonzero value; the root cause remains unknown. One state sample
+showed type/subtype 0x2/0x80, state 0x47, error 0x8, command 0, path 0x95;
+gauge/SOC and charging state remain unverified. No charging controls or torch
+were activated. Phone left booted in the survey image over USB.
+
+Local build setup: installed Homebrew cmake, ninja, ccache and gum; Homebrew
+also installed dependencies and updated certificates and OpenSSL 4. Homebrew
+had unlinked OpenSSL 3; its prior link was restored afterwards. KDK 13.5
+22G74 DMG SHA256 29866842eef039812888daea4176ce493be153b0d6d1b88f90753d69ea51b7d4
+matched the release checksum; `pkgutil --check-signature` outside the sandbox
+reported signed Apple Software. Expanded in the workspace, not system-installed.
+Pinned darwin-xnu-build 6639065 with the same River patches and Xcode 27 beta
+initially failed MIG headers due to multiple platform deployment variables.
+A workspace-only adjustment clearing unrelated targets got past the failure.
+The resumed local build linked an arm64 kernel, SHA256
+ec10f0f7a47c75324c99acb56c98e28365262db6bfc85267b1e3148fc64c412a.
+Its sweet_keys.c matched CI's exactly; local host tests and symbol checks passed.
+This is a locally linked kernel, not a phone-tested local image. A second clean
+build through the reusable helper completed successfully for commit 03076c1;
+kernel SHA256 f9cc19c9bdbf09c208bd87656b68cc7eb9da3ed01cb5272f26f9a27a7fa10830.
+The helper validated River strings and no skipped numbered patches. See
+LOCAL-BUILD.md for setup; clean builds have not yet been benchmarked.
+
 ## River alternating observer diagnostic and Wi-Fi investigation (2026-11-05)
 
 Patch 0259 adds an opt-in survey alternating 64 reads each of charger type and

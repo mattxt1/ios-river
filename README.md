@@ -114,9 +114,10 @@ configuration. Preparing or writing one is destructive to the target partition.
   power/torch dependencies and unverified media milestones.
 - [DISPLAY-FIT-HANDOFF.md](DISPLAY-FIT-HANDOFF.md): historical failed display
   fit experiments and diagnostics.
+- [LOCAL-BUILD.md](LOCAL-BUILD.md): workspace-contained local XNU build setup.
 - `shim-river/`, `xnu/patches/`, `tools/`, `phone-tools/`, `mesa/`: loader,
   ordered kernel patches, host utilities, device tools and Mesa integration.
-  River patches continue through 0257; higher patch numbers do not imply a
+  River patches continue through 0260; higher patch numbers do not imply a
   feature was tested on a phone.
 
 ## Next work
