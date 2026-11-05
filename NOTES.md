@@ -5,6 +5,27 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River 0260 local build and test preparation (2026-11-05)
+
+Clean local build of commit 74bb0d2fd4bbf2b9ccaf27eef72a915e75e96193
+completed using the documented Xcode 27 and workspace KDK setup. Kernel
+SHA256 72e8b01715d465a60bf5bea77f681767824b5de17e26276adda057d3142280a1.
+The built sweet_keys.c matches the 0260 candidate byte for byte and passes
+the settle sanitizer model. This is a successful local link, not a phone test.
+CI run 42111857626 was still building exact commit deb17a9 at last check;
+verify its final result, artifact checksums and source before packaging.
+The golden backlight payload reconstructed exactly using a separate
+package-settle.py with a new output filename. Phone responded over USB; SSH
+staged the signed reader at /tmp/river-settle-reader-1105. A fresh private USB
+receiver follows reboots in work/river-settle-live-*.log. No reboot or 0260
+survey has occurred in this continuation. No controls or partitions changed.
+
+The historical private Wi-Fi target argument needs 42 bytes; the survey
+command line has insufficient room. Its absent target and PMK prevent targeted
+association. A separate reviewed configuration solution is needed; retain UI
+and backlight arguments and do not disclose or commit the private inputs.
+Actual charge, charging and battery percentage remain unverified.
+
 ## River post-DONE data-delay diagnostic candidate (2026-11-05)
 
 The alternating survey did not observe the prior nonzero register value, but
