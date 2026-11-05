@@ -23,7 +23,7 @@ A later read-only charge sample completed, but its raw fields and the
 synthetic battery UI do not validate actual charge or charging. The full
 individual records are private work/river-gate-results.txt; the boot log is
 private work/river-gate-live-1.log. No PMIC charging or torch controls were
-changed. CI 42125055534 for exact commit 770c1f1 was in progress at check.
+changed. CI 42125055534 succeeded for exact commit 770c1f1.
 
 This validates initial identity reads under this workload, not freshness of
 all PMIC data or coordination with other execution environments. The 14 busy
