@@ -29,8 +29,8 @@ This validates initial identity reads under this workload, not freshness of
 all PMIC data or coordination with other execution environments. The 14 busy
 failures and fail-closed controller poison on timeout remain availability
 tradeoffs, including possible skipped PON polls or disabled PON after timeout;
-this implementation is experimental. User was asked to check physical power
-button responsiveness; response pending. Phone remains on 0264 RAM boot.
+this implementation is experimental. User confirmed the physical power button responds normally on this boot.
+Phone remains on 0264 RAM boot.
 
 ## River common SPMI transaction gate candidate (2026-11-05)
 
