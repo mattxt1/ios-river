@@ -34,9 +34,14 @@ The opt-in --gate reader reports acquired/busy/poisoned counters. Host
 ASan/UBSan stress exercised two concurrent readers, all transaction paths,
 contention without MMIO, completed errors, timeout poison and release;
 existing survey and PON models pass, and exact candidate compiled to arm64.
-Full build and hardware test pending. CI 42122390516 for 0263 succeeded.
-Signed reader staged at /tmp/river-gate-reader-1105. Battery remains synthetic
-and actual charge and charging remain unverified.
+Clean full local build of commit 770c1f169586c23dd83ad70c748dc79c30c4b17d
+succeeded; built source matches candidate and targeted models passed. Kernel
+SHA256 b26ad766481a2861715ed8b20d4e59c4a8f1098a89a89c4d5673b9cbb5927c38;
+temporary image SHA256 5c8c6419268f4835d7bb43044f74c8631bf2a4094d7992407b2b54984fd63cfc
+preserved golden shim, DTB, firmware and backlight. Fastboot handoff requested;
+hardware test pending. CI 42125055534 for 0264 is in progress; CI 42122390516
+for 0263 succeeded. Signed reader staged at /tmp/river-gate-reader-1105.
+Battery remains synthetic and actual charge and charging remain unverified.
 
 ## River PON exclusion controlled hardware result (2026-11-05)
 
