@@ -5,6 +5,19 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River 0266 USB-connected time series (2026-11-05)
+
+The signed river-qg-log completed 24 sequential samples, nominally five
+seconds apart, on the 0266 RAM boot. All 24 QG, comparison, charger and gate
+sysctl reads completed without reported error. Voltage ranged 3644188–3676692
+uV; raw-polarity current ranged 0–187072 uA with 13 zeroes. Charger state was
+0x47 and path 0x95 in all records. Final gate acquired=30496 busy=3 poisoned=0.
+Readings remain uncalibrated and do not establish active charging or SOC.
+Records are at projectless work/qg-series-0266-final.txt. User was asked to
+return to the existing Android installation for an independent read-only
+comparison; Android normally manages its own charging. No charge-control
+commands were sent by this diagnostic.
+
 ## River charger status interpretation (2026-11-05)
 
 Motorola River source e098be34e94ab00ad922803492995eef75017d78 smb5-reg.h
