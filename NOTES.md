@@ -5,6 +5,34 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River PON correlation result and exclusion candidate (2026-11-05)
+
+Fastboot product river confirmed; temporary local 0262 image SHA256
+d21b991e0c2c3295376a647880c8251c9cd705e07744a328b9f76bc4aadff266
+booted successfully, no flash. USB and SSH returned. Thirty-two --pon runs
+of 64 attempts yielded 2,048 attempts: 41 initial zeroes, 1,999 initial
+twos, no other values, eight errors (all status 0x9). Delayed data changed
+in 74 at 10 us and 147 at 100 us. Possible PON overlap was recorded in
+145 and 224 attempts respectively; all 74 and all 147 data changes had
+possible PON overlap. Counter snapshots bracket, rather than observe, bus
+activity; they may overcount overlaps and this does not prove causation.
+The survey did not record overlap for initial zeros or failed reads. Results
+for 31 runs are private work/river-pon-results.txt; first run is summarized
+here. USB log is work/river-pon-live-1.log. No controls changed.
+
+Patch 0263 adds an opt-in test gate shared only between PON and the new
+64-attempt survey. PON uses a nonblocking gate: if the survey holds it, a
+power-key poll is deferred until its next iteration, without synthesizing a
+key state. The survey skips a trial if PON holds the gate, and releases the
+gate after each failed transaction and after the 100 us observation. It
+does not mask interrupts or change PMIC controls. Existing read timeout is
+nominally 1 ms; scheduling/preemption can extend the hold, so this is not
+a hard real-time bound. This is an experiment, not a production controller
+lock. Sanitizer models cover success, dropped/timeout, busy gate, deferred
+polls, data changes and release on error; source compiled to ARM64 object.
+Signed reader staged as /tmp/river-serial-reader-1105. Full build and device
+test pending. Battery charge, charging and SOC remain unverified.
+
 ## River cross-port research and PON correlation candidate (2026-11-05)
 
 The exact River Android kernel at e098be34e94ab00ad922803492995eef75017d78
