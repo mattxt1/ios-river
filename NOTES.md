@@ -30,8 +30,14 @@ nominally 1 ms; scheduling/preemption can extend the hold, so this is not
 a hard real-time bound. This is an experiment, not a production controller
 lock. Sanitizer models cover success, dropped/timeout, busy gate, deferred
 polls, data changes and release on error; source compiled to ARM64 object.
-Signed reader staged as /tmp/river-serial-reader-1105. Full build and device
-test pending. Battery charge, charging and SOC remain unverified.
+Signed reader staged as /tmp/river-serial-reader-1105. Full clean local build
+of commit 0c9ea7d7b28f754aa08d70b0ba1aeba45591b2e3 succeeded, exact source
+matched the candidate and passed targeted host tests. Kernel SHA256
+8ef98702c884ee67491c010e8e05ef07f674f88e2d780c639469af499d201f84;
+temporary image SHA256 95e0cd049e22de2b212c6a4c59844219ab04f195bbd69bfded07e0a1550c9a66
+preserved golden shim, DTB, firmware and backlight. CI 42122390516 running
+for that commit. Fastboot handoff requested; device test pending. Battery
+charge, charging and SOC remain unverified.
 
 ## River cross-port research and PON correlation candidate (2026-11-05)
 
