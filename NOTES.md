@@ -5,6 +5,34 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River observer status correlation hardware result (2026-11-05)
+
+Fastboot identified product river; temporary boot of local 0261 image
+7f8d20216863ef54b7096149be061c678aa7ee1f6498e42dbdf022aff8f9e6b5
+succeeded. User restored the USB alias; USB and SSH returned. Sixteen
+--status runs of 64 attempts: 1,024 total, 22 initial zeroes, 1,000
+initial twos, no other initial values, two initial errors, both 0x9
+(DONE | DROPPED). Data differed from first in 40 at 10 us and 84 at
+100 us. Status differed from initial in two at 10 us and one at 100 us;
+one 10 us data change coincided with a status change, and no 100 us data
+change did. No delayed status sample had error bits. Thus 39/40 and 84/84
+observed data changes respectively occurred without a coincident sampled
+status change. Status and data reads are separate, and transient or
+same-status transactions can escape observation. These measurements do not
+identify the cause or establish freshness, nor do they identify the delayed
+data values in this diagnostic. No fix is justified yet. Individual runs
+are in private work/river-status-results.txt (the first run is summarized
+here); private USB log is work/river-status-live-1.log.
+
+No partition was flashed and no charging or torch controls changed. The
+phone remains on the local 0261 RAM boot over USB. CI 42115681088 for exact
+commit fed652f remained running at last check; this phone test used the
+independently verified local build, not a CI artifact. Battery charge and
+charging remain unverified. Investigate why observer RDATA changes while
+status often remains constant; compare a carefully scoped interrupt-masked
+transaction or read-only time-profile against normal execution, with tests
+and explicit timing bounds before any further hardware experiment.
+
 ## River observer status correlation diagnostic (2026-11-05)
 
 The pinned Motorola SPMI driver serializes command through completion and
