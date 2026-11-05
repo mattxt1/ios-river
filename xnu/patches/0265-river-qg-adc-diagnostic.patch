@@ -1,0 +1,43 @@
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -3078,6 +3078,11 @@
+   if (ri_vib_deadline && mach_absolute_time() >= ri_vib_deadline) river_vibrate(0);
+   uint8_t pon=0;
+   bool pok=ri_pon(&pon);
++  /* A permanent timeout otherwise leaves a previously pressed PON key
++   * logically held forever. Release once; never manufacture a new press. */
++  if (!pok && __atomic_load_n(&ri_spmi_poisoned, __ATOMIC_ACQUIRE)) {
++   for (int k=0;k<3;k+=2) if (keys[k]) { keys[k]=0; sweet_hid_key(k,0); }
++  }
+   int now[3]={!!(pon&1),vol_ok ? !(ri_rd(ri_key,0x1004)&1) : 0,!!(pon&2)};
+   for (int k=0;k<3;k++) if((k==1?vol_ok:pok) && now[k]!=keys[k]) {
+    if (now[k]) river_vibrate(35);
+@@ -3259,7 +3264,28 @@
+  else if (count == 2) value &= 0xffffu;
+  *out = value;
+  return true;
++}
++
++/* Diagnostic only: one four-byte last-ADC read, not Motorola's held burst
++ * average and not a guaranteed simultaneous voltage/current snapshot. The
++ * 0x8000 reset sentinel is rejected for either half conservatively. */
++static int
++river_qg_sample_sysctl SYSCTL_HANDLER_ARGS
++{
++ if (!__atomic_load_n(&ri_power_ready, __ATOMIC_ACQUIRE)) return ENXIO;
++ uint32_t raw;
++ if (!ri_power_read(ri_power_qg, 0xc0, 4, &raw)) return EIO;
++ uint32_t vr = raw & 0xffffu, ir = raw >> 16;
++ if (vr == 0x8000u || ir == 0x8000u) return ENODATA;
++ int32_t signed_ir = ir < 0x8000u ? (int32_t)ir : (int32_t)ir - 65536;
++ uint32_t uv = (uint32_t)((194637ULL * vr) / 1000);
++ int32_t ua = (int32_t)((152588LL * signed_ir) / 1000);
++ char note[160];
++ snprintf(note, sizeof(note), "voltage_raw=%#x current_raw=%#x voltage_uv=%u current_ua=%d", vr, ir, uv, ua);
++ return sysctl_handle_string(oidp, note, 0, req);
+ }
++SYSCTL_PROC(_debug, OID_AUTO, river_qg_sample, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
++            NULL, 0, river_qg_sample_sysctl, "A", "River QG last ADC diagnostic");
+ 
+ /* On-demand, read-only observer sample. The atomic gate prevents concurrent
+  * readers from racing on the same SPMI observer command registers. */

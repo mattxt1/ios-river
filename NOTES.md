@@ -5,6 +5,28 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River read-only QG diagnostic candidate (2026-11-05)
+
+Phone reachable over USB; existing 0264 gate reported acquired=43588 busy=14
+poisoned=0. Patch 0265 adds an opt-in four-byte last-ADC voltage/current read.
+It rejects 0x8000 in either half conservatively (Motorola defines that reset
+value for FIFO data; applicability to last ADC is unverified), reports raw and
+scaled values, and returns errors rather than stale measurements. Scaling uses
+Motorola qg-defs.h at e098be34e94ab00ad922803492995eef75017d78: unsigned
+194637/1000 microvolts per count and signed 152588/1000 microamps per count,
+with signed division toward zero. Current is raw gauge polarity, not a verified
+charging indication. Motorola's current-now reads a held burst average; this
+read-only last-ADC diagnostic is not equivalent. One bus read is not proof of
+an atomic hardware sample. No SOC or iOS power properties are changed.
+
+On permanent gate poison, PON keys already logically down are released once;
+no new press is synthesized. This prevents a stuck logical key but does not
+restore power-button availability. Automatic recovery is unsafe without proof
+that a timed-out transaction can no longer complete; assess controller behavior
+before changing that policy. No charge or torch control was changed. Hardware
+validation, independent voltage/current reference, cable correlation and
+sustained workload testing remain outstanding.
+
 ## River common SPMI gate hardware result (2026-11-05)
 
 Fastboot product river verified; local 0264 temporary image SHA256
