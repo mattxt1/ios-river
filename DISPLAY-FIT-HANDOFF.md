@@ -1,11 +1,14 @@
 # River display-fit experiments — 2026-10-23
 
-## Current phone state
+> Historical test handoff. The phone and active image may have changed since
+> these October 23 experiments; see [NOTES.md](NOTES.md) for later work.
+
+## Recorded phone state on October 23
 
 The Moto G7 was restored with a RAM-only `fastboot boot` of
 `shim-river/out/river-r76-fullram-boot.img`. The user confirmed that it booted.
-This is the known working image for subsequent performance work. No partition
-was flashed during the display-fit tests.
+The user confirmed that image booted at the time. No partition was flashed
+during the display-fit tests; later work used other images.
 
 ## What did not work
 
@@ -37,7 +40,9 @@ drop-in driver for River's A5xx and ABL framebuffer.
 
 ## Performance-chat handoff
 
-Start from the confirmed r76 full-RAM image and its default display path.
+For this historical handoff, start from the then-confirmed r76 full-RAM image
+and its default display path. Check later notes and actual image provenance
+before selecting a baseline today.
 The display-fit boot arguments `riverfitcpu=1`, `riverfitmdp=1`, and
 `sweetfb_native=1` are diagnostic only. See `NOTES.md` for the preceding
 River performance sample and the separate GPU/EAGL work.

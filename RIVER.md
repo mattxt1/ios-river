@@ -1,28 +1,21 @@
+> **Historical bring-up log:** This narrative stops at earlier River milestones.
+> For later October 30 hardware and UI evidence, see [NOTES.md](NOTES.md);
+> [README.md](README.md) summarizes current documented limitations. Statements
+> below describe the recorded tests, not the phone's present state.
+
 # Moto G7 river bring-up (local branch)
 
 Started 19 October 2026. This is a chronological evidence log of the Motorola
 Moto G7 (`river`, XT1962-1, Qualcomm Snapdragon 632 / MSM8953, Adreno 506 GPU)
 port running unmodified iOS 16.7.16 (20H392, iPhone X userland).
 
-As of milestone **r146** (2026-10-27), River has achieved:
-- **Graphics & UI**: Full hardware acceleration via Mesa Gallium freedreno +
-  `sweetgl.dylib` + `cgprobe.dylib`. SpringBoard runs at 60 FPS across Lock Screen,
-  Home Screen, App Library (all category pod frosted glass surfaces render properly
-  without freeze), App Switcher (settled wallpaper blur blackout eliminated, dimming
-  overlay cleared), and search bar header blur blackout resolved.
-- **Battery Management (r146)**: Kernel `SweetBattery` / `IOPMPowerSource` enabled
-  (`0242-river-battery-power-source.patch`), eliminating the empty red 0% outline
-  and displaying an 85% green charging indicator in the status bar with full
-  `powerd` and `BatteryCenter` recognition.
-- **Networking**: WCNSS firmware loading via TrustZone PAS, WPA2 4-way handshake,
-  2-way Group Rekey (GTK rotation), DHCP, and verified IPv4/TCP/HTTP via `wl0`
-  (`river-net`), plus SCDynamicStore integration and verified MobileSafari HTTPS
-  browsing on device.
-- **Touch & Input**: Touchscreen input fully functional (`riverinput=1`).
-- **RAM & Memory**: 3.38 GB usable DDR3 mapped around firmware carve-outs
-  (0x18000000 to 0x100000000).
-- **USB & Tools**: Root SSH over USB Ethernet (`192.168.7.2`), dropbear, and
-  on-device inspection tools.
+A historical r146 summary reported GPU-backed UI, touch, approximately 3.38 GiB
+usable memory, USB SSH, WCNSS networking and a Safari HTTPS test. The original
+summary overstated UI smoothness and the switcher fix: later measurements
+reported approximately 20.2 and 26.1 renderer flushes/s in two workloads, and
+later UI work used a wallpaper replica. The r146 battery display was synthetic,
+not a real charge reading. See [README.md](README.md) and [NOTES.md](NOTES.md)
+for the distinction between observations, proxies and unresolved work.
 
 Older sections below retain historical observations and proposals from earlier
 milestones. Device dumps, photos, logs, Apple artifacts and boot images stay in
@@ -52,7 +45,7 @@ adjacent private folders or ignored output directories.
 - Boot image uses Android header v1 and 2048-byte packing, gzip ARM64 Image
   with a base DTB, plus separate DTBO partition. The early diagnostic boots
   used RAM images only; later work wrote an iOS root to storage as recorded
-  in the dated sections below. Current test boots remain RAM-only.
+  in the dated sections below. Subsequent tests in this log used RAM boots.
 
 ## Added code
 

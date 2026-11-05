@@ -1,4 +1,20 @@
-# iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
+# Engineering notes: sweet, topaz and river
+
+> Historical, dated engineering log. Each entry records the state and knowledge
+> at that time; later entries can supersede earlier status, pending work, device
+> ownership and paths. The phone state is not known from this file alone. Start
+> with [README.md](README.md) for the reconciled River summary.
+
+## River documentation audit (2026-11-05)
+
+Reconciled the public documentation against the tracked October 30 notes and
+patches, preserving older entries as historical records. README now separates
+phone observations from host tests and unverified behavior, corrects haptics,
+UI and FPS claims, identifies the synthetic battery and incomplete build inputs,
+and distinguishes River from the destructive topaz recovery record. The user
+reported that the River battery was dead and the phone was charging externally;
+no phone connection, boot, battery measurement or hardware test was performed as
+part of this documentation audit. The present device state remains unverified.
 
 ## River observer timing candidate (2026-10-30)
 

@@ -1,7 +1,8 @@
 # River camera, microphone and torch: offline survey
 
-2026-10-30. This is a source-based plan, not a hardware verification. The
-active image and phone hardware must be checked before applying it.
+2026-10-30 source-based survey and plan. Later dated results are in
+[NOTES.md](NOTES.md); the active image, phone state and actual hardware must be
+checked before any test.
 
 ## Evidence
 
@@ -13,25 +14,26 @@ They describe a River configuration, not verified hardware on this phone.
 * The [PMI632 tree](https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/2dba45b8e247958d5a1b15b33c6064c15af4983e/arch/arm64/boot/dts/qcom/pmi632.dtsi) places the LED block at peripheral d3 on SPMI slave 3, with fault, droop and thermal controls. The River overlay sets `qcom,current = <100>` for torch0, but the [LED driver](https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/2dba45b8e247958d5a1b15b33c6064c15af4983e/drivers/leds/leds-qpnp-flash-v2.c) parses `qcom,current-ma` instead; the base torch value is 300 mA. Neither is a verified safe setting for this boot. Trace initialization, current conversion, enable, shutdown and fault handling before implementation.
 * The [River audio overlay](https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/2dba45b8e247958d5a1b15b33c6064c15af4983e/arch/arm64/boot/dts/qcom/sdm632-river-audio-overlay.dtsi) describes a Cirrus CS47L35 codec on SPI 7, reset GPIO 68, interrupt GPIO 46, a 9.6 MHz audio clock, mic-bias routes and Qualcomm Q6 audio endpoints. CS35L41 on I2C is a separate speaker amplifier. Microphone routing and DSP state remain unverified.
 * The pinned [River Android proprietary-file list](https://github.com/LineageOS/android_device_motorola_river/blob/f9b320caf51d7c75041d921ff63f9116f6065001/proprietary-files.txt) lists a prebuilt audio HAL, camera HAL and sensor-specific camera tuning libraries, including S5K3L6 as well as the sensors named in the overlay. These Android components cannot be assumed usable by iOS; their presence in a list does not identify the sensors actually fitted in this phone.
-* Existing River patches contain SPMI read/write machinery, but the haptics channel helper has a hard-coded fallback when lookup fails. Do not reuse it for the LED without a fail-closed lookup and synchronization with other clients. Haptics is owned by the other chat.
+* Existing River patches contain SPMI read/write machinery, but the haptics channel helper has a hard-coded fallback when lookup fails. Do not reuse it for the LED without a fail-closed lookup and synchronization with other clients. This statement describes the ownership at the time of the survey.
 * The LED driver's PMI632 enable path sets the module bit and then polls the charger power-supply `FLASH_TRIGGER` property for regulator readiness, disabling the module on failure. Its torch node has no configured safety duration in the base tree. The charger readiness mechanism, fault mitigation and an independent bounded shutdown therefore need investigation before a test; writing only current and enable registers would omit required behavior.
 * In the pinned Android [SMB5 charger](https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/2dba45b8e247958d5a1b15b33c6064c15af4983e/drivers/power/supply/qcom/qpnp-smb5.c), `FLASH_ACTIVE` changes charger state and may force USB VBUS to 5 V. `FLASH_TRIGGER` calls [schgm_flash_get_vreg_ok](https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/2dba45b8e247958d5a1b15b33c6064c15af4983e/drivers/power/supply/qcom/schgm-flash.c), which requires flash initialization, checks regulator-ready status and, if not ready, checks the flash error state. The Android initialization also programs flash configuration. The equivalent boot state, charger ownership and USB consequences on iOS are unknown; do not infer that a single status bit or bare SPMI write reproduces this contract.
 * Historical NOTES reports VirtualAudio disabled after a mediaserverd crash with no audio device. This does not establish microphone capture or iOS audio integration. No camera or torch integration was identified in the tracked tree.
 
 ## Milestones
 
-1. **Inventory, then torch:** after the other chat releases the phone and the user coordinates testing, collect read-only OS/IORegistry evidence and available boot logs. Avoid MMIO during that survey. Audit the full LED driver and SPMI arbitration, then design a default-off, bounded torch operation with controlled current, fault handling, timeout and explicit shutdown. Verify physical light and shutdown first, then separately prove iOS flashlight control discovers and operates it.
+1. **Inventory, then torch:** after confirming device availability and coordinating testing, collect read-only OS/IORegistry evidence and available boot logs. Avoid MMIO during that survey. Audit the full LED driver and SPMI arbitration, then design a default-off, bounded torch operation with controlled current, fault handling, timeout and explicit shutdown. Verify physical light and shutdown first, then separately prove iOS flashlight control discovers and operates it.
 2. **Microphone:** identify codec, bus, rails, clocks and actual microphone routing. Determine Q6 DSP and firmware state and how captured buffers reach the CPU. Verify samples from a minimal capture path, then implement an iOS-compatible audio device and test app recording. DSP messaging, DMA, codec setup, audio HAL and permissions are independent unknowns.
 3. **Camera:** identify fitted sensors and calibration; bring up CCI and sensor power/clock and read an ID with controlled shutdown. A frame additionally needs CSI PHY/CSID, ISP, DMA and buffer handling, sensor setup, format processing and an iOS camera-provider interface. Sensor identification alone is not camera integration.
 
 Do not flash partitions. Coordinate every device test and display restart with
-the user and other chat. Preserve the working UI and sleep/wake behavior.
+the user and any other active device work. Preserve the working UI and sleep/wake behavior.
 
 Patch 0248 is an experimental one-shot candidate, not an iOS flashlight driver.
 It refuses writes with the observed charger control 0xff and SOC threshold 0.
 Its timer, QG SOC freshness, VBUS handling and fault behavior need hardware and
-source validation; do not bypass the guard to force a pulse. The phone currently
-runs the read-only survey, not patch 0248.
+source validation; do not bypass the guard to force a pulse. The phone was running a read-only survey at the time of the original handoff;
+its present state must be checked. Patch 0248 was not demonstrated to produce
+light.
 
 With `riverfs=1`, `river-torch-test --pulse` queues at most one test per boot.
 The result is 1 if the modeled sequence and shutdown readback completed, 2

@@ -1,10 +1,16 @@
-# topaz: back to stock / recovery runbook
+# topaz: historical recovery record
+
+> **Not for Moto G7 / River.** This documents a specific Redmi Note 12 4G
+> (`topaz`) and a past host, partition layout and set of backups. It contains
+> destructive firmware, partition-table and data writes. It is not a generally
+> verified recovery procedure; paths, backups, device identity and layout must
+> be independently verified before any use. Do not run these commands on River.
 
 Redmi Note 12 4G (`topaz`, ROM codename `tapas`), SM6225. Everything below runs on **s8build**
 with the phone in **fastboot** (Power + Volume down). Bootloader is unlocked; there is no EDL.
 
-Last verified working: 2026-10-19 (this exact sequence brought a phone that booted nothing back
-to HyperOS).
+Historical report: on 2026-10-19 this sequence reportedly returned that particular phone to HyperOS.
+That observation does not validate it for a different device or its current state.
 
 ## Files (on s8build)
 
@@ -20,7 +26,7 @@ to HyperOS).
 | Slot backups 2026-09-30 / 2026-10-01 | `~/work/topaz/backup/*.img.gz`, `~/work/topaz/backup_20261001/`, `~/work/topaz/stock/` |
 | GPT tools | `/mnt/mui/ios-topaz/gptdump.py` (print slot GUIDs/attrs), `/mnt/mui/ios-topaz/mkgptboth.py` (build gpt_bothN.bin from head/tail dumps with CRC checks) |
 
-## Current layout (2026-10-19)
+## Recorded layout on 2026-10-19
 
 - Slot **b** active: `boot_b` = iOS shim (`/mnt/mui/ios-topaz/shim-boot-0088.img`), boots iOS on power-on.
 - `userdata` = iOS HFS+ root (`/mnt/mui/ios-topaz/ios16-root.simg`).

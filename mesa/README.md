@@ -1,18 +1,19 @@
 # Mesa freedreno on Moto G7 river
 
-**Current on 21 October 2026:** Mesa 26.2.5 runs Gallium and OpenGL ES 3.1
+**Historical result, October 21, 2026:** Mesa 26.2.5 runs Gallium and OpenGL ES 3.1
 on Adreno 506 through the RiverGPU IOKit service. The GPU clear, offscreen
 GLES draw, and dynamically loaded GLES library draw passed on the phone.
-CoreAnimation is still using its existing CPU renderer. Current integration
-plan and phone state are in `../../HANDOFF.md`; dated diagnostic evidence is
-in `../RIVER.md`.
+At that point CoreAnimation still used the CPU renderer. Subsequent River
+work integrated an EAGL/GLI adapter and documented GPU-backed UI; consult
+[the project README](../README.md) and [engineering notes](../NOTES.md) for
+later status. The phone's current state is not established by this record.
 
 ## Source layout
 
 `../../mesa/` is a separate shallow Mesa 26.2.5 tree. Its river changes are
 exported in `patches/0001-freedreno-river-iokit-backend.patch` tracked by
-`river-xnu/`. The current Mesa tree already contains these changes; apply
-that patch only to a clean matching Mesa checkout. From the current Mesa
+`river-xnu/`. The historical local Mesa tree contained these changes; apply
+that patch only to a clean matching Mesa checkout after checking applicability. From the current Mesa
 working tree, `git apply --reverse --check` against the exported patch
 passed at handoff.
 
@@ -88,7 +89,7 @@ entry points because static linking dropped unreferenced objects; linking
 `libglapi_bridge` whole exported them. These fixes were verified by the
 passing phone tests, not inferred from build success alone.
 
-## Next integration step
+## Historical next integration step (since undertaken)
 
 The public Pixel 1 port's `tools/sweetgl` is an interface reference for
 CoreAnimation's EAGL/GLI renderer and IOSurface imports:
