@@ -5,6 +5,18 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River QG offline logging tool (2026-11-05)
+
+Added river-qg-log: bounded on-phone sequential samples of QG ADC, QG
+comparison, charger and gate sysctls, with per-read errno, wall-clock time,
+exclusive creation and a flush/fsync per sample. It performs no control writes;
+disk sync and polling may affect load and current. It requires the caller to
+choose a new output path and verify that filesystem persists across reboot; no
+such persistence is yet demonstrated on this device. Signed iOS arm64 build
+and host checks for one sample, no overwrite and invalid count passed. This
+tool has not yet run on the phone. Patch 0266 local build and CI 42130549865
+are in progress for c53afbdfc446c8dd5ffbff71b3d684be07dfab4b.
+
 ## River QG read comparison candidate (2026-11-05)
 
 The phone's USB interface remains inactive following the cable test; the user
