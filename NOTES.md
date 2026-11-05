@@ -5,6 +5,34 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River PON exclusion controlled hardware result (2026-11-05)
+
+Verified fastboot product river and RAM-booted local 0263 image SHA256
+95e0cd049e22de2b212c6a4c59844219ab04f195bbd69bfded07e0a1550c9a66.
+USB and SSH returned. First protected run: 64 twos, no zeroes, errors or
+changes; 37 PON polls deferred. Then 16 alternating pairs of --pon and
+--serial on the same boot (1,024 attempts per condition) yielded:
+
+- Baseline: zero=12, two=1010, other=0, errors=2 (both status 0x9);
+  changed10=29, changed100=63, possible PON overlaps=51 and 86, and
+  coincident changes=29 and 63 respectively.
+- PON-excluded: zero=0, two=1024, other=0, errors=0, gate_busy=0,
+  changed10=0, changed100=0, PON polls deferred=81.
+
+These paired results strongly support contention involving River PON traffic
+as the cause of the observed zeroes, drops and delayed data changes; they do
+not prove all returned data fresh or cover all possible controller actors.
+The experimental gate includes the 100 us observation and defers PON polls,
+so it is not yet a production controller lock. Design a common controller
+transaction lock covering actual command/status/data and all relevant callers,
+with interrupt context, lock ordering, timeouts and exclusion against other
+execution environments considered before deployment. Never enable charge or
+torch based on these tests. Actual battery charge/charging remain unverified;
+QG monotonic SOC is software maintained, as recorded below. No partition was
+flashed. Phone remains on the 0263 RAM boot over USB. Paired output in private
+work/river-serial-paired-results.txt and boot log in work/river-serial-live-1.log.
+CI 42122390516 for exact commit 0c9ea7d was in progress at last check.
+
 ## River PON correlation result and exclusion candidate (2026-11-05)
 
 Fastboot product river confirmed; temporary local 0262 image SHA256
