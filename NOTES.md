@@ -5,6 +5,30 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River QG diagnostic first boot (2026-11-05)
+
+Fastboot product river verified; RAM-booted image SHA256
+d2611f97faa38fa8870fdc2d0172dc0b35c01af81487ed5fb2a992e83621b1f1.
+No partitions flashed. USB/SSH returned. First QG sample raw voltage 0x4953,
+current 0x052d, converted 3653531 uV and +202179 uA raw gauge polarity.
+Subsequent USB-connected samples ranged 3670464–3682726 uV; currents included
+0, +71716 and +80413 uA. Charger read consistently type=2 subtype=0x80,
+state=0x47 errors=0x8 modes=0x80 temp=0 command=0 path=0x95. These are
+unvalidated diagnostic values, not proof of current polarity or charge state;
+several exactly-zero current samples are unexplained. Gate counters reached
+acquired=15789 busy=2 poisoned=0. The user said the only cable was USB to
+Mac, with no external meter. USB sample records and live log are in the
+projectless session work directory, outside Git.
+
+Started /tmp/river-qg-logger to log 36 five-second samples to
+/tmp/river-qg-disconnect-log without control writes. User disconnected for
+about a minute and reported reconnecting. As of this entry the Mac's matching
+USB interface is inactive, and its IP alias disappeared; the log has not been
+retrieved and the screen state is unknown. User reports the screen remains responsive; a second cable reconnection did
+not restore USB, and no alternate port is available. The log remains in /tmp;
+rebooting would likely lose it. No safe retrieval path is currently known. Logger writes QG, charger and gate sysctls sequentially, not atomically.
+CI 42127927283 was in progress at last check.
+
 ## River QG diagnostic build and gate soak (2026-11-05)
 
 On the existing 0264 RAM boot, 128 alternating surveys completed 16,384
