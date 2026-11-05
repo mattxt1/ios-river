@@ -5,6 +5,39 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River common SPMI transaction gate candidate (2026-11-05)
+
+Patch 0264 puts a single River controller gate around all command-issuing
+paths in sweet_keys.c: PON, normal observer read, timing and alternating
+diagnostics, and channel writes. PON uses the normal read helper. The gate
+covers command, completion status and first data read (or write completion);
+it is not held over mapping, logs, or successive independent operations.
+The existing 0263 experimental PON gate remains outermost for that survey.
+No lock is recursive; order is diagnostic busy/PON test gate, then common
+gate. Late diagnostic RDATA samples occur after the common gate releases
+and are not coherent snapshots. sweet_spmi.c is a separate topaz v5
+controller path; River's synthetic SweetBattery start does not initialize
+or poll it. Firmware/other execution environments remain outside this gate.
+
+Acquisition uses an atomic non-sleeping bounded 64-iteration try loop; busy
+returns failure without issuing a command. No interrupts are masked and no
+unbounded spin occurs, including if an owner is preempted on the same CPU.
+Actual wall time can exceed nominal delays if preempted. A status timeout
+poisons the controller until reboot because a late completion cannot safely
+be attributed; subsequent requests fail closed, including PON key polls.
+This is deliberate but means a real timeout disables PMIC key polling for
+the remainder of that boot; assess availability before production use.
+Dropped/denied completed commands fail but do not poison. A PMIC write and
+its later readback are separate transactions, not an atomic sequence; do not
+use the lock as proof of safe power/torch control. No controls were changed.
+The opt-in --gate reader reports acquired/busy/poisoned counters. Host
+ASan/UBSan stress exercised two concurrent readers, all transaction paths,
+contention without MMIO, completed errors, timeout poison and release;
+existing survey and PON models pass, and exact candidate compiled to arm64.
+Full build and hardware test pending. CI 42122390516 for 0263 succeeded.
+Signed reader staged at /tmp/river-gate-reader-1105. Battery remains synthetic
+and actual charge and charging remain unverified.
+
 ## River PON exclusion controlled hardware result (2026-11-05)
 
 Verified fastboot product river and RAM-booted local 0263 image SHA256

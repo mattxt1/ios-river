@@ -10,6 +10,8 @@ pre=r'''
 #include <stdio.h>
 #include <string.h>
 typedef uintptr_t vm_offset_t;
+static bool ri_spmi_acquire(void){return true;}
+static void ri_spmi_release(bool timeout){assert(!timeout);}
 struct sysctl_req { int unused; };
 #define SYSCTL_HANDLER_ARGS (void *oidp, void *arg1, int arg2, struct sysctl_req *req)
 static int ri_power_ready,ri_power_busy,mode,phase,writes,output_error;

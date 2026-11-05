@@ -11,6 +11,7 @@ static int ri_pon_ok, mode, calls; static uint32_t ri_pon_started,ri_pon_finishe
 static void ri_wr(uintptr_t b,unsigned o,uint32_t v){assert(b==1&&o==0&&v==((1u<<27)|0x100));}
 static uint32_t ri_rd(uintptr_t b,unsigned o){assert(b==1);if(o==0x18)return 0x42;assert(o==8);calls++;return mode==0?1:mode==1?9:0;}
 static void delay(unsigned n){assert(n==1);}
+static bool ri_spmi_read(uintptr_t p,unsigned a,unsigned count,uint32_t *v){assert(p==1&&a==0x10&&count==1);ri_wr(p,0,(1u<<27)|0x100); for(int i=0;i<1000;i++){unsigned status=ri_rd(p,8);if(status&1){if(status&14)return false;*v=ri_rd(p,0x18);return true;}delay(1);}return false;}
 '''
 main=r'''
 int main(void){uint8_t v=0;assert(!ri_pon(&v)&&!ri_pon_started);ri_pon_ok=1;for(mode=0;mode<3;mode++){calls=0;bool ok=ri_pon(&v);assert(ok==(mode==0));if(ok)assert(v==0x42);if(mode==2)assert(calls==1000);assert(ri_pon_started==ri_pon_finished);}ri_pon_survey_gate=1; assert(!ri_pon(&v)&&ri_pon_deferred==1); puts("PASS: PON success, error, timeout, balanced counters and busy gate");}

@@ -1,0 +1,188 @@
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -80,6 +80,34 @@
+  *(volatile uint32_t *)(base + off) = v;
+  __asm__ volatile("dsb osh" ::: "memory");
+ }
++/* One River AP execution-environment controller gate. A bounded non-sleeping
++ * acquisition can be called from early boot or interrupt-sensitive contexts.
++ * It does not exclude firmware or another execution environment. A command
++ * timeout poisons the controller until reboot: a late completion is unsafe to
++ * associate with a subsequent command. Never print or sleep while held. */
++static int ri_spmi_gate, ri_spmi_poisoned;
++static uint32_t ri_spmi_acquired, ri_spmi_busy;
++static bool
++ri_spmi_acquire(void)
++{
++ for (unsigned i=0;i<64;i++) {
++  if (__atomic_load_n(&ri_spmi_poisoned,__ATOMIC_ACQUIRE)) return false;
++  int expected=0;
++  if (__atomic_compare_exchange_n(&ri_spmi_gate,&expected,1,false,__ATOMIC_ACQUIRE,__ATOMIC_RELAXED)) {
++   if (!__atomic_load_n(&ri_spmi_poisoned,__ATOMIC_ACQUIRE)) { __atomic_add_fetch(&ri_spmi_acquired,1,__ATOMIC_RELAXED); return true; }
++   __atomic_store_n(&ri_spmi_gate,0,__ATOMIC_RELEASE); return false;
++  }
++  delay(1);
++ }
++ __atomic_add_fetch(&ri_spmi_busy,1,__ATOMIC_RELAXED); return false;
++}
++static void
++ri_spmi_release(bool timeout)
++{
++ if (timeout) __atomic_store_n(&ri_spmi_poisoned,1,__ATOMIC_RELEASE);
++ __atomic_store_n(&ri_spmi_gate,0,__ATOMIC_RELEASE);
++}
++
+ static inline uint32_t ri_fifo_rd32(vm_offset_t base, uint32_t off)
+ {
+  const volatile uint8_t *p = (const volatile uint8_t *)(base + off);
+@@ -234,13 +262,9 @@
+   __atomic_add_fetch(&ri_pon_deferred,1,__ATOMIC_RELAXED); return false;
+  }
+  __atomic_add_fetch(&ri_pon_started,1,__ATOMIC_SEQ_CST);
+- ri_wr(ri_obs, 0, (1u << 27) | 0x100); /* EXT_READL of SID0 0x810 */
+- bool ok=false;
+- for (unsigned i = 0; i < 1000; i++) {
+-  unsigned s = ri_rd(ri_obs, 8);
+-  if (s & 1) { if (!(s & 14)) { *v = (uint8_t)ri_rd(ri_obs,0x18); ok=true; } break; }
+-  delay(1);
+- }
++ uint32_t value=0;
++ bool ok=ri_spmi_read(ri_obs,0x10,1,&value);
++ if (ok) *v=(uint8_t)value;
+  __atomic_add_fetch(&ri_pon_finished,1,__ATOMIC_SEQ_CST);
+  __atomic_store_n(&ri_pon_survey_gate,0,__ATOMIC_RELEASE);
+  return ok;
+@@ -3107,14 +3131,17 @@
+ static bool
+ ri_spmi_read(vm_offset_t obs, unsigned addr, unsigned count, uint32_t *v)
+ {
++ if (!obs || !v || !count || count>4 || !ri_spmi_acquire()) return false;
++ bool ok=false, timeout=true;
+  ri_wr(obs, 0, (1u << 27) | ((addr & 0xff) << 4) | ((count - 1) & 7));
+  for (unsigned i = 0; i < 1000; i++) {
+   unsigned st = ri_rd(obs, 8);
+-  if (st & 1) { if (st & 14) return false; *v = ri_rd(obs, 0x18); return true; }
++  if (st & 1) { timeout=false; if (!(st & 14)) { *v = ri_rd(obs, 0x18); ok=true; } break; }
+   delay(1);
+  }
+- return false;
++ ri_spmi_release(timeout); return ok;
+ }
++
+ bool river_rtc_utc(clock_sec_t *out);
+ bool
+ river_rtc_utc(clock_sec_t *out)
+@@ -3291,20 +3318,19 @@
+ static bool
+ ri_charge_timing_read(vm_offset_t obs, unsigned wait_us, uint32_t *first, uint32_t *value)
+ {
+- ri_wr(obs, 0, (1u << 27) | (4u << 4)); /* EXT_READL, register 04, one byte */
++ *first=0; if (!ri_spmi_acquire()) return false;
++ bool ok=false,timeout=true;
++ ri_wr(obs, 0, (1u << 27) | (4u << 4));
+  if (wait_us) delay(wait_us);
+  *first = ri_rd(obs, 8);
+  for (unsigned i=0; i<1000; i++) {
+   uint32_t st = i ? ri_rd(obs, 8) : *first;
+-  if (st & 1) {
+-   if (st & 14) return false;
+-   *value = ri_rd(obs, 0x18) & 0xffu;
+-   return true;
+-  }
++  if (st & 1) { timeout=false; if (!(st & 14)) { *value=ri_rd(obs,0x18)&0xffu; ok=true; } break; }
+   delay(1);
+  }
+- return false;
++ ri_spmi_release(timeout); return ok;
+ }
++
+ static int
+ river_charge_timing_sysctl SYSCTL_HANDLER_ARGS
+ {
+@@ -3366,19 +3392,17 @@
+ static bool
+ ri_charge_alt_read(vm_offset_t obs, unsigned addr, uint32_t *status, uint32_t *value)
+ {
++ *status=0; if (!ri_spmi_acquire()) return false;
++ bool ok=false,timeout=true;
+  ri_wr(obs, 0, (1u << 27) | ((addr & 0xffu) << 4));
+- *status=0;
+  for (unsigned i=0; i<1000; i++) {
+   *status=ri_rd(obs,8);
+-  if (*status & 1u) {
+-   if (*status & 14u) return false;
+-   *value=ri_rd(obs,0x18)&0xffu;
+-   return true;
+-  }
++  if (*status & 1u) { timeout=false; if (!(*status & 14u)) { *value=ri_rd(obs,0x18)&0xffu; ok=true; } break; }
+   delay(1);
+  }
+- return false;
++ ri_spmi_release(timeout); return ok;
+ }
++
+ static int
+ river_charge_alt_sysctl SYSCTL_HANDLER_ARGS
+ {
+@@ -3407,8 +3431,8 @@
+ SYSCTL_PROC(_debug, OID_AUTO, river_charge_alt, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
+             NULL, 0, river_charge_alt_sysctl, "A", "River alternating SPMI identity survey");
+ 
+-/* Diagnostic only: compare the same RDATA before and after delays following
+- * DONE, rather than delaying before polling for DONE. No PMIC control writes. */
++/* Diagnostic only: later RDATA samples occur after the transaction gate is
++ * released and may be changed by another user; not a coherent snapshot. */
+ static int
+ river_charge_settle_sysctl SYSCTL_HANDLER_ARGS
+ {
+@@ -3498,6 +3522,20 @@
+ }
+ SYSCTL_PROC(_debug, OID_AUTO, river_charge_pon, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
+             NULL, 0, river_charge_pon_sysctl, "A", "River PON traffic correlation survey");
++
++/* Snapshot of the common transaction gate; counters may change during read. */
++static int
++river_spmi_gate_sysctl SYSCTL_HANDLER_ARGS
++{
++ char note[128];
++ snprintf(note,sizeof(note),"acquired=%u busy=%u poisoned=%d",
++  __atomic_load_n(&ri_spmi_acquired,__ATOMIC_RELAXED),
++  __atomic_load_n(&ri_spmi_busy,__ATOMIC_RELAXED),
++  __atomic_load_n(&ri_spmi_poisoned,__ATOMIC_ACQUIRE));
++ return sysctl_handle_string(oidp,note,0,req);
++}
++SYSCTL_PROC(_debug, OID_AUTO, river_spmi_gate, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
++            NULL, 0, river_spmi_gate_sysctl, "A", "River SPMI transaction gate status");
+ 
+ /* Experimental PON/charger exclusion only. No interrupt masking, waiting on
+  * the gate, or PMIC control writes. Busy PON polls are deferred to next tick.
+@@ -3542,21 +3580,18 @@
+ static bool
+ ri_spmi_write(vm_offset_t chnl, unsigned addr, uint8_t val)
+ {
+- if (!chnl) return false;
++ if (!chnl || !ri_spmi_acquire()) return false;
++ bool ok=false,timeout=true; uint32_t status=0;
+  ri_wr(chnl, 0x10, (uint32_t)val);
+- /* PMIC arbiter opcode 0 = EXT_WRITEL; opcode 3 is RESET. */
+  ri_wr(chnl, 0x00, (addr & 0xff) << 4);
+- for (unsigned i = 0; i < 2000; i++) {
+-  uint32_t s = ri_rd(chnl, 0x08);
+-  if (s & 1) {
+-   if (!(s & 0xe)) return true;
+-   printf("RIVER HAPTICS: SPMI write reg=%#x status=%#x\n", addr, s);
+-   return false;
+-  }
++ for (unsigned i=0;i<2000;i++) {
++  status=ri_rd(chnl,0x08);
++  if (status & 1u) { timeout=false; ok=!(status & 14u); break; }
+   delay(1);
+  }
+- printf("RIVER HAPTICS: SPMI write timeout reg=%#x status=%#x\n", addr, ri_rd(chnl, 8));
+- return false;
++ ri_spmi_release(timeout);
++ if (!ok) printf("RIVER HAPTICS: SPMI write reg=%#x status=%#x%s\n",addr,status,timeout?" timeout":" error");
++ return ok;
+ }
+ 
+ /* Read back every reset configuration write through the observer channel. */

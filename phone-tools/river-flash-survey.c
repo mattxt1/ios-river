@@ -13,7 +13,8 @@ int main(int argc, char **argv) {
  else if (argc == 2 && strcmp(argv[1], "--status") == 0) name = "debug.river_charge_status";
  else if (argc == 2 && strcmp(argv[1], "--pon") == 0) name = "debug.river_charge_pon";
  else if (argc == 2 && strcmp(argv[1], "--serial") == 0) name = "debug.river_charge_serial";
- else if (argc != 1) { fprintf(stderr, "usage: river-flash-survey [--live|--charge|--timing|--rdata|--alternating|--settle|--status|--pon|--serial]\n"); return 2; }
+ else if (argc == 2 && strcmp(argv[1], "--gate") == 0) name = "debug.river_spmi_gate";
+ else if (argc != 1) { fprintf(stderr, "usage: river-flash-survey [--live|--charge|--timing|--rdata|--alternating|--settle|--status|--pon|--serial|--gate]\n"); return 2; }
  char data[512]; size_t n=sizeof(data);
  if (sysctlbyname(name,data,&n,0,0)) { perror(name); return 1; }
  printf("%s\n",data); return 0;
