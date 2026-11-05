@@ -20,6 +20,13 @@ Host sanitizer model passed stable/changed status and data, error, busy and
 output failure cases. The candidate source compiled to an ARM64 object
 against the exact 0260 CI build tree; full build and hardware test pending.
 Signed reader staged as /tmp/river-status-reader-1105 on the 0260 boot.
+Full clean local build commit fed652f2c432b31da6457c83e23c9365302623ab
+succeeded; source matched candidate and passed sanitizer test. Kernel SHA256
+d5f15bb9bca6ae9c06b2a8cddc285579e172f89cbc2d50f05e20b9f0fce86129.
+Temporary image SHA256 7f8d20216863ef54b7096149be061c678aa7ee1f6498e42dbdf022aff8f9e6b5
+preserved the golden shim, DTB, firmware and backlight config. CI run
+42115681088 is independently building the same commit. Fastboot handoff
+requested for the local image; no 0261 device result yet.
 No charge or torch controls changed; actual charging and SOC remain unknown.
 
 ## River 0260 post-DONE survey result (2026-11-05)
