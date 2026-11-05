@@ -5,6 +5,23 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River observer status correlation diagnostic (2026-11-05)
+
+The pinned Motorola SPMI driver serializes command through completion and
+data under an IRQ-safe controller lock; River's survey gate covers only
+its diagnostic paths. This makes interference a hypothesis, not a proven
+cause of delayed zeroes. Patch 0261 adds an opt-in 64-attempt diagnostic
+that samples status immediately before each delayed data read and counts
+status changes, data changes, their overlap, late error bits and initial
+transaction errors. It does not write PMIC controls. Status and data are
+separate reads; unchanged status cannot rule out an intervening transaction
+or establish data freshness, and observation itself changes sample timing.
+Host sanitizer model passed stable/changed status and data, error, busy and
+output failure cases. The candidate source compiled to an ARM64 object
+against the exact 0260 CI build tree; full build and hardware test pending.
+Signed reader staged as /tmp/river-status-reader-1105 on the 0260 boot.
+No charge or torch controls changed; actual charging and SOC remain unknown.
+
 ## River 0260 post-DONE survey result (2026-11-05)
 
 User restored the Mac USB alias after re-enumeration; USB and SSH returned

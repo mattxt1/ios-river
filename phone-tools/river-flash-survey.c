@@ -10,7 +10,8 @@ int main(int argc, char **argv) {
  else if (argc == 2 && strcmp(argv[1], "--rdata") == 0) name = "debug.river_charge_rdata";
  else if (argc == 2 && strcmp(argv[1], "--alternating") == 0) name = "debug.river_charge_alt";
  else if (argc == 2 && strcmp(argv[1], "--settle") == 0) name = "debug.river_charge_settle";
- else if (argc != 1) { fprintf(stderr, "usage: river-flash-survey [--live|--charge|--timing|--rdata|--alternating|--settle]\n"); return 2; }
+ else if (argc == 2 && strcmp(argv[1], "--status") == 0) name = "debug.river_charge_status";
+ else if (argc != 1) { fprintf(stderr, "usage: river-flash-survey [--live|--charge|--timing|--rdata|--alternating|--settle|--status]\n"); return 2; }
  char data[512]; size_t n=sizeof(data);
  if (sysctlbyname(name,data,&n,0,0)) { perror(name); return 1; }
  printf("%s\n",data); return 0;
