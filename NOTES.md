@@ -5,6 +5,39 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River repeated observer data hardware test (2026-11-05)
+
+User authorized pushing branch `codex/river-spmi-rdata`, building and testing.
+GitHub Actions run 42102528747 succeeded for source commit 0cc83b7 with
+`board=river`; SHA256 of the kernel was
+e5d51976b31b3a8c84ee110a2fc0e59ab7e889fbe1d43125c061ac8203e692f9.
+The CI sweet_keys.c matched the locally compiled candidate byte for byte; the
+sanitizer model passed against the CI source. RAM image SHA256
+4ac50598bb90821a3d2cafcca02a860c7c210a8458056436db43983a641282fb
+preserved the verified baseline shim, DTB, four firmware blobs and backlight
+argument. `product: river` was verified, and fastboot send/boot succeeded;
+no partition was flashed. USB Ethernet and SSH returned. The ad-hoc signed
+reader was staged at `/tmp/river-rdata-reader-1105` on the writable root.
+
+Twelve runs of 64 transactions each returned 12 first-byte zeroes, 755 twos,
+no other values, and one error. Every successful transaction's three immediate
+reads of the same RDATA register agreed, including the zeroes (`changed=0`
+in all runs). This evidence disfavors a transient mismatch between these three
+successive register reads; it does not establish that the first value is fresh,
+exclude a concurrent same-channel writer, or show whether the incorrect value
+originates in the command/completion, bus, PMIC, or mapping. The individual
+error was reported by the diagnostic; its detailed status was not captured.
+A charge sample still reported type/subtype 0x2/0x80, state 0x47, error 0x8,
+command 0, path 0x95; a live sample's SOC and ADC are unvalidated. No charger
+control or torch request was made. The phone was left on the survey image with
+USB connected. Original diagnostic output is captured in this entry; USB log
+is in /Users/matttyson/Documents/Codex/2026-11-05/d-2/work/river-timing-live.log.
+
+Next investigate command/completion freshness and channel mapping, including a
+paired alternating-register test to detect stale prior data and a test that
+records full status on failure. Do not publish a battery percentage or alter
+charging based on these results; repeat RDATA agreement is not value validity.
+
 ## River observer data-register diagnostic candidate (2026-11-05)
 
 On the same live diagnostic boot, an additional eight timing runs of 64
