@@ -5,6 +5,36 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River upstream comparison and QG image (2026-11-05)
+
+GitHub identifies MakrSas/ios-topaz as the immediate parent and
+Dipa-studio/ios-sweet as the original upstream. Fetched topaz default branch
+at e4772911e116ab4ab6c4ac1f38e6106fefe8b483: compared with River a2b1a34,
+the merge base is 590f0018cbd5a500595fb790f20f4202ac457464 and the branch
+histories have 460 River-only and 22 Topaz-only commits. Commit ancestry alone
+does not establish which changes were independently ported. Topaz patch 0148
+actively controls a bq2589x charger and uses an SM5602 gauge; it does not
+apply to River PMI632 and must not be ported as River charging policy.
+
+Fetched ios-sweet main at 45263bee51df4a0f55cdf9c649af886399488ddb; River
+and upstream have 534 and 11 ancestry-only commits respectively from merge
+base 347e19018e3e4c0117635e9e444f73659b2ece53. Upstream 0081 advertises iOS
+USB Ethernet link state, useful for routing but not demonstrated to fix the
+physical reconnect failure. The existing SweetBattery lineage has a PMI632
+voltage-derived estimate, but River's 0242 intentionally publishes a synthetic
+value. An unvalidated voltage curve or different device's charger controls
+must not be substituted for measured River battery behavior.
+
+Local build of c53afbdfc446c8dd5ffbff71b3d684be07dfab4b passed, source
+matched tested candidate, kernel SHA256
+6e825343623bf6d563f6967c73bf63b89168811b8564253892c4bb91a15d7212.
+Temporary image SHA256
+d2030fd2df39dde295d9a433e8664aabe5843cba496a655685b6e2a30ea5f3ea;
+golden payload reconstructed and shim, DTB, firmware and backlight preserved.
+Image /Users/matttyson/Documents/Codex/2026-11-05/river-battery-implementation/work/river-qg-compare-boot.img.
+User asked to enter fastboot; previous inaccessible /tmp log may be lost.
+CI 42130549865 is pending at this writing. Nothing has been flashed.
+
 ## River QG offline logging tool (2026-11-05)
 
 Added river-qg-log: bounded on-phone sequential samples of QG ADC, QG
