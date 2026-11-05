@@ -5,6 +5,23 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River QG read comparison candidate (2026-11-05)
+
+The phone's USB interface remains inactive following the cable test; the user
+reported the screen responsive and no alternative Mac port. The disconnected
+sample log remains on the running phone and cannot presently be retrieved.
+Patch 0266 adds an opt-in, read-only QG transaction comparison: identity and
+status1, four-byte last-ADC, separate two-byte voltage/current, unheld burst
+current, then another four-byte last-ADC. Each read is sequential and can
+observe a different conversion; neither equality nor disagreement proves
+freshness or an atomic snapshot. Status2 is intentionally omitted because
+Motorola treats it as sticky. Burst current is explicitly unheld and is not
+Motorola's current-now measurement. Nothing changes charger or torch controls.
+ASan/UBSan tests of the actual handler exercise the register sequence, busy and
+unavailable paths, every read failure and output error; existing power and
+charger sample tests were repaired to extract only ri_power_read and pass.
+No battery property, SOC, charger state or USB recovery is claimed validated.
+
 ## River QG diagnostic first boot (2026-11-05)
 
 Fastboot product river verified; RAM-booted image SHA256

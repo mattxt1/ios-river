@@ -1,0 +1,40 @@
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -3287,6 +3287,37 @@
+ SYSCTL_PROC(_debug, OID_AUTO, river_qg_sample, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
+             NULL, 0, river_qg_sample_sysctl, "A", "River QG last ADC diagnostic");
+ 
++/* Read-only transport comparison. Every transaction can observe a different
++ * gauge update; agreement is not proof of freshness or atomicity. QG status2
++ * is deliberately omitted because the Motorola driver treats it as sticky.
++ * The burst value is unheld and is not Motorola's current-now reading. */
++static int
++river_qg_compare_sysctl SYSCTL_HANDLER_ARGS
++{
++ if (!__atomic_load_n(&ri_power_ready, __ATOMIC_ACQUIRE)) return ENXIO;
++ int expected = 0;
++ if (!__atomic_compare_exchange_n(&ri_power_busy, &expected, 1, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) return EBUSY;
++ uint32_t type, subtype, status, pair1, v, i, burst, pair2;
++ int error = EIO;
++ if (ri_power_read(ri_power_qg, 4, 1, &type) &&
++     ri_power_read(ri_power_qg, 5, 1, &subtype) &&
++     ri_power_read(ri_power_qg, 8, 1, &status) &&
++     ri_power_read(ri_power_qg, 0xc0, 4, &pair1) &&
++     ri_power_read(ri_power_qg, 0xc0, 2, &v) &&
++     ri_power_read(ri_power_qg, 0xc2, 2, &i) &&
++     ri_power_read(ri_power_qg, 0xc6, 2, &burst) &&
++     ri_power_read(ri_power_qg, 0xc0, 4, &pair2)) {
++  char note[192];
++  snprintf(note, sizeof(note), "type=%#x subtype=%#x status1=%#x pair1=%#x v16=%#x i16=%#x burst_unheld=%#x pair2=%#x",
++      type, subtype, status, pair1, v, i, burst, pair2);
++  error = sysctl_handle_string(oidp, note, 0, req);
++ }
++ __atomic_store_n(&ri_power_busy, 0, __ATOMIC_RELEASE);
++ return error;
++}
++SYSCTL_PROC(_debug, OID_AUTO, river_qg_compare, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
++            NULL, 0, river_qg_compare_sysctl, "A", "River QG read-only transaction comparison");
++
+ /* On-demand, read-only observer sample. The atomic gate prevents concurrent
+  * readers from racing on the same SPMI observer command registers. */
+ static int

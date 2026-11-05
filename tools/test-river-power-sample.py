@@ -1,7 +1,7 @@
 from pathlib import Path
 import subprocess, sys, tempfile
 if len(sys.argv) != 2: raise SystemExit('usage: test-river-power-sample.py PATCHED_SWEET_KEYS_C')
-s=Path(sys.argv[1]).read_text();a=s.index('static int\nriver_power_sample_sysctl');b=s.index('\nSYSCTL_PROC(_debug, OID_AUTO, river_power_sample',a);fn=s[s.index('static bool\nri_power_read('):s.index('\n/* On-demand',s.index('static bool\nri_power_read('))]+s[a:b]
+s=Path(sys.argv[1]).read_text();a=s.index('static int\nriver_power_sample_sysctl');b=s.index('\nSYSCTL_PROC(_debug, OID_AUTO, river_power_sample',a);fn=s[s.index('static bool\nri_power_read('):s.index('\n}\n',s.index('static bool\nri_power_read('))+3]+s[a:b]
 pre=r'''#include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
