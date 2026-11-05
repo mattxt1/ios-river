@@ -5,6 +5,38 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River power-observer test preparation (2026-11-05)
+
+The phone was detected in fastboot and `product` returned `river`. Fastboot did
+not provide battery voltage, percentage or SOC through the queried variables.
+The user reported `Battery Low` while unplugged, `Battery OK (Charging)` on the
+fast charger, and later `Battery OK (Charging)` on the Mac. These indications do
+not quantify state of charge; in particular, the connected status does not
+prove sufficient charge for an iOS test or that charging works under XNU.
+No boot, partition write or power-control change was performed in this session.
+
+Previously pending GitHub Actions run 41093918442 completed successfully for
+commit cecec3e. Downloaded kernel SHA256
+1246bdc20dd10ac05101a1265142d6fa3a3c3f7650bdb6ba2e0261903c3593e7;
+artifact checksum and River/timing strings verified. The host timing model
+passes against the previously saved patched source. A temporary image was
+prepared at /Users/matttyson/Documents/Codex/2026-11-05/d-2/work/river-timing-survey-boot.img,
+SHA256 b34d68ec3a834e6741a99dd0bdc39fd387836d6e93ed2f54a8f61ee9be947a53.
+The historical backlight image's payload was reconstructed byte-for-byte,
+and the new package retains the shim, DTB and four firmware blobs, with the
+survey boot argument substituted and `riverbl=1` retained. It has NOT been
+booted. This image is for `fastboot boot` only, and uses the existing writable
+root; temporary booting does not itself make the root read-only.
+
+The timing survey compares reads of the charger identity register with and
+without a 10 us delay; it does not prove PMIC data freshness or charging. It
+issues read transactions through the observer; it does not request PMIC control
+writes. The `ri_power_busy` gate serializes these survey sysctls with one
+another, not every possible SPMI client. Keep the torch production interlock,
+avoid making charging changes, and reassess battery and device identity before
+any RAM boot. Next when sufficiently charged: connect, capture USB logs and
+run the timing and live surveys, then compare counts with previous data.
+
 ## River documentation audit (2026-11-05)
 
 Reconciled the public documentation against the tracked October 30 notes and
