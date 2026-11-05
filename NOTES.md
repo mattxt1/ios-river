@@ -5,6 +5,35 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River cable log recovered and QG read comparison (2026-11-05)
+
+The previous /tmp/river-qg-disconnect-log survived a fastboot reboot and was
+retrieved successfully (36 records); this establishes survival for that file
+on this installation for this reboot, not a general persistence guarantee.
+Nine successive records showed charger power_path=0x02 and modes=0x40, bounded
+by records with power_path=0x95 and modes=0x80, consistent with the user's
+USB unplug/replug. In those nine records QG voltage was 3.463–3.527 V and raw
+polarity current +0.581–+0.937 A, while adjacent connected observations had
+higher voltage and much lower current. Readings are sequential and uncalibrated;
+this supports a load/cable correlation, not a validated charging state or SOC.
+Device wall-clock values were not checked against actual time. Gate busy rose
+from 2 to 12 within that interval; no poison, and one earlier charger sample
+returned EBUSY. Raw log is in projectless work/qg-disconnect-recovered.txt.
+
+RAM-booted 0266 image d2030fd2df39dde295d9a433e8664aabe5843cba496a655685b6e2a30ea5f3ea
+on verified product river, no flash. A 64-run comparison returned QG identity
+0x0d/0x03 and status1 QG_OK plus battery present in all 64. The current halves
+of both four-byte samples and the intervening two-byte read agreed in all 64;
+voltage agreed in 62/64. Both four-byte current halves were zero in 60 runs;
+all three ADC current reads and the unheld burst value were zero in 45. No
+0x8000 sentinel appeared. Different reads are sequential; equality does not
+prove freshness, and the burst register is not held. Gate moved from
+acquired=12465 busy=0 poisoned=0 before the run to 15964/2/0 after it, with
+other activity between snapshots. Individual records in projectless
+work/qg-compare-results.txt. Signed bounded logger staged and a 24-sample,
+5-second read-only series started; retrieve /tmp/river-qg-series-0266 when
+complete. No charging or torch controls changed. CI 42130549865 in progress.
+
 ## River upstream comparison and QG image (2026-11-05)
 
 GitHub identifies MakrSas/ios-topaz as the immediate parent and
