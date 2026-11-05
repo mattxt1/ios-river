@@ -5,6 +5,20 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River charger status interpretation (2026-11-05)
+
+Motorola River source e098be34e94ab00ad922803492995eef75017d78 smb5-reg.h
+masks BATTERY_CHARGER_STATUS_1 to bits 2:0: code 7 is DISABLE_CHARGE.
+Thus observed raw 0x47 indicates the charger reports disabled, not charging,
+throughout the recovered cable log. POWER_PATH_STATUS 0x95 has USE_USBIN and
+VALID_INPUT_POWER_SOURCE set; 0x02 has neither. Motorola's smblib can apply
+additional software votes and exceptions, so these register observations do
+not reproduce the complete Android power-supply state. The precise reason
+charging is disabled is unknown; do not change charge controls to test it.
+Sources: https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/e098be34e94ab00ad922803492995eef75017d78/drivers/power/supply/qcom/smb5-reg.h
+and https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/e098be34e94ab00ad922803492995eef75017d78/drivers/power/supply/qcom/smb5-lib.c
+CI 42130549865 passed for c53afbdfc446c8dd5ffbff71b3d684be07dfab4b.
+
 ## River cable log recovered and QG read comparison (2026-11-05)
 
 The previous /tmp/river-qg-disconnect-log survived a fastboot reboot and was
