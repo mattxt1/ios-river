@@ -5,6 +5,33 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River common SPMI gate hardware result (2026-11-05)
+
+Fastboot product river verified; local 0264 temporary image SHA256
+5c8c6419268f4835d7bb43044f74c8631bf2a4094d7992407b2b54984fd63cfc
+booted successfully with no partition flash. USB and SSH returned. Before
+the survey, --gate reported acquired=10101 busy=0 poisoned=0. A --pon
+survey reported 64 initial twos, no initial zeroes/errors and eight delayed
+changes by 100 us with eight possible PON overlaps; delayed samples are
+outside the common lock and are not guaranteed coherent. Then 32 alternating
+64-pair runs made 4,096 successful transactions: 2,048 expected type=2
+and 2,048 expected subtype=0x80, zero zeroes, prior matches, other values or
+reported transaction errors. Afterwards --gate was acquired=14341 busy=14
+poisoned=0. Thus 14 gate acquisitions elsewhere failed under the workload;
+these counters do not identify the caller. No timeout poisoned the gate.
+A later read-only charge sample completed, but its raw fields and the
+synthetic battery UI do not validate actual charge or charging. The full
+individual records are private work/river-gate-results.txt; the boot log is
+private work/river-gate-live-1.log. No PMIC charging or torch controls were
+changed. CI 42125055534 for exact commit 770c1f1 was in progress at check.
+
+This validates initial identity reads under this workload, not freshness of
+all PMIC data or coordination with other execution environments. The 14 busy
+failures and fail-closed controller poison on timeout remain availability
+tradeoffs, including possible skipped PON polls or disabled PON after timeout;
+this implementation is experimental. User was asked to check physical power
+button responsiveness; response pending. Phone remains on 0264 RAM boot.
+
 ## River common SPMI transaction gate candidate (2026-11-05)
 
 Patch 0264 puts a single River controller gate around all command-issuing
