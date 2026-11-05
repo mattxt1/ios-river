@@ -5,6 +5,22 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River continuation handoff (2026-11-05)
+
+User does not think Android is still installed; do not assume an Android boot
+or ask for one without first establishing availability. The 0266 RAM boot is
+still reachable at 192.168.7.2 over USB at this handoff. An independent meter
+or another reliable reference is still needed to validate voltage/current and
+charging behavior. Do not implement a fabricated SOC or publish these
+unvalidated readings as real battery properties. Preserve the existing
+constraint against changing charging/torch controls and never flash partitions.
+
+An initial path inventory from the pinned Motorola kernel tree is saved at
+/Users/matttyson/Documents/Codex/2026-11-05/river-battery-implementation/work/motorola-battery-files.txt.
+It includes River device-tree overlays and multiple qg-batterydata files;
+no River pack profile has yet been identified or validated. Trace the actual
+includes and pack identification before choosing any profile.
+
 ## River 0266 USB-connected time series (2026-11-05)
 
 The signed river-qg-log completed 24 sequential samples, nominally five
