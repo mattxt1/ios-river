@@ -1,0 +1,40 @@
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+index 3982f86..0f12280 100644
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -3396,6 +3396,35 @@ river_charge_alt_sysctl SYSCTL_HANDLER_ARGS
+ SYSCTL_PROC(_debug, OID_AUTO, river_charge_alt, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
+             NULL, 0, river_charge_alt_sysctl, "A", "River alternating SPMI identity survey");
+ 
++/* Diagnostic only: compare the same RDATA before and after delays following
++ * DONE, rather than delaying before polling for DONE. No PMIC control writes. */
++static int
++river_charge_settle_sysctl SYSCTL_HANDLER_ARGS
++{
++ if (!__atomic_load_n(&ri_power_ready,__ATOMIC_ACQUIRE) || !ri_charge_chgr) return ENXIO;
++ int expected=0;
++ if (!__atomic_compare_exchange_n(&ri_power_busy,&expected,1,false,__ATOMIC_ACQ_REL,__ATOMIC_ACQUIRE)) return EBUSY;
++ unsigned first_zero=0,first_two=0,first_other=0,errors=0,changed10=0,changed100=0,z10=0,z100=0,good_to_zero=0;
++ uint32_t last_error=0;
++ for (unsigned i=0;i<64;i++) {
++  uint32_t status=0,first=0;
++  if (!ri_charge_alt_read(ri_charge_chgr,4,&status,&first)) { errors++; last_error=status; continue; }
++  delay(10); uint32_t d10=ri_rd(ri_charge_chgr,0x18)&0xffu;
++  delay(90); uint32_t d100=ri_rd(ri_charge_chgr,0x18)&0xffu;
++  if (first==0) first_zero++; else if(first==2) first_two++; else first_other++;
++  if(first!=d10) changed10++; if(first!=d100) changed100++;
++  if(first==0 && d10==2) z10++; if(first==0 && d100==2) z100++;
++  if(first==2 && (d10==0 || d100==0)) good_to_zero++;
++ }
++ char note[320];
++ snprintf(note,sizeof(note),"trials=64 first_zero=%u first_two=%u first_other=%u errors=%u last_error=%#x changed10=%u changed100=%u zero_to_two10=%u zero_to_two100=%u two_to_zero=%u",first_zero,first_two,first_other,errors,last_error,changed10,changed100,z10,z100,good_to_zero);
++ int error=sysctl_handle_string(oidp,note,0,req);
++ __atomic_store_n(&ri_power_busy,0,__ATOMIC_RELEASE);
++ return error;
++}
++SYSCTL_PROC(_debug, OID_AUTO, river_charge_settle, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
++            NULL, 0, river_charge_settle_sysctl, "A", "River post-DONE data delay survey");
++
+ static vm_offset_t
+ ri_spmi_chnl(vm_offset_t core, unsigned ppid)
+ {
