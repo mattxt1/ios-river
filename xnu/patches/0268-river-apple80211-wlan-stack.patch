@@ -386,7 +386,7 @@
 +#endif /* _SYS_RIVER_APPLE80211_H_ */
 --- /dev/null
 +++ b/bsd/dev/river_apple80211.c
-@@ -0,0 +1,638 @@
+@@ -0,0 +1,656 @@
 +/*
 + * river_apple80211.c: Apple80211 ioctl and event engine for Moto G7 river.
 + */
@@ -795,6 +795,7 @@
 +	case 22: {
 +		lck_mtx_lock(&river_apple80211_mtx);
 +		active_phase = PHASE_IDLE;
++		bzero(&active_bss, sizeof(active_bss));
 +		lck_mtx_unlock(&river_apple80211_mtx);
 +		river_apple80211_link_changed(false, 0);
 +		break;
@@ -802,7 +803,14 @@
 +	case 19: {
 +		lck_mtx_lock(&river_apple80211_mtx);
 +		river_power_state = (request->req_val != 0);
++		if (!river_power_state) {
++			active_phase = PHASE_IDLE;
++			bzero(&active_bss, sizeof(active_bss));
++		}
 +		lck_mtx_unlock(&river_apple80211_mtx);
++		if (!river_power_state) {
++			river_apple80211_link_changed(false, 0);
++		}
 +		post(EVENT_POWER_CHANGED, NULL, 0);
 +		break;
 +	}
@@ -940,8 +948,18 @@
 +river_apple80211_assoc_done(int status)
 +{
 +	lck_mtx_lock(&river_apple80211_mtx);
-+	join_result = (status == 0 ? 1 : (status == EAUTH ? 21 : (status == ETIMEDOUT ? 9 : 2)));
++	join_result = (status == 0 ? 0 : (status == EAUTH ? 21 : (status == ETIMEDOUT ? 9 : 2)));
 +	join_pending_flag = false;
++	if (status == 0) {
++		active_phase = PHASE_JOINED;
++		for (unsigned i = 0; i < river_bss_count; i++) {
++			if (river_bss_table[i].ssid_len == pending_join.ssid_len &&
++			    memcmp(river_bss_table[i].ssid, pending_join.ssid, pending_join.ssid_len) == 0) {
++				memcpy(&active_bss, &river_bss_table[i], sizeof(active_bss));
++				break;
++			}
++		}
++	}
 +	lck_mtx_unlock(&river_apple80211_mtx);
 +	post(EVENT_ASSOC_DONE, NULL, 0);
 +	printf("river_apple80211: assoc finished, status=%d join_result=%u, posted EVENT_ASSOC_DONE\n",
@@ -1147,12 +1165,13 @@
      }
      static const unsigned tbls[] = { 13, 266 };
      for (unsigned t = 0; t < sizeof(tbls) / sizeof(tbls[0]); t++) {
-@@ -2897,6 +2927,57 @@
+@@ -2897,6 +2927,58 @@
    for (unsigned ticks = 0; river_dxe_ready; ticks++) {
     river_dxe_poll();
     river_network_poll();
 +   if (!river_wifi_ifp) river_network_create();
-+   if (river_apple80211_scan_pending() && river_smd_smem && river_smd_wlan_info && river_wpa.stage != 2) {
++   if (river_apple80211_scan_pending() && river_smd_smem && river_smd_wlan_info) {
++    if (river_wpa.stage == 2) river_wpa.stage = 0;
 +    river_passive_scan(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc);
 +    river_apple80211_scan_done(0);
 +   }
@@ -1191,11 +1210,11 @@
 +     if (river_wpa.stage == 2) {
 +      ifnet_set_flags(river_wifi_ifp, IFF_UP | IFF_RUNNING, IFF_UP | IFF_RUNNING);
 +      river_net_live = true;
-+      river_apple80211_assoc_done(0);
 +      river_apple80211_link_changed(true, tinfo.rssi);
++      river_apple80211_assoc_done(0);
 +     } else {
-+      river_apple80211_assoc_done(EAUTH);
 +      river_apple80211_link_changed(false, 0);
++      river_apple80211_assoc_done(EAUTH);
 +     }
 +    } else {
 +     river_apple80211_assoc_done(ETIMEDOUT);
