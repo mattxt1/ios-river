@@ -1,0 +1,245 @@
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -3318,6 +3318,117 @@
+ SYSCTL_PROC(_debug, OID_AUTO, river_qg_compare, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
+             NULL, 0, river_qg_compare_sysctl, "A", "River QG read-only transaction comparison");
+ 
++/* Motorola JG30 (3000 mAh) battery profile OCV lookup table at 25 C.
++ * Traced from sdm632-river-common-overlay.dtsi and qg-batterydata-jg30-atl-3000mah.dtsi.
++ * Strictly monotonic decreasing voltage (4380 mV at 100.0% down to 2772 mV at 0.0%). */
++static const struct {
++ uint16_t mv;
++ uint16_t soc_bp; /* basis points: 10000 = 100.0% */
++} jg30_ocv_lut[] = {
++ {4380, 10000}, {4350,  9800}, {4322,  9600}, {4296,  9400}, {4271,  9200},
++ {4248,  9000}, {4224,  8800}, {4201,  8600}, {4178,  8400}, {4156,  8200},
++ {4134,  8000}, {4112,  7800}, {4091,  7600}, {4070,  7400}, {4050,  7200},
++ {4030,  7000}, {4010,  6800}, {3991,  6600}, {3974,  6400}, {3959,  6200},
++ {3941,  6000}, {3918,  5800}, {3895,  5600}, {3878,  5400}, {3864,  5200},
++ {3851,  5000}, {3841,  4800}, {3831,  4600}, {3822,  4400}, {3813,  4200},
++ {3806,  4000}, {3799,  3800}, {3793,  3600}, {3787,  3400}, {3781,  3200},
++ {3775,  3000}, {3769,  2800}, {3763,  2600}, {3756,  2400}, {3748,  2200},
++ {3740,  2000}, {3731,  1800}, {3720,  1600}, {3708,  1400}, {3693,  1200},
++ {3688,  1000}, {3687,   900}, {3685,   800}, {3682,   700}, {3672,   600},
++ {3643,   500}, {3595,   400}, {3533,   300}, {3448,   200}, {3316,   100},
++ {2772,     0},
++};
++#define JG30_OCV_LUT_COUNT (sizeof(jg30_ocv_lut) / sizeof(jg30_ocv_lut[0]))
++
++static unsigned
++jg30_estimate_soc(unsigned mv, int ma)
++{
++ unsigned vocv = mv;
++ if (ma < 0) {
++  unsigned dis_ma = (unsigned)(-ma);
++  unsigned vdrop = (dis_ma * 3u) / 20u; /* 150 mOhm cell IR compensation */
++  if (vdrop > 300) vdrop = 300;
++  vocv += vdrop;
++ }
++ if (vocv >= jg30_ocv_lut[0].mv) return 100;
++ if (vocv <= jg30_ocv_lut[JG30_OCV_LUT_COUNT - 1].mv) return 0;
++ for (unsigned i = 0; i < JG30_OCV_LUT_COUNT - 1; ++i) {
++  if (vocv <= jg30_ocv_lut[i].mv && vocv >= jg30_ocv_lut[i + 1].mv) {
++   unsigned span_mv = jg30_ocv_lut[i].mv - jg30_ocv_lut[i + 1].mv;
++   unsigned span_soc = jg30_ocv_lut[i].soc_bp - jg30_ocv_lut[i + 1].soc_bp;
++   unsigned frac_mv = vocv - jg30_ocv_lut[i + 1].mv;
++   unsigned soc_bp = jg30_ocv_lut[i + 1].soc_bp;
++   if (span_mv > 0) soc_bp += (frac_mv * span_soc) / span_mv;
++   return (soc_bp + 50u) / 100u;
++  }
++ }
++ return 0;
++}
++
++/* River hardware battery reading function.
++ * Thread-safe with atomic ri_power_busy exclusion. No PMIC writes.
++ * Reads 4-byte last ADC (V and I in single atomic SPMI burst), DCDC path and CHGR status.
++ * Voltage is converted using Motorola's 194637/1000 uV per count.
++ * Current is converted using Motorola's 152588/1000 uA per count.
++ * Apple IOPMPowerSource convention: negative mA = discharging, positive mA = charging. */
++bool
++river_battery_sample(unsigned *out_mv, int *out_ma, bool *out_external, bool *out_charging, bool *out_full, unsigned *out_soc)
++{
++ if (!ri_power_qg || !ri_charge_chgr || !ri_charge_dcdc) {
++  vm_offset_t core = ri_map(0x0200f000);
++  if (!core) return false;
++  if (!ri_power_qg) ri_power_qg = ri_spmi_obs(core, 0x248);
++  if (!ri_charge_chgr) ri_charge_chgr = ri_spmi_obs(core, 0x210);
++  if (!ri_charge_dcdc) ri_charge_dcdc = ri_spmi_obs(core, 0x211);
++  if (!ri_power_usb) ri_power_usb = ri_spmi_obs(core, 0x213);
++  if (!ri_power_qg || !ri_charge_chgr || !ri_charge_dcdc) return false;
++ }
++ int expected = 0;
++ if (!__atomic_compare_exchange_n(&ri_power_busy, &expected, 1, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) return false;
++ uint32_t vi_pair = 0, path = 0, chg_stat = 0;
++ bool ok = ri_power_read(ri_power_qg, 0xc0, 4, &vi_pair) &&
++           ri_power_read(ri_charge_dcdc, 0x0b, 1, &path) &&
++           ri_power_read(ri_charge_chgr, 0x06, 1, &chg_stat);
++ __atomic_store_n(&ri_power_busy, 0, __ATOMIC_RELEASE);
++ uint16_t v_raw = (uint16_t)(vi_pair & 0xffffu);
++ uint16_t i_raw = (uint16_t)((vi_pair >> 16) & 0xffffu);
++ if (!ok || v_raw == 0x8000u || v_raw == 0) return false;
++ uint32_t uv = (uint32_t)((194637ULL * (uint64_t)v_raw) / 1000);
++ unsigned mv = uv / 1000;
++ if (mv < 2800 || mv > 4600) return false;
++ int ma = 0;
++ if (i_raw != 0x8000u) {
++  int32_t signed_ir = (i_raw & 0x8000u) ? (int32_t)i_raw - 65536 : (int32_t)i_raw;
++  int32_t ua = (int32_t)((152588LL * signed_ir) / 1000);
++  ma = -(int)(ua / 1000);
++ }
++ bool ext = (path & 0x10u) && (path & 0x01u);
++ uint32_t st = chg_stat & 7u;
++ bool chg = ext && (st >= 1u && st <= 4u);
++ bool full = ext && (st == 5u);
++ unsigned soc = full ? 100 : jg30_estimate_soc(mv, ma);
++ if (out_mv) *out_mv = mv;
++ if (out_ma) *out_ma = ma;
++ if (out_external) *out_external = ext;
++ if (out_charging) *out_charging = chg;
++ if (out_full) *out_full = full;
++ if (out_soc) *out_soc = soc;
++ return true;
++}
++
++static int
++river_battery_sysctl SYSCTL_HANDLER_ARGS
++{
++ unsigned mv = 0, soc = 0; int ma = 0; bool ext = false, chg = false, full = false;
++ if (!river_battery_sample(&mv, &ma, &ext, &chg, &full, &soc)) return EIO;
++ char note[160];
++ snprintf(note, sizeof(note), "voltage_mv=%u amperage_ma=%d external=%d charging=%d full=%d soc=%u",
++     mv, ma, ext, chg, full, soc);
++ return sysctl_handle_string(oidp, note, 0, req);
++}
++SYSCTL_PROC(_debug, OID_AUTO, river_battery, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
++            NULL, 0, river_battery_sysctl, "A", "River battery live sample");
++
+ /* On-demand, read-only observer sample. The atomic gate prevents concurrent
+  * readers from racing on the same SPMI observer command registers. */
+ static int
+--- a/iokit/Kernel/arm/SweetBattery.cpp
++++ b/iokit/Kernel/arm/SweetBattery.cpp
+@@ -38,6 +38,9 @@
+ 	    bool capable, bool charging, bool full, bool measured, bool currentValid);
+ 	void poll(void);
+ 	bool pollTopaz(void);
++#if defined(RIVER)
++	bool pollRiver(void);
++#endif
+ 	static void timerFired(OSObject *owner, IOTimerEventSource *sender);
+ 	static IOReturn stopPolling(OSObject *owner, void *, void *, void *, void *);
+ 	static bool readWord(unsigned address, uint16_t *value);
+@@ -106,11 +109,16 @@
+ SweetBattery::publish(unsigned percent, unsigned mv, int ma, bool external,
+     bool capable, bool charging, bool full, bool measured, bool currentValid)
+ {
+-	/* Use consistent mAh units (DT nominal=5020). powerd computes C*100/M. */
+-	const unsigned capacity = (5020u * percent + 50u) / 100u;
++	/* Use consistent mAh units (DT nominal: river=3000, sweet/topaz=5020). powerd computes C*100/M. */
++#if defined(RIVER)
++	const unsigned nominalCapacity = 3000;
++#else
++	const unsigned nominalCapacity = 5020;
++#endif
++	const unsigned capacity = (nominalCapacity * percent + 50u) / 100u;
+ 	setBatteryInstalled(true);
+ 	setCurrentCapacity(capacity);
+-	setMaxCapacity(5020);
++	setMaxCapacity(nominalCapacity);
+ 	setExternalConnected(external);
+ 	setExternalChargeCapable(capable);
+ 	setIsCharging(charging);
+@@ -124,8 +132,8 @@
+ 	putBool("FullyCharged", full);
+ 	putBool("AppleRawExternalConnected", external);
+ 	putNumber("AppleRawCurrentCapacity", capacity);
+-	putNumber("AppleRawMaxCapacity", 5020);
+-	putNumber("DesignCapacity", 5020);
++	putNumber("AppleRawMaxCapacity", nominalCapacity);
++	putNumber("DesignCapacity", nominalCapacity);
+ 	putNumber("InstantAmperage", (UInt32)ma);
+ 	/* iOS battery convention: centidegrees C; fixed 25 C, NOT measured. */
+ 	putNumber("Temperature", 2500);
+@@ -142,7 +150,7 @@
+ 		const char *keys[] = {kIOBatteryCurrentChargeKey, kIOBatteryCapacityKey,
+ 		    kIOBatteryVoltageKey, kIOBatteryAmperageKey, kIOBatteryCycleCountKey,
+ 		    kIOBatteryFlagsKey};
+-		UInt32 values[] = {capacity, 5020, mv, (UInt32)ma, 0,
++		UInt32 values[] = {capacity, nominalCapacity, mv, (UInt32)ma, 0,
+ 		    (UInt32)(kIOBatteryInstalled | (external ? kIOBatteryChargerConnect : 0) |
+ 		    (charging ? kIOBatteryCharge : 0))};
+ 		for (unsigned i = 0; i < sizeof(values) / sizeof(values[0]); ++i) {
+@@ -312,10 +320,46 @@
+ {
+ 	SweetBattery *self = OSDynamicCast(SweetBattery, owner);
+ 	if (self && self->fRunning) {
++#if defined(RIVER)
++		self->pollRiver();
++#else
+ 		self->poll();
++#endif
+ 		sender->setTimeoutMS(10000);
+ 	}
+ }
++
++#if defined(RIVER)
++extern "C" bool river_battery_sample(unsigned *out_mv, int *out_ma, bool *out_external, bool *out_charging, bool *out_full, unsigned *out_soc);
++
++bool
++SweetBattery::pollRiver(void)
++{
++	unsigned mv = 0, soc = 0;
++	int ma = 0;
++	bool external = true, charging = false, full = false;
++	bool ok = river_battery_sample(&mv, &ma, &external, &charging, &full, &soc);
++	if (!ok) {
++		publish(85, 4100, 0, true, true, false, true, false, false);
++		return false;
++	}
++	int override_pct = -1;
++	unsigned percent = 0;
++	if (PE_parse_boot_argn("riverbattery_override", &override_pct, sizeof(override_pct)) &&
++	    override_pct >= 0 && override_pct <= 100) {
++		percent = (unsigned)override_pct;
++	} else {
++		percent = soc;
++	}
++	publish(percent, mv, ma, external, external, charging, full, true, true);
++	static unsigned river_logs;
++	if (river_logs++ % 10 == 0) {
++		IOLog("SWEET BATTERY: river %u%% %umV %dmA external=%d charging=%d full=%d\n",
++		    percent, mv, ma, external, charging, full);
++	}
++	return true;
++}
++#endif
+ 
+ bool
+ SweetBattery::start(IOService *provider)
+@@ -324,13 +368,19 @@
+ 		return false;
+ 	}
+ #if defined(RIVER)
+-	int pct = 85;
+-	(void)PE_parse_boot_argn("riverbattery", &pct, sizeof(pct));
+-	if (pct < 1) pct = 1;
+-	if (pct > 100) pct = 100;
+-	publish((unsigned)pct, 4100, 0, true, true, false, true, false, false);
++	fReal = true;
++	pollRiver();
++	fLoop = IOWorkLoop::workLoop();
++	fTimer = IOTimerEventSource::timerEventSource(this, &SweetBattery::timerFired);
++	if (fLoop && fTimer && fLoop->addEventSource(fTimer) == kIOReturnSuccess) {
++		fTimerAdded = true;
++		fRunning = true;
++		fTimer->setTimeoutMS(10000);
++	} else {
++		fReal = false;
++		IOLog("SWEET BATTERY: river timer unavailable\n");
++	}
+ 	registerService();
+-	IOLog("SWEET BATTERY: started river power source (%u%%, AC)\n", (unsigned)pct);
+ 	return true;
+ #else
+ 	(void)sweet_cpufreq_max();
