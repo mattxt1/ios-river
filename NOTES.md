@@ -5,6 +5,85 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River JG30 battery power source and live SOC validation (2026-11-05)
+
+Implemented and validated real battery and power functionality for Moto G7 (river)
+without fabricating percentages, modifying charging controls, or flashing partitions.
+
+### 1. Battery Pack Profile & Device Tree Trace
+Traced the exact River device-tree include chain from the pinned Motorola tree
+(`LineageOS/android_kernel_motorola_sdm632` commit `e098be34e94ab00ad922803492995eef75017d78`):
+- `arch/arm64/boot/dts/qcom/sdm632-river-evt2-overlay.dts` (and `dvt1b`, `na-evt2`)
+- includes `sdm632-river-common-overlay.dtsi`
+- includes `qg-batterydata-jg30-atl-3000mah.dtsi` (default serial `SB18C34004`)
+- includes `qg-batterydata-jg30-scud-3000mah.dtsi` (serial `SB18C34005`)
+Both profiles match the Motorola JG30 (3000 mAh) battery pack with `qcom,batt-id-kohm = <82>`
+and agree within 1–6 mV across the entire curve.
+Extracted the full 56-entry Open Circuit Voltage (OCV) table at 25°C from
+`qcom,pc-temp-v2-lut` (spanning 4380 mV at 100.0% down to 2772 mV at 0.0%) and
+coupled it with internal resistance compensation ($R_{\text{bat}} \approx 150\text{ m}\Omega$,
+from `qcom,pc-temp-z1-lut`) for load-sag compensation during discharge ($ma < 0$).
+
+### 2. Kernel Implementation (Patch 0267)
+- `bsd/dev/sweet_keys.c`:
+  - Embedded `jg30_ocv_lut` table and `jg30_estimate_soc(mv, ma)` estimator.
+  - Implemented `river_battery_sample(out_mv, out_ma, out_external, out_charging, out_full, out_soc)`
+    reading 4-byte last ADC (voltage and current in a single atomic SPMI burst),
+    DCDC power path (`0x0b`), and charger status (`0x06`) under the atomic `ri_power_busy`
+    gate and SPMI transaction gate.
+  - Voltage count conversion: $194637 / 1000\ \mu\text{V}/\text{count}$.
+  - Current count conversion: $152588 / 1000\ \mu\text{A}/\text{count}$, converted to Apple
+    IOPMPowerSource polarity (negative = discharge, positive = charge).
+  - Added `debug.river_battery` sysctl providing live diagnostic readout.
+- `iokit/Kernel/arm/SweetBattery.cpp`:
+  - Updated `publish()` to advertise Motorola JG30 3000 mAh nominal capacity
+    (`DesignCapacity = 3000`, `MaxCapacity = 3000`, `AppleRawMaxCapacity = 3000`) on River.
+  - Implemented `SweetBattery::pollRiver()` wired to a 10-second periodic timer
+    (`IOTimerEventSource`) on the IOKit workloop, publishing real voltage, amperage,
+    external power status, and JG30-calibrated SOC.
+  - Supported optional `riverbattery_override` boot-arg if an explicit forced percentage is requested.
+
+### 3. Mac USB Charging Analysis
+Correlated live SPMI registers with Motorola `smb5-reg.h`:
+- When plugged into Mac: `POWER_PATH_STATUS` is `0x95` (`USE_USBIN | VALID_INPUT_POWER_SOURCE`),
+  so the Mac USB port powers the system bus directly.
+- Battery charging into the cell is held at `BATTERY_CHARGER_STATUS_1` = `0x47` (bits 2:0 = 7:
+  `DISABLE_CHARGE`) with `CHARGING_ENABLE_CMD_REG` = `0x00`.
+- Net current through the battery cell while connected to the Mac sits at $\sim 0\text{ mA}$
+  (intermittent 0 to -28 mA under transient system activity).
+- When unplugged, `POWER_PATH_STATUS` changes to `0x02` and discharge current jumps to
+  $+580\text{ to }+940\text{ mA}$.
+- The phone does not charge its battery from the Mac USB port, but runs entirely on USB power.
+
+### 4. Live Device Validation
+RAM-booted temporary image `river-power-boot.img` on verified product `river` (no partitions flashed).
+Device came up at `192.168.7.2` over USB Ethernet with backlight and UI intact.
+- `battcheck` live query:
+  - `SweetBatteryPercent = 6%`
+  - `Voltage = 3672 mV`
+  - `Amperage = -7 mA`
+  - `CurrentCapacity = 180 mAh` (6% of 3000 mAh)
+  - `MaxCapacity = 3000 mAh`
+  - `DesignCapacity = 3000 mAh`
+  - `ExternalConnected = 1`
+  - `IsCharging = 0`
+  - `SweetBatteryFallback = 0`
+  - `SweetBatteryHardwareSampleValid = 1`
+  - `SweetBatteryCurrentValid = 1`
+  - `SweetBatterySOCEstimated = 1`
+  - `IOPMPowerSource Source[0]: Current Capacity = 6%`, `Max Capacity = 100`, `Power Source State = AC Power`
+- Sequential `debug.river_battery` sysctl samples:
+  - `voltage_mv=3660 amperage_ma=-27 external=1 charging=0 full=0 soc=6`
+  - `voltage_mv=3680 amperage_ma=0 external=1 charging=0 full=0 soc=7`
+  - `voltage_mv=3648 amperage_ma=-28 external=1 charging=0 full=0 soc=5`
+  - `voltage_mv=3677 amperage_ma=-6 external=1 charging=0 full=0 soc=7`
+  - `voltage_mv=3675 amperage_ma=0 external=1 charging=0 full=0 soc=6`
+- Artifacts & Hashes:
+  - Commit: `b4c8ace` (`codex/river-spmi-rdata`)
+  - Kernel SHA256: `37863c3abff42cb891bff159b00e7e95499dcc9228e5f17ec4a24d9a0d3ee627`
+  - Image SHA256: `80b6541992e2ef01e54394bb8d01b62a10fe25590e397b4ca02f75f6c73ae725`
+  - Golden shim, DTB, and firmware blobs (`RiverGPUFW`, `RiverWCNSSMeta`, `RiverWCNSSImage`, `RiverWCNSSNV`) preserved.
+
 ## River continuation handoff (2026-11-05)
 
 User does not think Android is still installed; do not assume an Android boot
