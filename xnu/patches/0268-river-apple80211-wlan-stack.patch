@@ -1061,8 +1061,8 @@
 + case 0xc02c6938u: case 0xc0306938u: case 0xc02c6948u: case 0xc0306948u: {
 +  struct river_ifmediareq *ifmr = (struct river_ifmediareq *)data;
 +  if (ifmr) {
-+   ifmr->ifm_current = 0x80 | 0x20;
-+   ifmr->ifm_active = 0x80 | 0x20;
++   ifmr->ifm_current = 0x80;
++   ifmr->ifm_active = 0x80;
 +   ifmr->ifm_status = 1 | 2;
 +   ifmr->ifm_count = 0;
 +  }
