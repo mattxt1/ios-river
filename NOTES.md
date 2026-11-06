@@ -5,6 +5,42 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River Wi-Fi Apple80211 Stack and iOS Settings Integration (2026-11-06)
+
+Implemented native Apple80211 stack and IOKit integration for Motorola Moto G7 (river / WCN3660B)
+to enable Wi-Fi scanning, management, and UI display in iOS 16 Settings (`Preferences.app`),
+Control Center, and the SpringBoard status bar.
+
+### 1. Reverse Engineering IO80211.framework & wifid
+Reverse-engineered `_getIfListCopy` and internal filtering in `/System/Library/PrivateFrameworks/IO80211.framework`:
+- `_getIfListCopy` issues `ioctl(s, SIOCGIFMEDIA, &ifmr)` (`0xc02c6938` / `0xc0306938`).
+  If `(ifmr.ifm_current & 0xe0) != 0x80` (`IFM_IEEE80211`), the interface is discarded.
+- Matches IOKit service with `IOPropertyMatch = { IOInterfaceName = "en0" }` and validates
+  `IO80211InterfaceRole == "Infrastructure"`.
+- Userland `wifid` requests interface power state and capabilities via `SIOCGA80211` / `SIOCSA80211`
+  (opcodes 14 MAC, 19 POWER, 23 TX_POWER, 37 COUNTRY_CODE, 43/44 DRIVER_VERSION).
+
+### 2. Implementation Details (Patch 0268)
+- `iokit/Kernel/arm/RiverWLAN.cpp`:
+  - Implemented `RiverWLAN` and `MiniIONetworkStack` IOKit classes published under `IOResources`.
+  - Publishes `IOInterfaceName = "en0"`, `BSD Name = "en0"`, `IOInterfaceType = 6` (Ethernet),
+    `IO80211InterfaceRole = "Infrastructure"`, `IOBuiltin = true`, `IOPrimaryInterface = true`.
+- `bsd/dev/river_apple80211.c`:
+  - Full Apple80211 ioctl dispatcher (`SIOCGA80211` / `SIOCSA80211`) and kernel event generator (`post()`).
+  - Supports scan initiation, scan results streaming (`give_network`), association request parsing,
+    and power state management (`EVENT_POWER_CHANGED`).
+- `bsd/dev/sweet_keys.c`:
+  - Handled `SIOCGIFMEDIA` (`0xc02c6938u`), `SIOCGIFMEDIA64` (`0xc0306938u`), `SIOCGIFXMEDIA` (`0xc02c6948u`),
+    `SIOCGIFXMEDIA64` (`0xc0306948u`), returning `IFM_IEEE80211 | IFM_AUTO` and active status.
+  - Linked background passive scan and association engine to Apple80211 scan/join request queues.
+  - Attached Wi-Fi network interface as `en0`.
+
+### 3. Local Build & Image Verification
+- Source commit: `533e7d79a2612d3059cdda73a2bfd278fc42505c`
+- Kernel SHA256: `fae0147172022d61bd3205f07c3c451f079e71e340f668b0e859cbebbc555bea`
+- Boot image: `river-wifi-boot.img`, SHA256: `7f7e12c061d7b84897e72bf2295ee9265ef08aca5fd751c582e40c0741edbcbb`
+- Verified: golden shim, river-wifi DTB (`wlan` node), GPU and WCNSS firmware blobs, command line < 608 bytes (`riverbl=1`, `riverfs=1`).
+
 ## River JG30 battery power source and live SOC validation (2026-11-05)
 
 Implemented and validated real battery and power functionality for Moto G7 (river)
