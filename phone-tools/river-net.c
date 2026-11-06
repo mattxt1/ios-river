@@ -25,6 +25,11 @@ _Static_assert(sizeof(struct ifaliasreq)==64,"ifaliasreq ABI");
 _Static_assert(sizeof(struct rt_msghdr)==92,"route ABI");
 _Static_assert(sizeof(struct bpf_hdr)==20,"BPF ABI");
 #include <unistd.h>
+#include <mach/mach.h>
+
+extern mach_port_t bootstrap_port;
+extern kern_return_t bootstrap_look_up(mach_port_t bootstrap, const char *name, mach_port_t *service);
+extern mach_port_t mig_get_reply_port(void);
 
 typedef const struct __SCDynamicStore * SCDynamicStoreRef;
 typedef SCDynamicStoreRef (*SCDynamicStoreCreate_t)(CFAllocatorRef, CFStringRef, void*, void*);
@@ -171,6 +176,74 @@ static void default_route(const char*name){
 }
 
 /* SystemConfiguration dynamic store integration for system DNS and primary network service */
+static SCDynamicStoreRef persistent_ds = NULL;
+
+static void get_service_id(const char *name, char *out, size_t out_len) {
+ if (!strcmp(name, "ue0")) {
+  snprintf(out, out_len, "5EE7C0DE-0000-4000-8000-000000000001");
+  return;
+ }
+ uint32_t h = 2166136261u;
+ for (const char *c = name; *c; c++)
+  h = (h ^ (uint8_t)*c) * 16777619u;
+ snprintf(out, out_len, "5EE7C0DE-0000-4000-8000-0000%08X", h);
+}
+
+#pragma pack(push, 4)
+struct ipconfig_req {
+ mach_msg_header_t head;
+ mach_msg_body_t body;
+ mach_msg_ool_descriptor_t method;
+ NDR_record_t ndr;
+ char name[16];
+ mach_msg_type_number_t method_length;
+};
+struct ipconfig_rep {
+ mach_msg_header_t head;
+ NDR_record_t ndr;
+ kern_return_t result;
+ char service[128];
+ int status;
+ mach_msg_max_trailer_t trailer;
+};
+#pragma pack(pop)
+
+static void ask_ipconfiguration(const char *ifname) {
+ mach_port_t server = MACH_PORT_NULL, reply_port = mig_get_reply_port();
+ kern_return_t kr = bootstrap_look_up(bootstrap_port, "com.apple.network.IPConfiguration", &server);
+ if (kr != KERN_SUCCESS) return;
+
+ static const uint8_t bplist_dhcp[] = {
+  0x62,0x70,0x6c,0x69,0x73,0x74,0x30,0x30,0xd1,0x01,0x02,0x5c,0x43,0x6f,0x6e,0x66,
+  0x69,0x67,0x4d,0x65,0x74,0x68,0x6f,0x64,0x54,0x44,0x48,0x43,0x50,0x08,0x0b,0x18,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x03,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x1d
+ };
+
+ union {
+  struct ipconfig_req req;
+  struct ipconfig_rep rep;
+ } msg;
+ memset(&msg, 0, sizeof(msg));
+ msg.req.head.msgh_bits = MACH_MSGH_BITS_COMPLEX | MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND_ONCE);
+ msg.req.head.msgh_size = sizeof(msg.req);
+ msg.req.head.msgh_remote_port = server;
+ msg.req.head.msgh_local_port = reply_port;
+ msg.req.head.msgh_id = 20011;
+ msg.req.body.msgh_descriptor_count = 1;
+ msg.req.method.address = (void *)bplist_dhcp;
+ msg.req.method.size = sizeof(bplist_dhcp);
+ msg.req.method.deallocate = FALSE;
+ msg.req.method.copy = MACH_MSG_VIRTUAL_COPY;
+ msg.req.method.type = MACH_MSG_OOL_DESCRIPTOR;
+ msg.req.ndr = NDR_record;
+ strncpy(msg.req.name, ifname, sizeof(msg.req.name) - 1);
+ msg.req.method_length = sizeof(bplist_dhcp);
+
+ mach_msg(&msg.req.head, MACH_SEND_MSG | MACH_RCV_MSG, sizeof(msg.req), sizeof(msg), reply_port, 2000, MACH_PORT_NULL);
+ mach_port_deallocate(mach_task_self(), server);
+}
+
 static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask, const uint8_t *gw, const uint8_t *dn) {
  void *h = dlopen("/System/Library/Frameworks/SystemConfiguration.framework/SystemConfiguration", RTLD_LAZY);
  if (!h) {
@@ -179,12 +252,16 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
  }
  SCDynamicStoreCreate_t fn_Create = (SCDynamicStoreCreate_t)dlsym(h, "SCDynamicStoreCreate");
  SCDynamicStoreSetValue_t fn_SetValue = (SCDynamicStoreSetValue_t)dlsym(h, "SCDynamicStoreSetValue");
+ SCDynamicStoreCopyValue_t fn_CopyValue = (SCDynamicStoreCopyValue_t)dlsym(h, "SCDynamicStoreCopyValue");
  if (!fn_Create || !fn_SetValue) {
   fprintf(stderr, "SCDynamicStore symbols unavailable\n");
   dlclose(h);
   return 0;
  }
- SCDynamicStoreRef ds = fn_Create(NULL, CFSTR("river-net"), NULL, NULL);
+ if (!persistent_ds) {
+  persistent_ds = fn_Create(NULL, CFSTR("river-net"), NULL, NULL);
+ }
+ SCDynamicStoreRef ds = persistent_ds;
  if (!ds) {
   fprintf(stderr, "SCDynamicStoreCreate failed\n");
   dlclose(h);
@@ -197,7 +274,11 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
  if (!memcmp(dn, "\0\0\0\0", 4)) snprintf(dns_str, sizeof(dns_str), "%s", gw_str);
  else snprintf(dns_str, sizeof(dns_str), "%u.%u.%u.%u", dn[0], dn[1], dn[2], dn[3]);
 
+ char svc_id[64];
+ get_service_id(name, svc_id, sizeof(svc_id));
+
  CFStringRef cf_ifname = CFStringCreateWithCString(NULL, name, kCFStringEncodingUTF8);
+ CFStringRef cf_svcid = CFStringCreateWithCString(NULL, svc_id, kCFStringEncodingUTF8);
  CFStringRef cf_ip = CFStringCreateWithCString(NULL, ip_str, kCFStringEncodingUTF8);
  CFStringRef cf_mask = CFStringCreateWithCString(NULL, mask_str, kCFStringEncodingUTF8);
  CFStringRef cf_gw = CFStringCreateWithCString(NULL, gw_str, kCFStringEncodingUTF8);
@@ -212,7 +293,7 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
  fn_SetValue(ds, CFSTR("State:/Network/Global/DNS"), cf_dns_dict);
 
  const void *gipv4_k[3] = { CFSTR("PrimaryInterface"), CFSTR("PrimaryService"), CFSTR("Router") };
- const void *gipv4_v[3] = { cf_ifname, cf_ifname, cf_gw };
+ const void *gipv4_v[3] = { cf_ifname, cf_svcid, cf_gw };
  CFDictionaryRef cf_gipv4_dict = CFDictionaryCreate(NULL, gipv4_k, gipv4_v, 3, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
  fn_SetValue(ds, CFSTR("State:/Network/Global/IPv4"), cf_gipv4_dict);
 
@@ -221,15 +302,21 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
  const void *masks_v[1] = { cf_mask };
  CFArrayRef cf_masks_arr = CFArrayCreate(NULL, masks_v, 1, &kCFTypeArrayCallBacks);
 
- const void *sipv4_k[4] = { CFSTR("Addresses"), CFSTR("SubnetMasks"), CFSTR("InterfaceName"), CFSTR("Router") };
- const void *sipv4_v[4] = { cf_addrs_arr, cf_masks_arr, cf_ifname, cf_gw };
- CFDictionaryRef cf_sipv4_dict = CFDictionaryCreate(NULL, sipv4_k, sipv4_v, 4, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+ const void *sipv4_k[5] = { CFSTR("Addresses"), CFSTR("SubnetMasks"), CFSTR("InterfaceName"), CFSTR("Router"), CFSTR("ConfigMethod") };
+ const void *sipv4_v[5] = { cf_addrs_arr, cf_masks_arr, cf_ifname, cf_gw, CFSTR("Manual") };
+ CFDictionaryRef cf_sipv4_dict = CFDictionaryCreate(NULL, sipv4_k, sipv4_v, 5, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 
- CFStringRef cf_svc_ipv4 = CFStringCreateWithFormat(NULL, NULL, CFSTR("State:/Network/Service/%s/IPv4"), name);
+ CFStringRef cf_svc_ipv4 = CFStringCreateWithFormat(NULL, NULL, CFSTR("State:/Network/Service/%s/IPv4"), svc_id);
  fn_SetValue(ds, cf_svc_ipv4, cf_sipv4_dict);
 
- CFStringRef cf_svc_dns = CFStringCreateWithFormat(NULL, NULL, CFSTR("State:/Network/Service/%s/DNS"), name);
+ CFStringRef cf_svc_dns = CFStringCreateWithFormat(NULL, NULL, CFSTR("State:/Network/Service/%s/DNS"), svc_id);
  fn_SetValue(ds, cf_svc_dns, cf_dns_dict);
+
+ const void *if_ipv4_k[2] = { CFSTR("Addresses"), CFSTR("SubnetMasks") };
+ const void *if_ipv4_v[2] = { cf_addrs_arr, cf_masks_arr };
+ CFDictionaryRef cf_if_ipv4_dict = CFDictionaryCreate(NULL, if_ipv4_k, if_ipv4_v, 2, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+ CFStringRef cf_if_ipv4 = CFStringCreateWithFormat(NULL, NULL, CFSTR("State:/Network/Interface/%s/IPv4"), name);
+ fn_SetValue(ds, cf_if_ipv4, cf_if_ipv4_dict);
 
  int lq_val = 100;
  CFNumberRef cf_lq = CFNumberCreate(NULL, kCFNumberIntType, &lq_val);
@@ -240,8 +327,6 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
  fn_SetValue(ds, cf_if_lq, cf_lq_dict);
 
  CFRelease(cf_if_lq); CFRelease(cf_lq_dict); CFRelease(cf_lq);
-
- SCDynamicStoreCopyValue_t fn_CopyValue = (SCDynamicStoreCopyValue_t)dlsym(h, "SCDynamicStoreCopyValue");
 
  /* AirPort & Link state for status bar and UI indicators */
  CFStringRef cf_if_ap = CFStringCreateWithFormat(NULL, NULL, CFSTR("State:/Network/Interface/%s/AirPort"), name);
@@ -273,15 +358,19 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
  CFRelease(cf_if_ap); CFRelease(cf_if_link);
  CFRelease(cf_ap); CFRelease(cf_link);
 
+ ask_ipconfiguration(name);
+
  (void)notify_post("com.apple.system.config.network_change");
  (void)notify_post("com.apple.wifi.link-changed");
  (void)notify_post("com.apple.wifi.power-changed");
+ (void)notify_post("com.apple.wifimanager.link-quality");
 
+ CFRelease(cf_if_ipv4); CFRelease(cf_if_ipv4_dict);
  CFRelease(cf_svc_dns); CFRelease(cf_svc_ipv4); CFRelease(cf_sipv4_dict);
  CFRelease(cf_masks_arr); CFRelease(cf_addrs_arr);
  CFRelease(cf_gipv4_dict); CFRelease(cf_dns_dict); CFRelease(cf_dns_arr);
- CFRelease(cf_dns); CFRelease(cf_gw); CFRelease(cf_mask); CFRelease(cf_ip); CFRelease(cf_ifname);
- CFRelease(ds); dlclose(h);
+ CFRelease(cf_dns); CFRelease(cf_gw); CFRelease(cf_mask); CFRelease(cf_ip); CFRelease(cf_svcid); CFRelease(cf_ifname);
+ dlclose(h);
  puts("SCDynamicStore system DNS and primary IPv4 service published");
  return 1;
 }
