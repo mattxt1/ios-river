@@ -1,0 +1,1145 @@
+--- a/iokit/conf/files.arm64
++++ b/iokit/conf/files.arm64
+@@ -16,6 +16,7 @@
+ iokit/Kernel/arm/RiverGPU.cpp                                    optional iokitcpp
+ iokit/Kernel/arm/SweetWatchdog.cpp                               optional iokitcpp
+ iokit/Kernel/arm/SweetSurface.cpp                                optional iokitcpp
++iokit/Kernel/arm/RiverWLAN.cpp                                   optional iokitcpp
+ iokit/Kernel/arm/SweetFramebuffer.cpp                            optional iokitcpp
+ iokit/Kernel/arm/SweetBattery.cpp                                optional iokitcpp
+ iokit/Kernel/arm/SweetAMFI.cpp                                   optional iokitcpp
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -116,6 +116,7 @@
+ bsd/dev/sweet_rpmh.c			standard
+ bsd/dev/sweet_spmi.c			standard
+ bsd/dev/sweet_usb.c			standard
++bsd/dev/river_apple80211.c		standard
+ bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
+--- /dev/null
++++ b/iokit/Kernel/arm/RiverWLAN.cpp
+@@ -0,0 +1,198 @@
++/*
++ * RiverWLAN: Apple80211 IOKit registry services and MiniIONetworkStack stand-in
++ * for Moto G7 (river) WCN36xx Wi-Fi.
++ */
++
++#include <IOKit/IOLib.h>
++#include <IOKit/IOPlatformExpert.h>
++#include <IOKit/IOService.h>
++#include <IOKit/IOUserClient.h>
++#include <IOKit/IOKitKeys.h>
++#include <libkern/c++/OSData.h>
++#include <libkern/c++/OSNumber.h>
++#include <sys/systm.h>
++#include <sys/proc.h>
++
++extern "C" void RiverWLANStart(const char * interface, const uint8_t * address);
++extern "C" void MiniIONetworkStackStart(void);
++
++class IO80211Controller : public IOService
++{
++	OSDeclareDefaultStructors(IO80211Controller);
++};
++
++OSDefineMetaClassAndStructors(IO80211Controller, IOService);
++
++class IONetworkInterface : public IOService
++{
++	OSDeclareDefaultStructors(IONetworkInterface);
++};
++
++OSDefineMetaClassAndStructors(IONetworkInterface, IOService);
++
++class RiverWLAN : public IONetworkInterface
++{
++	OSDeclareDefaultStructors(RiverWLAN);
++
++public:
++	virtual IOReturn newUserClient(task_t owningTask, void * securityID, UInt32 type, OSDictionary * properties,
++	    IOUserClient ** handler) APPLE_KEXT_OVERRIDE;
++};
++
++OSDefineMetaClassAndStructors(RiverWLAN, IONetworkInterface);
++
++IOReturn
++RiverWLAN::newUserClient(task_t owningTask, void * securityID, UInt32 type, OSDictionary * properties, IOUserClient ** handler)
++{
++	static unsigned said;
++	if (said++ < 8) {
++		IOLog("RiverWLAN: newUserClient type %u requested -> returning kIOReturnUnsupported for fallback to IOCTL path\n", (unsigned)type);
++	}
++	return kIOReturnUnsupported;
++}
++
++static IOService *
++publish(IOService * service, IOService * provider, const char * name)
++{
++	if (service == NULL || !service->attach(provider)) {
++		OSSafeReleaseNULL(service);
++		return NULL;
++	}
++	service->setName(name);
++	if (!service->start(provider)) {
++		service->detach(provider);
++		service->release();
++		return NULL;
++	}
++	service->registerService();
++	return service;
++}
++
++void
++RiverWLANStart(const char * interface, const uint8_t * address)
++{
++	IOService * platform = IOService::getPlatform();
++	IO80211Controller * controller = OSTypeAlloc(IO80211Controller);
++	RiverWLAN * wlan = OSTypeAlloc(RiverWLAN);
++	OSData * mac;
++	OSNumber * number;
++
++	if (platform == NULL || controller == NULL || wlan == NULL || !controller->init() || !wlan->init()) {
++		OSSafeReleaseNULL(controller);
++		OSSafeReleaseNULL(wlan);
++		IOLog("RiverWLAN: cannot create the services\n");
++		return;
++	}
++	if ((mac = OSData::withBytes(address, 6)) != NULL) {
++		controller->setProperty("IOMACAddress", mac);
++		mac->release();
++	}
++	controller->setProperty("IOBuiltin", true);
++	if ((controller = (IO80211Controller *) publish(controller, platform, "RiverWLANController")) == NULL) {
++		wlan->release();
++		IOLog("RiverWLAN: controller did not start\n");
++		return;
++	}
++
++	wlan->setProperty("IOInterfaceName", interface);
++	wlan->setProperty("BSD Name", interface);
++	wlan->setProperty("IOInterfaceNamePrefix", "en");
++	if ((number = OSNumber::withNumber(6ULL, 32)) != NULL) { /* IFT_ETHER */
++		wlan->setProperty("IOInterfaceType", number);
++		number->release();
++	}
++	if ((number = OSNumber::withNumber((unsigned long long)(interface[2] - '0'), 32)) != NULL) {
++		wlan->setProperty("IOInterfaceUnit", number);
++		number->release();
++	}
++	wlan->setProperty("IOBuiltin", true);
++	wlan->setProperty("IOPrimaryInterface", true);
++	wlan->setProperty("IO80211InterfaceRole", "Infrastructure");
++	if (publish(wlan, controller, "RiverWLAN") == NULL) {
++		IOLog("RiverWLAN: service did not start\n");
++	} else {
++		wlan->release();
++	}
++	controller->release();
++	IOLog("RiverWLAN: published %s as Apple80211 Infrastructure interface\n", interface);
++}
++
++class IONetworkStack : public IOService
++{
++	OSDeclareDefaultStructors(IONetworkStack);
++
++public:
++	virtual bool start(IOService * provider) APPLE_KEXT_OVERRIDE;
++};
++
++OSDefineMetaClassAndStructors(IONetworkStack, IOService);
++
++bool
++IONetworkStack::start(IOService * provider)
++{
++	if (!IOService::start(provider)) {
++		return false;
++	}
++	setProperty(kIOUserClientClassKey, "IONetworkStackUserClient");
++	setName("IONetworkStack");
++	registerService();
++	return true;
++}
++
++class IONetworkStackUserClient : public IOUserClient
++{
++	OSDeclareDefaultStructors(IONetworkStackUserClient);
++
++public:
++	virtual bool start(IOService * provider) APPLE_KEXT_OVERRIDE;
++	virtual IOReturn clientClose(void) APPLE_KEXT_OVERRIDE;
++	virtual IOReturn setProperties(OSObject * properties) APPLE_KEXT_OVERRIDE;
++};
++
++OSDefineMetaClassAndStructors(IONetworkStackUserClient, IOUserClient);
++
++bool
++IONetworkStackUserClient::start(IOService * provider)
++{
++	char who[32] = "?";
++	if (!IOUserClient::start(provider)) {
++		return false;
++	}
++	proc_selfname(who, sizeof(who));
++	IOLog("MiniIONetworkStack: opened by %s (busy state %u)\n", who,
++	    (unsigned) IOService::getServiceRoot()->getBusyState());
++	return true;
++}
++
++IOReturn
++IONetworkStackUserClient::clientClose(void)
++{
++	if (!isInactive()) {
++		terminate();
++	}
++	return kIOReturnSuccess;
++}
++
++IOReturn
++IONetworkStackUserClient::setProperties(OSObject * properties)
++{
++	return kIOReturnUnsupported;
++}
++
++void
++MiniIONetworkStackStart(void)
++{
++	IOService * resources = IOService::getResourceService();
++	IONetworkStack * stack = OSTypeAlloc(IONetworkStack);
++
++	if (resources == NULL || stack == NULL || !stack->init() || !stack->attach(resources)) {
++		OSSafeReleaseNULL(stack);
++		IOLog("MiniIONetworkStack: cannot create service\n");
++		return;
++	}
++	if (!stack->start(resources)) {
++		stack->detach(resources);
++	}
++	stack->release();
++	IOLog("MiniIONetworkStack: published under IOResources\n");
++}
+--- /dev/null
++++ b/bsd/sys/river_apple80211.h
+@@ -0,0 +1,153 @@
++#ifndef _SYS_RIVER_APPLE80211_H_
++#define _SYS_RIVER_APPLE80211_H_
++
++#include <sys/types.h>
++#include <sys/socket.h>
++
++#define SIOCSA80211             0x802869c8u     /* _IOW('i', 200, struct apple80211req) */
++#define SIOCGA80211             0xc02869c9u     /* _IOWR('i', 201, struct apple80211req) */
++
++struct apple80211req {
++	char req_if_name[16];
++	int32_t req_type;
++	int32_t req_val;
++	uint32_t req_len;
++	user_addr_t req_data __attribute__((aligned(8)));
++};
++
++#define CHANNEL_20MHZ           0x2u
++#define CHANNEL_2GHZ            0x8u
++#define CHANNEL_5GHZ            0x10u
++#define CHANNEL_ACTIVE          0x80u
++#define CHANNEL_DFS             0x100u
++
++#define CIPHER_PMK              6
++#define CIPHER_PASSPHRASE       10
++
++enum {
++	EVENT_POWER_CHANGED = 1,
++	EVENT_SSID_CHANGED = 2,
++	EVENT_BSSID_CHANGED = 3,
++	EVENT_LINK_CHANGED = 4,
++	EVENT_ASSOC_DONE = 9,
++	EVENT_SCAN_DONE = 10,
++};
++
++struct apple80211_channel {
++	uint32_t version, channel, flags;
++};
++
++struct apple80211_channels {
++	uint32_t version, count;
++	struct apple80211_channel channels[401];
++	uint32_t unused;
++};
++
++struct apple80211_channels_info {
++	uint8_t unknown_0[12];
++	uint16_t count;
++	uint8_t unknown_1[800];
++	uint8_t number[400], indoor[400], dfs[400], passive[400], wide_40[400], wide_80[400];
++	uint8_t unknown_2[1602];
++	uint32_t flags[400];
++	uint8_t unknown_3[3600];
++} __attribute__((packed));
++
++struct apple80211_scan_request {
++	uint32_t version, bss_type;
++	uint8_t bssid[6], unused_0[2];
++	uint32_t ssid_length;
++	uint8_t ssid[32];
++	uint32_t scan_type;
++	uint32_t phy_mode;
++	uint16_t dwell_ms, unused_1;
++	uint32_t rest_ms;
++	uint32_t channel_count;
++	struct apple80211_channel channels[400];
++	uint64_t flags;
++	uint32_t unused_2;
++	uint32_t name_count;
++	uint8_t names[10][56];
++	uint32_t short_ssid, unused_3;
++};
++
++struct apple80211_scan_result {
++	uint32_t version;
++	struct apple80211_channel channel;
++	uint16_t noise_known;
++	int16_t noise, snr, rssi;
++	uint16_t beacon_interval, capability;
++	uint8_t bssid[6];
++	uint8_t rate_count, unused_0;
++	uint32_t rates[15];
++	uint8_t ssid_length, ssid[32], unused_1[3];
++	uint32_t age_ms;
++	uint8_t flags, unused_2;
++	uint16_t elements_length;
++	uint8_t elements[1024];
++};
++
++struct apple80211_assoc {
++	uint32_t version;
++	uint16_t mode, auth_lower, auth_upper, unused_0;
++	uint32_t ssid_length;
++	uint8_t ssid[32];
++	uint8_t bssid[6], unused_1[2];
++	uint32_t key_version, key_length, key_cipher;
++	uint16_t key_flags, key_index;
++	uint8_t key[64];
++	uint8_t rest[0x250 - 0x88];
++};
++
++struct apple80211_link_changed {
++	uint8_t down, unused_0[3];
++	int32_t rssi;
++	uint16_t snr, noise;
++	uint8_t unused_1[4];
++	uint8_t involuntary, unused_2[3];
++	uint32_t reason, subreason;
++	uint8_t unused_3[4];
++};
++
++struct river_apple80211_join_req {
++	uint8_t ssid[32];
++	uint8_t ssid_len;
++	uint8_t bssid[6];
++	uint8_t passphrase[64];
++	uint8_t passphrase_len;
++	uint8_t pmk[32];
++	bool has_pmk;
++};
++
++struct river_apple80211_target_info {
++	uint8_t bssid[6];
++	uint8_t channel;
++	uint16_t beacon;
++	uint16_t caps;
++	uint8_t dtim;
++	int16_t rssi;
++	uint8_t nrates;
++	uint8_t rates[12];
++	uint8_t rsn_len;
++	uint8_t rsn[22];
++	uint8_t ap_rsn_len;
++	uint8_t ap_rsn[257];
++};
++
++#ifdef KERNEL
++void river_apple80211_init(void);
++errno_t river_apple80211_ioctl(u_long command, void *data);
++void river_apple80211_add_bss(const uint8_t *bssid, const uint8_t *ssid, uint8_t ssid_len,
++    uint16_t freq, int16_t rssi, uint16_t beacon_int, uint16_t caps,
++    const uint8_t *ies, uint16_t ies_len);
++void river_apple80211_clear_scan(void);
++void river_apple80211_scan_done(int status);
++void river_apple80211_assoc_done(int status);
++void river_apple80211_link_changed(bool up, int16_t rssi);
++bool river_apple80211_scan_pending(void);
++bool river_apple80211_join_pending(struct river_apple80211_join_req *req);
++bool river_apple80211_find_target(const struct river_apple80211_join_req *req, struct river_apple80211_target_info *info);
++void river_pbkdf2_pmk(const char *passphrase, const char *ssid, size_t ssid_len, uint8_t pmk[32]);
++#endif
++
++#endif /* _SYS_RIVER_APPLE80211_H_ */
+--- /dev/null
++++ b/bsd/dev/river_apple80211.c
+@@ -0,0 +1,613 @@
++/*
++ * river_apple80211.c: Apple80211 ioctl and event engine for Moto G7 river.
++ */
++
++#include <kern/kalloc.h>
++#include <kern/locks.h>
++#include <libkern/libkern.h>
++#include <libkern/crypto/sha1.h>
++#include <sys/errno.h>
++#include <sys/kern_event.h>
++#include <sys/kernel.h>
++#include <sys/proc.h>
++#include <sys/river_apple80211.h>
++#include <sys/sockio.h>
++#include <sys/systm.h>
++
++static LCK_GRP_DECLARE(river_apple80211_lck_grp, "river-apple80211");
++static LCK_MTX_DECLARE(river_apple80211_mtx, &river_apple80211_lck_grp);
++
++static const char interface_name[16] = "en0";
++
++#define RIVER_MAX_BSS 32
++struct river_apple80211_bss {
++	uint8_t bssid[6];
++	uint8_t ssid[32];
++	uint8_t ssid_len;
++	uint8_t channel;
++	uint16_t freq;
++	int16_t rssi;
++	uint16_t beacon_int;
++	uint16_t caps;
++	uint32_t age_ms;
++	uint16_t ies_len;
++	uint8_t ies[768];
++};
++
++static struct river_apple80211_bss river_bss_table[RIVER_MAX_BSS];
++static unsigned river_bss_count = 0;
++static unsigned scan_result_idx = 0;
++static bool scan_pending_flag = false;
++
++static struct river_apple80211_join_req pending_join;
++static bool join_pending_flag = false;
++static uint32_t join_result = 0;
++
++enum river_wifi_phase {
++	PHASE_IDLE = 0,
++	PHASE_SCANNING = 1,
++	PHASE_JOINING = 2,
++	PHASE_JOINED = 4,
++};
++static enum river_wifi_phase active_phase = PHASE_IDLE;
++static struct river_apple80211_bss active_bss;
++
++static void
++hmac_sha1(const uint8_t *key, size_t key_len, const uint8_t *data, size_t data_len, uint8_t mac[20])
++{
++	SHA1_CTX ctx;
++	uint8_t k_pad[64];
++	uint8_t tk[20];
++	size_t i;
++
++	if (key_len > 64) {
++		SHA1Init(&ctx);
++		SHA1Update(&ctx, key, key_len);
++		SHA1Final(tk, &ctx);
++		key = tk;
++		key_len = 20;
++	}
++
++	memset(k_pad, 0x36, sizeof(k_pad));
++	for (i = 0; i < key_len; i++) {
++		k_pad[i] ^= key[i];
++	}
++	SHA1Init(&ctx);
++	SHA1Update(&ctx, k_pad, 64);
++	SHA1Update(&ctx, data, data_len);
++	SHA1Final(mac, &ctx);
++
++	memset(k_pad, 0x5c, sizeof(k_pad));
++	for (i = 0; i < key_len; i++) {
++		k_pad[i] ^= key[i];
++	}
++	SHA1Init(&ctx);
++	SHA1Update(&ctx, k_pad, 64);
++	SHA1Update(&ctx, mac, 20);
++	SHA1Final(mac, &ctx);
++}
++
++void
++river_pbkdf2_pmk(const char *passphrase, const char *ssid, size_t ssid_len, uint8_t pmk[32])
++{
++	size_t pass_len = strlen(passphrase);
++	uint8_t salt[64];
++	uint8_t u[20];
++	uint8_t f[20];
++	uint32_t b, i, j;
++
++	for (b = 1; b <= 2; b++) {
++		memcpy(salt, ssid, ssid_len);
++		salt[ssid_len + 0] = (uint8_t)(b >> 24);
++		salt[ssid_len + 1] = (uint8_t)(b >> 16);
++		salt[ssid_len + 2] = (uint8_t)(b >> 8);
++		salt[ssid_len + 3] = (uint8_t)(b & 0xff);
++
++		hmac_sha1((const uint8_t *)passphrase, pass_len, salt, ssid_len + 4, u);
++		memcpy(f, u, 20);
++
++		for (i = 1; i < 4096; i++) {
++			hmac_sha1((const uint8_t *)passphrase, pass_len, u, 20, u);
++			for (j = 0; j < 20; j++) {
++				f[j] ^= u[j];
++			}
++		}
++
++		if (b == 1) {
++			memcpy(pmk, f, 20);
++		} else {
++			memcpy(pmk + 20, f, 12);
++		}
++	}
++}
++
++static void
++post(uint32_t code, const void *data, uint32_t length)
++{
++	struct kev_msg message = {
++		.vendor_code = KEV_VENDOR_APPLE,
++		.kev_class = KEV_IEEE80211_CLASS,
++		.kev_subclass = 1,
++		.event_code = code,
++	};
++	char name[16];
++	memcpy(name, interface_name, sizeof(name));
++	message.dv[0].data_length = sizeof(name);
++	message.dv[0].data_ptr = name;
++	if (length != 0) {
++		message.dv[1].data_length = length;
++		message.dv[1].data_ptr = __DECONST(void *, data);
++	}
++	kev_post_msg(&message);
++}
++
++static int
++give(const struct apple80211req *request, const void *data, size_t length)
++{
++	return request->req_data == USER_ADDR_NULL ? 0 :
++	    copyout(data, request->req_data, length < request->req_len ? length : request->req_len);
++}
++
++static void
++channel_fill(struct apple80211_channel *channel, unsigned ch)
++{
++	channel->version = 1;
++	channel->channel = ch;
++	channel->flags = CHANNEL_20MHZ | CHANNEL_2GHZ | CHANNEL_ACTIVE;
++}
++
++static int
++give_network(const struct apple80211req *request, const struct river_apple80211_bss *bss)
++{
++	struct apple80211_scan_result *result = kalloc_data(sizeof(*result), Z_WAITOK | Z_ZERO);
++	unsigned room = sizeof(result->elements);
++	int error;
++
++	if (result == NULL) {
++		return ENOMEM;
++	}
++	if (request->req_len >= sizeof(*result) &&
++	    copyin(request->req_data, result, offsetof(struct apple80211_scan_result, elements)) == 0 &&
++	    result->elements_length < room) {
++		room = result->elements_length;
++	}
++	bzero(result, sizeof(*result));
++	result->version = 1;
++	channel_fill(&result->channel, bss->channel);
++	result->rssi = bss->rssi;
++	result->beacon_interval = bss->beacon_int;
++	result->capability = bss->caps;
++	memcpy(result->bssid, bss->bssid, 6);
++	result->ssid_length = bss->ssid_len;
++	memcpy(result->ssid, bss->ssid, bss->ssid_len);
++	result->age_ms = bss->age_ms;
++	result->elements_length = (uint16_t)(bss->ies_len <= room ? bss->ies_len : 0);
++	if (result->elements_length > 0) {
++		memcpy(result->elements, bss->ies, result->elements_length);
++	}
++	for (unsigned at = 0; at + 2 <= bss->ies_len && at + 2 + bss->ies[at + 1] <= bss->ies_len;
++	    at += 2 + bss->ies[at + 1]) {
++		if (bss->ies[at] == 1 || bss->ies[at] == 50) {
++			for (unsigned i = 0; i < bss->ies[at + 1]; i++) {
++				unsigned rate = (bss->ies[at + 2 + i] & 0x7f) / 2;
++				if (rate != 0 && rate <= 54 && result->rate_count < 15) {
++					result->rates[result->rate_count++] = rate;
++				}
++			}
++		}
++	}
++	error = give(request, result, sizeof(*result));
++	kfree_data(result, sizeof(*result));
++	return error;
++}
++
++static int
++get(struct apple80211req *request)
++{
++	int error = 0;
++	lck_mtx_lock(&river_apple80211_mtx);
++	switch (request->req_type) {
++	case 43:
++	case 44: {
++		static const char name[256] = "river: Qualcomm SDM632 (WCN36xx)";
++		error = give(request, name, sizeof(name));
++		break;
++	}
++	case 12: {
++		uint8_t bits[13] = { 0 };
++		static const uint8_t has[] = { 2, 3, 6, 9, 10, 14, 17, 19 };
++		for (unsigned i = 0; i < sizeof(has); i++) {
++			bits[has[i] / 8] |= (uint8_t)(1u << (has[i] % 8));
++		}
++		error = give(request, bits, sizeof(bits));
++		break;
++	}
++	case 19: {
++		struct {
++			uint32_t version, radios, state[4];
++		} answer = { .version = 1, .radios = 1, .state = { 1 } };
++		error = give(request, &answer, sizeof(answer));
++		break;
++	}
++	case 15:
++		request->req_val = 1;
++		error = 0;
++		break;
++	case 27:
++	case 254: {
++		struct apple80211_channels *answer = kalloc_data(sizeof(*answer), Z_WAITOK | Z_ZERO);
++		if (!answer) { error = ENOMEM; break; }
++		answer->version = 1;
++		answer->count = 11;
++		for (unsigned i = 0; i < 11; i++) {
++			channel_fill(&answer->channels[i], i + 1);
++		}
++		error = give(request, answer, sizeof(*answer));
++		kfree_data(answer, sizeof(*answer));
++		break;
++	}
++	case 207: {
++		struct apple80211_channels_info *answer = kalloc_data(sizeof(*answer), Z_WAITOK | Z_ZERO);
++		if (!answer) { error = ENOMEM; break; }
++		answer->count = 11;
++		for (unsigned i = 0; i < 11; i++) {
++			struct apple80211_channel ch;
++			channel_fill(&ch, i + 1);
++			answer->number[i] = (uint8_t)(i + 1);
++			answer->dfs[i] = 0;
++			answer->passive[i] = 0;
++			answer->flags[i] = ch.flags;
++		}
++		error = give(request, answer, sizeof(*answer));
++		kfree_data(answer, sizeof(*answer));
++		break;
++	}
++	case 21:
++		request->req_val = (int32_t)join_result;
++		error = 0;
++		break;
++	case 11: {
++		if (scan_result_idx < river_bss_count) {
++			error = give_network(request, &river_bss_table[scan_result_idx++]);
++		} else {
++			error = EIO;
++		}
++		break;
++	}
++	case 13:
++		request->req_val = (active_phase == PHASE_JOINED ? 4 :
++		    (active_phase == PHASE_JOINING ? 2 :
++		    (active_phase == PHASE_SCANNING ? 1 : 0)));
++		error = 0;
++		break;
++	case 1:
++		if (active_phase != PHASE_JOINED) {
++			error = ENXIO;
++		} else if ((error = give(request, active_bss.ssid, active_bss.ssid_len)) == 0) {
++			request->req_len = active_bss.ssid_len;
++		}
++		break;
++	case 9:
++		error = (active_phase != PHASE_JOINED) ? ENXIO : give(request, active_bss.bssid, 6);
++		break;
++	case 4: {
++		struct {
++			uint32_t version;
++			struct apple80211_channel channel;
++		} answer = { .version = 1 };
++		if (active_phase != PHASE_JOINED) {
++			error = ENXIO;
++		} else {
++			channel_fill(&answer.channel, active_bss.channel);
++			error = give(request, &answer, sizeof(answer));
++		}
++		break;
++	}
++	case 16: {
++		struct {
++			uint32_t version, radios, unit;
++			int32_t each[4], all, each_ext[4], all_ext;
++		} answer = {
++			.version = 1, .radios = 1,
++			.each = { active_bss.rssi }, .all = active_bss.rssi,
++			.each_ext = { active_bss.rssi }, .all_ext = active_bss.rssi,
++		};
++		error = (active_phase != PHASE_JOINED) ? ENXIO : give(request, &answer, sizeof(answer));
++		break;
++	}
++	case 103:
++		error = (active_phase != PHASE_JOINED) ? ENXIO : give_network(request, &active_bss);
++		break;
++	case 2: {
++		struct {
++			uint32_t version, lower, upper, extended;
++		} answer = { .version = 1, .lower = 1, .upper = 8 };
++		error = (active_phase != PHASE_JOINED) ? ENXIO : give(request, &answer, sizeof(answer));
++		break;
++	}
++	default:
++		error = EOPNOTSUPP;
++		break;
++	}
++	lck_mtx_unlock(&river_apple80211_mtx);
++	return error;
++}
++
++static int
++set(const struct apple80211req *request)
++{
++	int error = 0;
++	switch (request->req_type) {
++	case 10: {
++		lck_mtx_lock(&river_apple80211_mtx);
++		scan_pending_flag = true;
++		scan_result_idx = 0;
++		active_phase = (active_phase == PHASE_JOINED) ? PHASE_JOINED : PHASE_SCANNING;
++		lck_mtx_unlock(&river_apple80211_mtx);
++		break;
++	}
++	case 20: {
++		struct apple80211_assoc *asked = kalloc_data(sizeof(*asked), Z_WAITOK | Z_ZERO);
++		if (!asked) return ENOMEM;
++		if (copyin(request->req_data, asked, offsetof(struct apple80211_assoc, rest)) != 0) {
++			kfree_data(asked, sizeof(*asked));
++			return EFAULT;
++		}
++		if (asked->ssid_length == 0 || asked->ssid_length > 32) {
++			kfree_data(asked, sizeof(*asked));
++			return EINVAL;
++		}
++		lck_mtx_lock(&river_apple80211_mtx);
++		memset(&pending_join, 0, sizeof(pending_join));
++		pending_join.ssid_len = (uint8_t)asked->ssid_length;
++		memcpy(pending_join.ssid, asked->ssid, asked->ssid_length);
++		memcpy(pending_join.bssid, asked->bssid, 6);
++		if (asked->key_length == 0) {
++			pending_join.has_pmk = false;
++		} else if (asked->key_cipher == CIPHER_PASSPHRASE && asked->key_length >= 8 && asked->key_length <= 63) {
++			char pass[65] = {0};
++			memcpy(pass, asked->key, asked->key_length);
++			river_pbkdf2_pmk(pass, (const char *)pending_join.ssid, pending_join.ssid_len, pending_join.pmk);
++			pending_join.has_pmk = true;
++			memset_s(pass, sizeof(pass), 0, sizeof(pass));
++		} else if (asked->key_cipher == CIPHER_PMK && asked->key_length == 32) {
++			memcpy(pending_join.pmk, asked->key, 32);
++			pending_join.has_pmk = true;
++		}
++		join_pending_flag = true;
++		join_result = 0;
++		active_phase = PHASE_JOINING;
++		lck_mtx_unlock(&river_apple80211_mtx);
++		memset_s(asked, sizeof(*asked), 0, sizeof(*asked));
++		kfree_data(asked, sizeof(*asked));
++		break;
++	}
++	case 22: {
++		lck_mtx_lock(&river_apple80211_mtx);
++		active_phase = PHASE_IDLE;
++		lck_mtx_unlock(&river_apple80211_mtx);
++		river_apple80211_link_changed(false, 0);
++		break;
++	}
++	case 19: {
++		break;
++	}
++	default:
++		error = EOPNOTSUPP;
++		break;
++	}
++	return error;
++}
++
++void
++river_apple80211_add_bss(const uint8_t *bssid, const uint8_t *ssid, uint8_t ssid_len,
++    uint16_t freq, int16_t rssi, uint16_t beacon_int, uint16_t caps,
++    const uint8_t *ies, uint16_t ies_len)
++{
++	lck_mtx_lock(&river_apple80211_mtx);
++	unsigned i;
++	for (i = 0; i < river_bss_count; i++) {
++		if (memcmp(river_bss_table[i].bssid, bssid, 6) == 0) {
++			break;
++		}
++	}
++	if (i == river_bss_count && i < RIVER_MAX_BSS) {
++		river_bss_count++;
++	}
++	if (i < RIVER_MAX_BSS) {
++		memcpy(river_bss_table[i].bssid, bssid, 6);
++		river_bss_table[i].ssid_len = ssid_len < 32 ? ssid_len : 32;
++		memcpy(river_bss_table[i].ssid, ssid, river_bss_table[i].ssid_len);
++		river_bss_table[i].freq = freq;
++		river_bss_table[i].channel = freq == 2484 ? 14 : (freq < 4000 ? (freq - 2407) / 5 : (freq - 5000) / 5);
++		river_bss_table[i].rssi = rssi;
++		river_bss_table[i].beacon_int = beacon_int;
++		river_bss_table[i].caps = caps;
++		river_bss_table[i].age_ms = 0;
++		river_bss_table[i].ies_len = ies_len < sizeof(river_bss_table[i].ies) ? ies_len : sizeof(river_bss_table[i].ies);
++		if (river_bss_table[i].ies_len > 0 && ies != NULL) {
++			memcpy(river_bss_table[i].ies, ies, river_bss_table[i].ies_len);
++		}
++	}
++	lck_mtx_unlock(&river_apple80211_mtx);
++}
++
++void
++river_apple80211_clear_scan(void)
++{
++	lck_mtx_lock(&river_apple80211_mtx);
++	river_bss_count = 0;
++	scan_result_idx = 0;
++	lck_mtx_unlock(&river_apple80211_mtx);
++}
++
++bool
++river_apple80211_find_target(const struct river_apple80211_join_req *req, struct river_apple80211_target_info *info)
++{
++	lck_mtx_lock(&river_apple80211_mtx);
++	const struct river_apple80211_bss *target = NULL;
++	for (unsigned i = 0; i < river_bss_count; i++) {
++		if (river_bss_table[i].ssid_len == req->ssid_len &&
++		    memcmp(river_bss_table[i].ssid, req->ssid, req->ssid_len) == 0) {
++			bool bssid_zero = true;
++			for (unsigned k = 0; k < 6; k++) if (req->bssid[k]) bssid_zero = false;
++			if (bssid_zero || memcmp(river_bss_table[i].bssid, req->bssid, 6) == 0) {
++				target = &river_bss_table[i];
++				break;
++			}
++		}
++	}
++	if (!target) {
++		lck_mtx_unlock(&river_apple80211_mtx);
++		return false;
++	}
++	bzero(info, sizeof(*info));
++	memcpy(info->bssid, target->bssid, 6);
++	info->channel = target->channel ? target->channel : 1;
++	info->beacon = target->beacon_int;
++	info->caps = target->caps;
++	info->dtim = 1;
++	info->rssi = target->rssi;
++
++	static const uint8_t supported[] = {2, 4, 11, 22, 12, 18, 24, 36, 48, 72, 96, 108};
++	for (unsigned off = 0; off + 2 <= target->ies_len;) {
++		unsigned id = target->ies[off], n = target->ies[off + 1];
++		off += 2;
++		if (n > target->ies_len - off) break;
++		if (id == 1 || id == 50) {
++			for (unsigned k = 0; k < n; k++) {
++				unsigned v = target->ies[off + k], j;
++				for (j = 0; j < sizeof(supported) && (v & 127) != supported[j]; j++) {}
++				if (j == sizeof(supported)) continue;
++				for (j = 0; j < info->nrates && (info->rates[j] & 127) != (v & 127); j++) {}
++				if (j < info->nrates) info->rates[j] |= (v & 128);
++				else if (j < 12) info->rates[info->nrates++] = v;
++			}
++		}
++		if (id == 5 && n >= 2 && target->ies[off + 1]) {
++			info->dtim = target->ies[off + 1];
++		}
++		if (id == 48) {
++			static const uint8_t rsn_std[] = {48, 20, 1, 0, 0, 15, 172, 4, 1, 0, 0, 15, 172, 4, 1, 0, 0, 15, 172, 2, 0, 0};
++			memcpy(info->rsn, rsn_std, sizeof(rsn_std));
++			info->rsn_len = sizeof(rsn_std);
++			info->ap_rsn_len = n + 2;
++			info->ap_rsn[0] = 48;
++			info->ap_rsn[1] = n;
++			memcpy(info->ap_rsn + 2, target->ies + off, n);
++		}
++		off += n;
++	}
++	if (info->nrates == 0) {
++		static const uint8_t default_rates[] = {0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24, 0x30, 0x48, 0x60, 0x6c};
++		info->nrates = sizeof(default_rates);
++		memcpy(info->rates, default_rates, sizeof(default_rates));
++	}
++	lck_mtx_unlock(&river_apple80211_mtx);
++	return true;
++}
++
++void
++river_apple80211_scan_done(int status)
++{
++	(void)status;
++	lck_mtx_lock(&river_apple80211_mtx);
++	scan_result_idx = 0;
++	scan_pending_flag = false;
++	if (active_phase == PHASE_SCANNING) {
++		active_phase = PHASE_IDLE;
++	}
++	lck_mtx_unlock(&river_apple80211_mtx);
++	post(EVENT_SCAN_DONE, NULL, 0);
++	printf("river_apple80211: scan complete, posted EVENT_SCAN_DONE (%u BSS found)\n", river_bss_count);
++}
++
++void
++river_apple80211_assoc_done(int status)
++{
++	lck_mtx_lock(&river_apple80211_mtx);
++	join_result = (status == 0 ? 1 : (status == EAUTH ? 21 : (status == ETIMEDOUT ? 9 : 2)));
++	join_pending_flag = false;
++	lck_mtx_unlock(&river_apple80211_mtx);
++	post(EVENT_ASSOC_DONE, NULL, 0);
++	printf("river_apple80211: assoc finished, status=%d join_result=%u, posted EVENT_ASSOC_DONE\n",
++	    status, join_result);
++}
++
++void
++river_apple80211_link_changed(bool up, int16_t rssi)
++{
++	lck_mtx_lock(&river_apple80211_mtx);
++	if (up) {
++		active_phase = PHASE_JOINED;
++		for (unsigned i = 0; i < river_bss_count; i++) {
++			if (river_bss_table[i].ssid_len == pending_join.ssid_len &&
++			    memcmp(river_bss_table[i].ssid, pending_join.ssid, pending_join.ssid_len) == 0) {
++				memcpy(&active_bss, &river_bss_table[i], sizeof(active_bss));
++				break;
++			}
++		}
++		active_bss.rssi = rssi;
++	} else {
++		active_phase = PHASE_IDLE;
++		bzero(&active_bss, sizeof(active_bss));
++	}
++	struct apple80211_link_changed link = {
++		.down = !up,
++		.involuntary = !up,
++		.rssi = rssi,
++		.reason = up ? 0 : 4,
++	};
++	lck_mtx_unlock(&river_apple80211_mtx);
++
++	post(EVENT_SSID_CHANGED, NULL, 0);
++	post(EVENT_BSSID_CHANGED, NULL, 0);
++	post(EVENT_LINK_CHANGED, &link, sizeof(link));
++	printf("river_apple80211: link %s (rssi=%d dBm), posted EVENT_LINK_CHANGED\n",
++	    up ? "UP" : "DOWN", rssi);
++}
++
++bool
++river_apple80211_scan_pending(void)
++{
++	lck_mtx_lock(&river_apple80211_mtx);
++	bool pending = scan_pending_flag;
++	lck_mtx_unlock(&river_apple80211_mtx);
++	return pending;
++}
++
++bool
++river_apple80211_join_pending(struct river_apple80211_join_req *req)
++{
++	lck_mtx_lock(&river_apple80211_mtx);
++	bool pending = join_pending_flag;
++	if (pending && req != NULL) {
++		memcpy(req, &pending_join, sizeof(*req));
++	}
++	join_pending_flag = false;
++	lck_mtx_unlock(&river_apple80211_mtx);
++	return pending;
++}
++
++void
++river_apple80211_init(void)
++{
++	static bool initialized = false;
++	if (initialized) return;
++	initialized = true;
++	printf("river_apple80211: initialized Apple80211 interface\n");
++}
++
++errno_t
++river_apple80211_ioctl(u_long command, void *data)
++{
++	struct apple80211req *request = data;
++	bool is_set = (command == SIOCSA80211);
++	int error;
++
++	if (command != SIOCSA80211 && command != SIOCGA80211) {
++		return EOPNOTSUPP;
++	}
++	error = is_set ? set(request) : get(request);
++	return error;
++}
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -19,6 +19,9 @@
+ #include <net/kpi_protocol.h>
+ #include <libkern/crypto/sha1.h>
+ #include <libkern/crypto/aes.h>
++#include <sys/river_apple80211.h>
++extern void RiverWLANStart(const char * interface, const uint8_t * address);
++extern void MiniIONetworkStackStart(void);
+ #include <sys/systm.h>
+ #include <kern/clock.h>
+ #include <kern/thread.h>
+@@ -920,6 +923,17 @@
+         river_scan_channel, len, river_rx_probe_ours);
+   }
+  }
++ unsigned ch_scan = river_scan_channel;
++ uint8_t s_bytes[32] = {0}; uint8_t s_len = 0;
++ for (unsigned off = 36; off + 2 <= len;) {
++  unsigned id = f[off], size = f[off + 1]; off += 2;
++  if (size > len - off) break;
++  if (id == 0 && size <= 32) { s_len = size; for (unsigned k = 0; k < size; k++) s_bytes[k] = f[off + k]; }
++  if (id == 3 && size == 1) ch_scan = f[off];
++  off += size;
++ }
++ river_apple80211_add_bss((const uint8_t *)(f + 16), s_bytes, s_len, (uint16_t)(ch_scan == 14 ? 2484 : (2407 + 5 * ch_scan)),
++     (int16_t)(river_bd_word(p + 28) >> 24) - 100, (uint16_t)river_le16(f + 32), (uint16_t)river_le16(f + 34), (const uint8_t *)(f + 36), (uint16_t)(len - 36));
+  unsigned n;
+  for (n = 0; n < river_bss_count; n++) {
+   unsigned k;
+@@ -1521,11 +1535,12 @@
+  return 0;
+ }
+ static errno_t
+-river_net_ioctl(ifnet_t ifp, unsigned long cmd, void *data __unused)
++river_net_ioctl(ifnet_t ifp, unsigned long cmd, void *data)
+ {
+  switch (cmd) {
+  case SIOCSIFADDR: case SIOCAIFADDR: ifnet_set_flags(ifp,IFF_UP,IFF_UP); return 0;
+  case SIOCSIFFLAGS: case SIOCADDMULTI: case SIOCDELMULTI: return 0;
++ case 0x802869c8u: case 0xc02869c9u: return river_apple80211_ioctl(cmd, data);
+  default: return EOPNOTSUPP;
+  }
+ }
+@@ -1537,7 +1552,7 @@
+ static void
+ river_network_create(void)
+ {
+- if (!river_dhcp_offer || river_wpa.stage != 2 || river_wifi_ifp) return;
++ if (river_wifi_ifp) return;
+  lck_grp_t *group = lck_grp_alloc_init("river_wifi", LCK_GRP_ATTR_NULL);
+  if (!group) return;
+  river_net_lock = lck_mtx_alloc_init(group,LCK_ATTR_NULL);
+@@ -1545,7 +1560,7 @@
+  struct ifnet_init_eparams init = {0};
+  init.ver=IFNET_INIT_CURRENT_VERSION;init.len=sizeof(init);init.flags=IFNET_INIT_LEGACY;
+  init.uniqueid="river-wcn36xx";init.uniqueid_len=sizeof("river-wcn36xx")-1;
+- init.name="wl";init.unit=0;init.family=IFNET_FAMILY_ETHERNET;init.type=IFT_ETHER;
++ init.name="en";init.unit=0;init.family=IFNET_FAMILY_ETHERNET;init.type=IFT_ETHER;init.subfamily=IFNET_SUBFAMILY_WIFI;
+  init.output=river_net_output;init.demux=ether_demux;init.add_proto=ether_add_proto;
+  init.del_proto=ether_del_proto;init.check_multi=ether_check_multi;
+  init.framer_extended=ether_frameout_extended;init.ioctl=river_net_ioctl;init.detach=river_net_detach;
+@@ -1560,11 +1575,10 @@
+  ifnet_set_lladdr(river_wifi_ifp,river_test_mac,6);
+  bpfattach(river_wifi_ifp,DLT_EN10MB,14);
+  errno_t err=proto_plumb(PF_INET,river_wifi_ifp);
+- if (!err) {
+-  lck_mtx_lock(river_net_lock);river_net_live=true;lck_mtx_unlock(river_net_lock);
+-  ifnet_set_flags(river_wifi_ifp,IFF_UP|IFF_RUNNING,IFF_UP|IFF_RUNNING);
+- }
+- printf("RIVER NET: wl0 Ethernet-facing Wi-Fi ifnet attached IPv4-plumb=%d; DHCP address not configured\n",err);
++ RiverWLANStart("en0", river_test_mac);
++ MiniIONetworkStackStart();
++ river_apple80211_init();
++ printf("RIVER NET: en0 Wi-Fi ifnet attached IPv4-plumb=%d; RiverWLAN published\n", err);
+ }
+ static void
+ river_network_poll(void)
+@@ -2787,9 +2801,13 @@
+     if (!scan_attempted && wlan_start_acked && river_dxe_ready && wcnss_wlan_info && wcnss_wlan_fifo) {
+      scan_attempted = true;
+      river_passive_scan(smem, wcnss_wlan_info, wcnss_wlan_fifo, ipc_reg2);
+-     river_target_associate(smem, wcnss_wlan_info, wcnss_wlan_fifo, ipc_reg2);
+-     river_wpa_run(smem, wcnss_wlan_info, wcnss_wlan_fifo, ipc_reg2);
++     river_apple80211_scan_done(0);
++     if (river_target.enabled && river_target.found) {
++      river_target_associate(smem, wcnss_wlan_info, wcnss_wlan_fifo, ipc_reg2);
++      river_wpa_run(smem, wcnss_wlan_info, wcnss_wlan_fifo, ipc_reg2);
++     }
+      river_smd_smem = smem; river_smd_ipc = ipc_reg2;
++     river_smd_wlan_info = wcnss_wlan_info; river_smd_wlan_fifo = wcnss_wlan_fifo;
+     }
+     static const unsigned tbls[] = { 13, 266 };
+     for (unsigned t = 0; t < sizeof(tbls) / sizeof(tbls[0]); t++) {
+@@ -2897,6 +2915,57 @@
+   for (unsigned ticks = 0; river_dxe_ready; ticks++) {
+    river_dxe_poll();
+    river_network_poll();
++   if (!river_wifi_ifp) river_network_create();
++   if (river_apple80211_scan_pending() && river_smd_smem && river_smd_wlan_info) {
++    river_passive_scan(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc);
++    river_apple80211_scan_done(0);
++   }
++   struct river_apple80211_join_req jreq;
++   if (river_apple80211_join_pending(&jreq) && river_smd_smem && river_smd_wlan_info) {
++    struct river_apple80211_target_info tinfo;
++    if (river_apple80211_find_target(&jreq, &tinfo)) {
++     river_target.channel = tinfo.channel;
++     river_target.beacon = tinfo.beacon;
++     river_target.caps = tinfo.caps;
++     river_target.dtim = tinfo.dtim ? tinfo.dtim : 1;
++     river_target.nrates = tinfo.nrates;
++     memcpy(river_target.rates, tinfo.rates, tinfo.nrates);
++     river_target.rates_ok = true;
++     river_target.security_ok = true;
++     river_target.rsn_len = tinfo.rsn_len;
++     memcpy(river_target.rsn, tinfo.rsn, tinfo.rsn_len);
++     river_target.ap_rsn_len = tinfo.ap_rsn_len;
++     memcpy(river_target.ap_rsn, tinfo.ap_rsn, tinfo.ap_rsn_len);
++     memcpy(river_target.bssid, tinfo.bssid, 6);
++     memcpy(river_target.ssid, jreq.ssid, jreq.ssid_len);
++     river_target.ssid_len = jreq.ssid_len;
++     river_target.enabled = true;
++     river_target.found = true;
++     if (jreq.has_pmk) {
++      memcpy(river_wpa.pmk, jreq.pmk, 32);
++      river_wpa.pmk_ready = true;
++     }
++     river_wpa.associated = false;
++     river_wpa.keys_installed = false;
++     river_wpa.stage = 0;
++     river_wpa.pending_len = 0;
++     river_wpa.data_tx_stalled = false;
++     river_target_associate(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc);
++     river_wpa_run(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc);
++     if (river_wpa.stage == 2) {
++      ifnet_set_flags(river_wifi_ifp, IFF_UP | IFF_RUNNING, IFF_UP | IFF_RUNNING);
++      river_net_live = true;
++      river_apple80211_assoc_done(0);
++      river_apple80211_link_changed(true, tinfo.rssi);
++     } else {
++      river_apple80211_assoc_done(EAUTH);
++      river_apple80211_link_changed(false, 0);
++     }
++    } else {
++     river_apple80211_assoc_done(ETIMEDOUT);
++     river_apple80211_link_changed(false, 0);
++    }
++   }
+    if (river_wpa.stage == 3 && river_target.found && river_smd_smem && river_smd_wlan_info) {
+     printf("RIVER JOIN: target AP re-discovered; re-associating...\n");
+     river_target_associate(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc);
