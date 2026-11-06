@@ -221,7 +221,7 @@
 +}
 --- /dev/null
 +++ b/bsd/sys/river_apple80211.h
-@@ -0,0 +1,153 @@
+@@ -0,0 +1,162 @@
 +#ifndef _SYS_RIVER_APPLE80211_H_
 +#define _SYS_RIVER_APPLE80211_H_
 +
@@ -356,6 +356,15 @@
 +	uint8_t rsn[22];
 +	uint8_t ap_rsn_len;
 +	uint8_t ap_rsn[257];
++};
++
++struct river_ifmediareq {
++	char ifm_name[16];
++	int ifm_current;
++	int ifm_mask;
++	int ifm_status;
++	int ifm_active;
++	int ifm_count;
 +};
 +
 +#ifdef KERNEL
@@ -1048,7 +1057,7 @@
   switch (cmd) {
   case SIOCSIFADDR: case SIOCAIFADDR: ifnet_set_flags(ifp,IFF_UP,IFF_UP); return 0;
   case SIOCSIFFLAGS: case SIOCADDMULTI: case SIOCDELMULTI: return 0;
-+ case 0xc02c6938u: case 0xc02c6948u: {
++ case 0xc02c6938u: case 0xc0306938u: case 0xc02c6948u: case 0xc0306948u: {
 +  struct river_ifmediareq *ifmr = (struct river_ifmediareq *)data;
 +  if (ifmr) {
 +   ifmr->ifm_current = 0x80 | 0x20;
