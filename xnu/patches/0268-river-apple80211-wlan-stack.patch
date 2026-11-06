@@ -386,7 +386,7 @@
 +#endif /* _SYS_RIVER_APPLE80211_H_ */
 --- /dev/null
 +++ b/bsd/dev/river_apple80211.c
-@@ -0,0 +1,630 @@
+@@ -0,0 +1,631 @@
 +/*
 + * river_apple80211.c: Apple80211 ioctl and event engine for Moto G7 river.
 + */
@@ -407,6 +407,7 @@
 +static LCK_MTX_DECLARE(river_apple80211_mtx, &river_apple80211_lck_grp);
 +
 +static const char interface_name[16] = "en0";
++static const uint8_t river_test_mac[6] = {0x02, 0, 0, 0x36, 0x60, 1};
 +
 +#define RIVER_MAX_BSS 32
 +struct river_apple80211_bss {
