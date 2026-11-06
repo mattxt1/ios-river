@@ -386,7 +386,7 @@
 +#endif /* _SYS_RIVER_APPLE80211_H_ */
 --- /dev/null
 +++ b/bsd/dev/river_apple80211.c
-@@ -0,0 +1,656 @@
+@@ -0,0 +1,675 @@
 +/*
 + * river_apple80211.c: Apple80211 ioctl and event engine for Moto G7 river.
 + */
@@ -629,6 +629,7 @@
 +		struct {
 +			uint32_t version, radios, state[4];
 +		} answer = { .version = 1, .radios = 1, .state = { river_power_state ? 1 : 0 } };
++		request->req_val = river_power_state ? 1 : 0;
 +		error = give(request, &answer, sizeof(answer));
 +		break;
 +	}
@@ -774,13 +775,13 @@
 +		memcpy(pending_join.bssid, asked->bssid, 6);
 +		if (asked->key_length == 0) {
 +			pending_join.has_pmk = false;
-+		} else if (asked->key_cipher == CIPHER_PASSPHRASE && asked->key_length >= 8 && asked->key_length <= 63) {
++		} else if (asked->key_length >= 8 && asked->key_length <= 63) {
 +			char pass[65] = {0};
 +			memcpy(pass, asked->key, asked->key_length);
 +			river_pbkdf2_pmk(pass, (const char *)pending_join.ssid, pending_join.ssid_len, pending_join.pmk);
 +			pending_join.has_pmk = true;
 +			memset_s(pass, sizeof(pass), 0, sizeof(pass));
-+		} else if (asked->key_cipher == CIPHER_PMK && asked->key_length == 32) {
++		} else if (asked->key_length == 32) {
 +			memcpy(pending_join.pmk, asked->key, 32);
 +			pending_join.has_pmk = true;
 +		}
@@ -802,7 +803,16 @@
 +	}
 +	case 19: {
 +		lck_mtx_lock(&river_apple80211_mtx);
-+		river_power_state = (request->req_val != 0);
++		int pwr = request->req_val;
++		if (request->req_data != USER_ADDR_NULL && request->req_len >= 12) {
++			struct {
++				uint32_t version, radios, state[4];
++			} ps = {0};
++			if (copyin(request->req_data, &ps, sizeof(ps)) == 0) {
++				pwr = (int)ps.state[0];
++			}
++		}
++		river_power_state = (pwr != 0);
 +		if (!river_power_state) {
 +			active_phase = PHASE_IDLE;
 +			bzero(&active_bss, sizeof(active_bss));
@@ -880,6 +890,15 @@
 +		}
 +	}
 +	if (!target) {
++		for (unsigned i = 0; i < river_bss_count; i++) {
++			if (river_bss_table[i].ssid_len == req->ssid_len &&
++			    memcmp(river_bss_table[i].ssid, req->ssid, req->ssid_len) == 0) {
++				target = &river_bss_table[i];
++				break;
++			}
++		}
++	}
++	if (!target) {
 +		lck_mtx_unlock(&river_apple80211_mtx);
 +		return false;
 +	}
@@ -948,7 +967,7 @@
 +river_apple80211_assoc_done(int status)
 +{
 +	lck_mtx_lock(&river_apple80211_mtx);
-+	join_result = (status == 0 ? 0 : (status == EAUTH ? 21 : (status == ETIMEDOUT ? 9 : 2)));
++	join_result = (status == 0 ? 0 : (status == EAUTH ? 15 : (status == ETIMEDOUT ? 16 : 1)));
 +	join_pending_flag = false;
 +	if (status == 0) {
 +		active_phase = PHASE_JOINED;
@@ -1132,7 +1151,22 @@
  }
  static void
  river_network_poll(void)
-@@ -1667,6 +1692,7 @@
+@@ -1655,18 +1680,21 @@
+ static void
+ river_wpa_run(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t ipc)
+ {
+  if (!river_wpa.pmk_ready || !river_wpa.associated) return;
+  for (unsigned w = 0; w < 1000 && river_dxe_ready; w++) {
+-  river_dxe_poll(); river_wpa_step(smem, info, fifo, ipc); ri_wait(10);
++  river_dxe_poll(); river_wpa_step(smem, info, fifo, ipc);
++  if (river_wpa.stage == 2) break;
++  ri_wait(10);
+  }
+  river_dhcp_probe();
+  printf("RIVER WPA: initial window complete stage=%u keys-attempted=%u ifnet-published=%u\n",
+      river_wpa.stage, river_wpa.keys_installed,river_wifi_ifp!=NULL);
+ }
+ 
  static void
  river_passive_scan(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t ipc)
  {
@@ -1214,7 +1248,7 @@
 +      river_apple80211_assoc_done(0);
 +     } else {
 +      river_apple80211_link_changed(false, 0);
-+      river_apple80211_assoc_done(EAUTH);
++      river_apple80211_assoc_done(river_wpa.associated ? EAUTH : ETIMEDOUT);
 +     }
 +    } else {
 +     river_apple80211_assoc_done(ETIMEDOUT);
