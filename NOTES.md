@@ -36,9 +36,9 @@ Reverse-engineered `_getIfListCopy` and internal filtering in `/System/Library/P
   - Attached Wi-Fi network interface as `en0`.
 
 ### 3. Local Build & Image Verification
-- Source commit: `533e7d79a2612d3059cdda73a2bfd278fc42505c`
-- Kernel SHA256: `fae0147172022d61bd3205f07c3c451f079e71e340f668b0e859cbebbc555bea`
-- Boot image: `river-wifi-boot.img`, SHA256: `7f7e12c061d7b84897e72bf2295ee9265ef08aca5fd751c582e40c0741edbcbb`
+- Source commit: `4e74e8e34bf13b0a1471394314d214d57e965446`
+- Kernel SHA256: `7d596b13127d59adde38bcaf2ea84a0f619b9adede40079964d684eaf474d8f4`
+- Boot image: `river-wifi-boot.img`, SHA256: `5bfa1e89fbd84f157fc87315fbc027e08a4c58bd793a3e0fe9536b9d3bf41946`
 - Verified: golden shim, river-wifi DTB (`wlan` node), GPU and WCNSS firmware blobs, command line < 608 bytes (`riverbl=1`, `riverfs=1`).
 
 ## River JG30 battery power source and live SOC validation (2026-11-05)
