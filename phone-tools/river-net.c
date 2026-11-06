@@ -29,6 +29,7 @@ _Static_assert(sizeof(struct bpf_hdr)==20,"BPF ABI");
 typedef const struct __SCDynamicStore * SCDynamicStoreRef;
 typedef SCDynamicStoreRef (*SCDynamicStoreCreate_t)(CFAllocatorRef, CFStringRef, void*, void*);
 typedef Boolean (*SCDynamicStoreSetValue_t)(SCDynamicStoreRef, CFStringRef, CFPropertyListRef);
+typedef CFPropertyListRef (*SCDynamicStoreCopyValue_t)(SCDynamicStoreRef, CFStringRef);
 
 static uint8_t mac[6],xid[4],offered[4],server[4],mask[4],gateway[4],dns[4];
 static uint32_t lease_time = 86400, t1_time = 43200;
@@ -240,20 +241,22 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
 
  CFRelease(cf_if_lq); CFRelease(cf_lq_dict); CFRelease(cf_lq);
 
+ SCDynamicStoreCopyValue_t fn_CopyValue = (SCDynamicStoreCopyValue_t)dlsym(h, "SCDynamicStoreCopyValue");
+
  /* AirPort & Link state for status bar and UI indicators */
- CFMutableDictionaryRef cf_ap = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
- CFDictionarySetValue(cf_ap, CFSTR("Power Status"), kCFBooleanTrue);
+ CFStringRef cf_if_ap = CFStringCreateWithFormat(NULL, NULL, CFSTR("State:/Network/Interface/%s/AirPort"), name);
+ CFPropertyListRef existing_ap = fn_CopyValue ? fn_CopyValue(ds, cf_if_ap) : NULL;
+ CFMutableDictionaryRef cf_ap = NULL;
+ if (existing_ap && CFGetTypeID(existing_ap) == CFDictionaryGetTypeID()) {
+  cf_ap = CFDictionaryCreateMutableCopy(NULL, 0, (CFDictionaryRef)existing_ap);
+ } else {
+  cf_ap = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+  CFDictionarySetValue(cf_ap, CFSTR("Power Status"), kCFBooleanTrue);
+  CFDictionarySetValue(cf_ap, CFSTR("OP_MODE"), CFSTR("Infrastructure"));
+ }
+ if (existing_ap) CFRelease(existing_ap);
+
  CFDictionarySetValue(cf_ap, CFSTR("Active"), kCFBooleanTrue);
- CFDictionarySetValue(cf_ap, CFSTR("SSID_STR"), CFSTR("Wi-Fi"));
- CFDictionarySetValue(cf_ap, CFSTR("OP_MODE"), CFSTR("Infrastructure"));
- int ap_chan = 11;
- CFNumberRef cf_chan = CFNumberCreate(NULL, kCFNumberIntType, &ap_chan);
- CFDictionarySetValue(cf_ap, CFSTR("CHANNEL"), cf_chan);
- CFRelease(cf_chan);
- int ap_rssi = -50;
- CFNumberRef cf_rssi = CFNumberCreate(NULL, kCFNumberIntType, &ap_rssi);
- CFDictionarySetValue(cf_ap, CFSTR("RSSI"), cf_rssi);
- CFRelease(cf_rssi);
  int ap_bars = 3;
  CFNumberRef cf_bars = CFNumberCreate(NULL, kCFNumberIntType, &ap_bars);
  CFDictionarySetValue(cf_ap, CFSTR("Bars"), cf_bars);
@@ -262,7 +265,6 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
  CFMutableDictionaryRef cf_link = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
  CFDictionarySetValue(cf_link, CFSTR("Active"), kCFBooleanTrue);
 
- CFStringRef cf_if_ap = CFStringCreateWithFormat(NULL, NULL, CFSTR("State:/Network/Interface/%s/AirPort"), name);
  CFStringRef cf_if_link = CFStringCreateWithFormat(NULL, NULL, CFSTR("State:/Network/Interface/%s/Link"), name);
  fn_SetValue(ds, cf_if_ap, cf_ap);
  fn_SetValue(ds, cf_if_link, cf_link);
@@ -359,32 +361,56 @@ static int dhcp_renew_attempt(const char *name) {
  return 0;
 }
 
-static void dhcp(const char*name,int adddefault){
+static int dhcp(const char*name,int adddefault){
  get_mac(name);
  arc4random_buf(xid,4);
  unsigned len=0;int fd=open_bpf_attached(name,&len);
- if(fd<0)fail("open/attach BPF");
+ if(fd<0){perror("open/attach BPF");return 0;}
  for(unsigned phase=0;phase<2;phase++){
   int ok=0;
   for(unsigned retry=0;retry<3&&!ok;retry++){
    send_dhcp(fd,phase?3:1);
    ok=wait_dhcp(fd,len,phase?5:2);
-   if(ok<0)exit(1);
+   if(ok<0){close(fd);return 0;}
   }
-  if(!ok){fprintf(stderr,"DHCP %s timeout\n",phase?"ACK":"OFFER");exit(1);}
+  if(!ok){fprintf(stderr,"DHCP %s timeout\n",phase?"ACK":"OFFER");close(fd);return 0;}
  }
  close(fd);
- if(!memcmp(mask,"\0\0\0\0",4)){fprintf(stderr,"no DHCP subnet mask\n");exit(1);}
+ if(!memcmp(mask,"\0\0\0\0",4)){fprintf(stderr,"no DHCP subnet mask\n");return 0;}
  addr_config(name);
  showip("address",offered);showip("mask",mask);showip("gateway",gateway);showip("DNS",dns);
  printf("lease=%u s (renewal T1=%u s)\n", lease_time, t1_time);
  if(adddefault){
-  if(!memcmp(gateway,"\0\0\0\0",4)){fprintf(stderr,"no DHCP gateway\n");exit(1);}
+  if(!memcmp(gateway,"\0\0\0\0",4)){fprintf(stderr,"no DHCP gateway\n");return 0;}
   default_route(name);
   puts("default route installed");
  }
  sc_config(name,offered,mask,gateway,dns);
  puts("DHCP ACK accepted and address configured");
+ return 1;
+}
+
+struct apple80211req {
+ char req_if_name[16];
+ int32_t req_type;
+ int32_t req_val;
+ uint32_t req_len;
+ uint64_t req_data __attribute__((aligned(8)));
+};
+#define SIOCGA80211 0xc02869c9u
+
+static int get_80211_state(const char *name) {
+ int s = socket(AF_INET, SOCK_DGRAM, 0);
+ if (s < 0) return 0;
+ struct apple80211req req = {0};
+ strncpy(req.req_if_name, name, 16);
+ req.req_type = 13; /* STATE */
+ int val = 0;
+ if (ioctl(s, SIOCGA80211, &req) == 0) {
+  val = req.req_val;
+ }
+ close(s);
+ return val;
 }
 
 static void dhcp_daemon_loop(const char *name, int adddefault) {
@@ -394,26 +420,47 @@ static void dhcp_daemon_loop(const char *name, int adddefault) {
  (void)daemon(1, 1);
  int nullfd = open("/dev/null", O_RDONLY);
  if (nullfd >= 0) { dup2(nullfd, 0); close(nullfd); }
- dhcp(name, adddefault);
- puts("Entering DHCP lease renewal daemon loop");
+ puts("Entering river-net background monitor/renewal loop");
  fflush(stdout);
+ time_t last_acquire = 0;
  while(1) {
-  uint32_t wait_sec = t1_time;
-  if (wait_sec > 60) wait_sec -= 30; /* renew slightly before T1 */
-  printf("DHCP renewal sleeping for %u seconds...\n", wait_sec);
-  fflush(stdout);
-  sleep(wait_sec);
-  printf("DHCP lease renewal timer fired; renewing...\n");
-  fflush(stdout);
-  if (!dhcp_renew_attempt(name)) {
-   fprintf(stderr, "Renewal failed; will retry in 30 seconds\n");
-   sleep(30);
-   if (!dhcp_renew_attempt(name)) {
-    fprintf(stderr, "Secondary renewal failed; performing full DHCP re-bind\n");
-    dhcp(name, adddefault);
+  int st = get_80211_state(name);
+  if (st == 4) { /* PHASE_JOINED */
+   if (!get_interface_ip(name)) {
+    printf("Interface %s associated (STATE=4) without IPv4; acquiring DHCP lease...\n", name);
+    fflush(stdout);
+    if (dhcp(name, adddefault)) {
+     last_acquire = time(NULL);
+    } else {
+     sleep(2);
+     continue;
+    }
+   } else if (last_acquire > 0 && (time(NULL) - last_acquire >= t1_time - 30)) {
+    printf("DHCP lease renewal timer fired; renewing...\n");
+    fflush(stdout);
+    if (!dhcp_renew_attempt(name)) {
+     fprintf(stderr, "Renewal failed; will retry in 10 seconds\n");
+     sleep(10);
+     if (!dhcp_renew_attempt(name)) {
+      fprintf(stderr, "Secondary renewal failed; performing full DHCP re-bind\n");
+      if (dhcp(name, adddefault)) {
+       last_acquire = time(NULL);
+      }
+     } else {
+      last_acquire = time(NULL);
+     }
+    } else {
+     last_acquire = time(NULL);
+    }
+   }
+  } else {
+   if (last_acquire > 0) {
+    printf("Interface %s disconnected (STATE=%d)\n", name, st);
+    fflush(stdout);
+    last_acquire = 0;
    }
   }
-  fflush(stdout);
+  sleep(1);
  }
 }
 
@@ -436,8 +483,8 @@ static void tcp_probe(const char*name,const char*address,unsigned port){
 int main(int argc,char**argv){
  if(argc==4&&!strcmp(argv[1],"route-check")){uint8_t ip[4];if(inet_pton(AF_INET,argv[3],ip)!=1)return 2;if(!route_check(argv[2],ip)){fprintf(stderr,"matching default route absent\n");return 1;}puts("matching default route verified");return 0;}
  if(argc==5&&!strcmp(argv[1],"tcp")){unsigned p=(unsigned)strtoul(argv[4],NULL,10);if(!p||p>65535)return 2;tcp_probe(argv[2],argv[3],p);return 0;}
- if(argc>=3&&!strcmp(argv[1],"dhcp")){dhcp(argv[2],argc==4&&!strcmp(argv[3],"--default"));return 0;}
- if(argc>=3&&!strcmp(argv[1],"daemon")){dhcp_daemon_loop(argv[2],argc==4&&!strcmp(argv[3],"--default"));return 0;}
+ if(argc>=3&&!strcmp(argv[1],"dhcp")){return dhcp(argv[2],argc==4&&!strcmp(argv[3],"--default"))?0:1;}
+ if(argc>=3&&(!strcmp(argv[1],"daemon")||!strcmp(argv[1],"monitor"))){dhcp_daemon_loop(argv[2],argc==4&&!strcmp(argv[3],"--default"));return 0;}
  if(argc==3&&!strcmp(argv[1],"renew")){return dhcp_renew_attempt(argv[2])?0:1;}
  if(argc>=5&&!strcmp(argv[1],"sc-setup")){
   uint8_t ip[4]={192,168,1,232},m[4]={255,255,255,0},gw[4],dn[4];
