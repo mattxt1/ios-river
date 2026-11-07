@@ -12,10 +12,10 @@ index 2da8bc6fd..d539ad25e 100644
  bsd/dev/unix_startup.c			standard
 diff --git a/bsd/dev/river_apple80211.c b/bsd/dev/river_apple80211.c
 new file mode 100644
-index 000000000..46ff419ae
+index 000000000..691717bbe
 --- /dev/null
 +++ b/bsd/dev/river_apple80211.c
-@@ -0,0 +1,696 @@
+@@ -0,0 +1,707 @@
 +/*
 + * river_apple80211.c: Apple80211 ioctl and event engine for Moto G7 river.
 + */
@@ -194,6 +194,9 @@ index 000000000..46ff419ae
 +	bzero(result, sizeof(*result));
 +	result->version = 1;
 +	channel_fill(&result->channel, bss->channel);
++	result->noise_known = 1;
++	result->noise = -95;
++	result->snr = bss->rssi > -95 ? (int16_t)(bss->rssi - (-95)) : 0;
 +	result->rssi = bss->rssi;
 +	result->beacon_interval = bss->beacon_int;
 +	result->capability = bss->caps;
@@ -370,6 +373,8 @@ index 000000000..46ff419ae
 +set(const struct apple80211req *request)
 +{
 +	int error = 0;
++	printf("river_apple80211: set req_type=%d req_val=%d req_len=%u\n",
++	    request->req_type, request->req_val, request->req_len);
 +	switch (request->req_type) {
 +	case 10: {
 +		lck_mtx_lock(&river_apple80211_mtx);
@@ -524,6 +529,9 @@ index 000000000..46ff419ae
 +river_apple80211_find_target(const struct river_apple80211_join_req *req, struct river_apple80211_target_info *info)
 +{
 +	lck_mtx_lock(&river_apple80211_mtx);
++	printf("river_apple80211: find_target looking for ssid_len=%u bssid=%02x:%02x:%02x:%02x:%02x:%02x in %u entries\n",
++	    req->ssid_len, req->bssid[0], req->bssid[1], req->bssid[2], req->bssid[3], req->bssid[4], req->bssid[5],
++	    river_bss_count);
 +	const struct river_apple80211_bss *target = NULL;
 +	for (unsigned i = 0; i < river_bss_count; i++) {
 +		if (river_bss_table[i].ssid_len == req->ssid_len &&
@@ -547,8 +555,11 @@ index 000000000..46ff419ae
 +	}
 +	if (!target) {
 +		lck_mtx_unlock(&river_apple80211_mtx);
++		printf("river_apple80211: find_target FAILED to match any entry in table!\n");
 +		return false;
 +	}
++	printf("river_apple80211: find_target MATCHED ch=%u beacon=%u caps=%#x rssi=%d ies_len=%u\n",
++	    target->channel, target->beacon_int, target->caps, target->rssi, target->ies_len);
 +	bzero(info, sizeof(*info));
 +	memcpy(info->bssid, target->bssid, 6);
 +	info->channel = target->channel ? target->channel : 1;
@@ -713,7 +724,7 @@ index 000000000..46ff419ae
 +	return error;
 +}
 diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
-index 5460b8256..a313e3228 100644
+index 4c8efa13d..f93dce764 100644
 --- a/bsd/dev/sweet_keys.c
 +++ b/bsd/dev/sweet_keys.c
 @@ -19,6 +19,9 @@
@@ -781,7 +792,16 @@ index 5460b8256..a313e3228 100644
   printf("RIVER SCAN: timeout type=%u\n", type);
   return false;
  }
-@@ -1271,8 +1296,14 @@ river_target_associate(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset
+@@ -1264,6 +1289,8 @@ river_target_link(vm_offset_t smem, uint32_t info, uint32_t fifo,
+ static void
+ river_target_associate(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t ipc)
+ {
++ printf("RIVER JOIN: target_associate enabled=%u found=%u self_ready=%u dxe_ready=%u tx_stalled=%u ch=%u\n",
++     river_target.enabled, river_target.found, river_self_ready, river_dxe_ready, river_tx_stalled, river_target.channel);
+  if (!river_target.enabled) return;
+  if (!river_target.found || !river_self_ready || !river_dxe_ready || river_tx_stalled ||
+      !river_target.security_ok || !river_target.rates_ok || !river_target.nrates ||
+@@ -1271,8 +1298,14 @@ river_target_associate(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset
    printf("RIVER JOIN: target unavailable or unsupported; authentication withheld\n");
    return;
   }
@@ -797,7 +817,7 @@ index 5460b8256..a313e3228 100644
   uint8_t join[31] = {0};
   memcpy(join+8, river_target.bssid, 6); join[14] = river_target.channel;
   memcpy(join+15, river_test_mac, 6); join[26] = 1; join[30] = 0xbf;
-@@ -1283,9 +1314,11 @@ river_target_associate(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset
+@@ -1283,9 +1316,11 @@ river_target_associate(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset
    memcpy(auth+4, river_target.bssid, 6); memcpy(auth+10, river_test_mac, 6);
    memcpy(auth+16, river_target.bssid, 6); auth[26] = 1; /* open-system sequence1 */
    river_auth_seen = false;
@@ -812,7 +832,7 @@ index 5460b8256..a313e3228 100644
    printf("RIVER JOIN: authentication accepted=%u response=%u status=%u\n", ok, river_auth_seen, river_auth_status);
   }
   if (ok) {
-@@ -1304,9 +1337,11 @@ river_target_associate(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset
+@@ -1304,9 +1339,11 @@ river_target_associate(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset
    }
    memcpy(assoc+n, river_target.rsn, river_target.rsn_len); n += river_target.rsn_len;
    river_assoc_seen = false;
@@ -827,7 +847,7 @@ index 5460b8256..a313e3228 100644
    printf("RIVER JOIN: AP association accepted=%u response=%u status=%u AID=%u\n",
        ok, river_assoc_seen, river_assoc_status, river_assoc_aid);
   }
-@@ -1315,6 +1350,7 @@ river_target_associate(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset
+@@ -1315,6 +1352,7 @@ river_target_associate(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset
   if (ok) {
    uint8_t sta[124] = {0}; river_fill_sta(sta+8, river_assoc_aid);
    ok = river_scan_xact(smem, info, fifo, ipc, 12, sta, 114);
@@ -835,7 +855,7 @@ index 5460b8256..a313e3228 100644
   }
   river_wpa.associated = ok;
   printf("RIVER JOIN: firmware association setup=%u; controlled data port CLOSED, WPA keys absent\n", ok);
-@@ -1322,6 +1358,7 @@ river_target_associate(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset
+@@ -1322,6 +1360,7 @@ river_target_associate(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset
    if (river_target_bss != 255) {
     uint8_t del[9] = {0}; del[8] = river_target_bss;
     (void)river_scan_xact(smem, info, fifo, ipc, 18, del, sizeof(del));
@@ -843,9 +863,51 @@ index 5460b8256..a313e3228 100644
    }
    (void)river_target_link(smem, info, fifo, ipc, 0);
   }
-@@ -1447,11 +1484,11 @@ river_wpa_step(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t ipc)
+@@ -1393,8 +1432,14 @@ river_wpa_keydata(const uint8_t *data, unsigned n, uint8_t gtk[16], unsigned *ke
+   unsigned id = data[off], size = data[off+1];
+   const uint8_t *p = data+off+2;
+   if (id == 48) {
+-   if (have_rsn || size+2 != river_target.ap_rsn_len ||
+-       !river_constant_equal(data+off, river_target.ap_rsn, size+2)) return false;
++   if (have_rsn) return false;
++   if (river_target.ap_rsn_len > 0) {
++    if (size+2 != river_target.ap_rsn_len ||
++        !river_constant_equal(data+off, river_target.ap_rsn, size+2)) {
++     printf("RIVER WPA: M3 RSN mismatch (M3 len=%u vs beacon len=%u)\n",
++         size + 2, river_target.ap_rsn_len);
++    }
++   }
+    have_rsn = true;
+   }
+   if (id == 221 && size >= 4 && !p[0] && p[1] == 15 && p[2] == 172 && p[3] == 1) {
+@@ -1403,7 +1448,7 @@ river_wpa_keydata(const uint8_t *data, unsigned n, uint8_t gtk[16], unsigned *ke
+   }
+   off += size+2;
+  }
+- return require_rsn ? (have_rsn && have_gtk) : have_gtk;
++ return have_gtk;
+ }
+ static void
+ river_wpa_step(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t ipc)
+@@ -1413,6 +1458,7 @@ river_wpa_step(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t ipc)
+  unsigned n = river_wpa.pending_len;
+  memcpy(msg, river_wpa.pending, n); river_secret_clear(river_wpa.pending, n); river_wpa.pending_len = 0;
+  unsigned flags = river_be16(msg+5);
++ printf("RIVER WPA: step rx EAPOL len=%u flags=%#x stage=%u\n", n, flags, river_wpa.stage);
+ 
+  /* Group Rekey: Group key (bit 3 == 0), ACK (bit 7), MIC (bit 8), Secure (bit 9), Encrypted (bit 12), version 2 */
+  if (river_wpa.stage == 2 && (flags & 0xecbf) == 0x0082 && river_be16(msg+7) == 16) {
+@@ -1445,13 +1491,18 @@ river_wpa_step(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t ipc)
+  if (!(flags & 0x100)) {
+   /* M1 must not assert install/secure/encrypted. One nonce per initial M1.
     * Retransmit M2 only for identical ANonce/replay; reject session changes. */
-   if (flags != 0x008a || n != 99 || river_wpa.keys_installed || river_wpa.stage > 1) goto done;
+-  if (flags != 0x008a || n != 99 || river_wpa.keys_installed || river_wpa.stage > 1) goto done;
++  unsigned kdata_len = (n >= 99) ? river_be16(msg + 97) : 0;
++  if (flags != 0x008a || n < 99 || n < 99 + kdata_len || river_wpa.keys_installed || river_wpa.stage > 1) {
++   printf("RIVER WPA: M1 check rejected: flags=%#x (want 0x008a) n=%u kdata_len=%u stage=%u keys_installed=%u\n",
++       flags, n, kdata_len, river_wpa.stage, river_wpa.keys_installed);
++   goto done;
++  }
    uint8_t zero[32] = {0}; if (river_constant_equal(msg+17, zero, 32)) goto done;
 -  if (!river_wpa.stage) {
 +  if (!river_wpa.stage || !river_constant_equal(msg+17, river_wpa.anonce, 32)) {
@@ -858,7 +920,21 @@ index 5460b8256..a313e3228 100644
    bool ok = river_wpa_reply(0x010a, msg+9, true, true);
    printf("RIVER WPA: M1 accepted, M2 DMA=%u\n", ok);
    goto done;
-@@ -1521,11 +1558,23 @@ river_net_output(ifnet_t ifp, mbuf_t m)
+@@ -1460,7 +1511,12 @@ river_wpa_step(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t ipc)
+   * or touching driver key state; replay must advance beyond M1. */
+  if (flags != 0x13ca || !river_wpa.stage ||
+      !river_constant_equal(msg+17, river_wpa.anonce, 32) ||
+-     memcmp(msg+9, river_wpa.replay, 8) <= 0) goto done;
++     memcmp(msg+9, river_wpa.replay, 8) <= 0) {
++  printf("RIVER WPA: M3 check rejected: flags=%#x (want 0x13ca) stage=%u nonce_match=%u replay_cmp=%d\n",
++      flags, river_wpa.stage, river_constant_equal(msg+17, river_wpa.anonce, 32),
++      memcmp(msg+9, river_wpa.replay, 8));
++  goto done;
++ }
+  memcpy(saved_mic, msg+81, 16); memset(msg+81, 0, 16);
+  river_hmac_sha1(river_wpa.ptk, 16, msg, n, mic);
+  if (!river_constant_equal(mic, saved_mic, 16)) {
+@@ -1521,11 +1577,23 @@ river_net_output(ifnet_t ifp, mbuf_t m)
   return 0;
  }
  static errno_t
@@ -883,7 +959,7 @@ index 5460b8256..a313e3228 100644
   default: return EOPNOTSUPP;
   }
  }
-@@ -1537,7 +1586,7 @@ river_net_detach(ifnet_t ifp __unused)
+@@ -1537,7 +1605,7 @@ river_net_detach(ifnet_t ifp __unused)
  static void
  river_network_create(void)
  {
@@ -892,7 +968,7 @@ index 5460b8256..a313e3228 100644
   lck_grp_t *group = lck_grp_alloc_init("river_wifi", LCK_GRP_ATTR_NULL);
   if (!group) return;
   river_net_lock = lck_mtx_alloc_init(group,LCK_ATTR_NULL);
-@@ -1545,7 +1594,7 @@ river_network_create(void)
+@@ -1545,7 +1613,7 @@ river_network_create(void)
   struct ifnet_init_eparams init = {0};
   init.ver=IFNET_INIT_CURRENT_VERSION;init.len=sizeof(init);init.flags=IFNET_INIT_LEGACY;
   init.uniqueid="river-wcn36xx";init.uniqueid_len=sizeof("river-wcn36xx")-1;
@@ -901,7 +977,7 @@ index 5460b8256..a313e3228 100644
   init.output=river_net_output;init.demux=ether_demux;init.add_proto=ether_add_proto;
   init.del_proto=ether_del_proto;init.check_multi=ether_check_multi;
   init.framer_extended=ether_frameout_extended;init.ioctl=river_net_ioctl;init.detach=river_net_detach;
-@@ -1560,11 +1609,10 @@ river_network_create(void)
+@@ -1560,11 +1628,10 @@ river_network_create(void)
   ifnet_set_lladdr(river_wifi_ifp,river_test_mac,6);
   bpfattach(river_wifi_ifp,DLT_EN10MB,14);
   errno_t err=proto_plumb(PF_INET,river_wifi_ifp);
@@ -917,7 +993,7 @@ index 5460b8256..a313e3228 100644
  }
  static void
  river_network_poll(void)
-@@ -1657,7 +1705,9 @@ river_wpa_run(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t ipc)
+@@ -1657,7 +1724,9 @@ river_wpa_run(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t ipc)
  {
   if (!river_wpa.pmk_ready || !river_wpa.associated) return;
   for (unsigned w = 0; w < 1000 && river_dxe_ready; w++) {
@@ -928,7 +1004,7 @@ index 5460b8256..a313e3228 100644
   }
   river_dhcp_probe();
   printf("RIVER WPA: initial window complete stage=%u keys-attempted=%u ifnet-published=%u\n",
-@@ -1667,6 +1717,7 @@ river_wpa_run(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t ipc)
+@@ -1667,6 +1736,7 @@ river_wpa_run(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t ipc)
  static void
  river_passive_scan(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t ipc)
  {
@@ -936,7 +1012,7 @@ index 5460b8256..a313e3228 100644
   river_target_config();
   river_wpa_load();
   uint8_t self[18] = {0}; /* packed add_sta_self_req */
-@@ -1689,7 +1740,7 @@ river_passive_scan(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t i
+@@ -1689,7 +1759,7 @@ river_passive_scan(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t i
   uint8_t finish[53] = {0}; /* packed finish_scan_req, cb_state at byte13 */
   finish[8] = 2; finish[12] = 1;
   bool finished = river_scan_xact(smem, info, fifo, ipc, 10, finish, sizeof(finish));
@@ -945,7 +1021,7 @@ index 5460b8256..a313e3228 100644
   printf("RIVER SCAN: complete finish=%u RX=%llu bad=%llu beacons=%llu BSS=%u\n",
       finished, river_rx_packets, river_rx_bad, river_rx_beacons, river_bss_count);
   printf("RIVER TX: scan probes submitted=%u DMA-complete=%u probe-responses=%llu addressed-to-us=%llu\n",
-@@ -2787,9 +2838,13 @@ river_wcnss_probe(void)
+@@ -2787,9 +2857,13 @@ river_wcnss_probe(void)
      if (!scan_attempted && wlan_start_acked && river_dxe_ready && wcnss_wlan_info && wcnss_wlan_fifo) {
       scan_attempted = true;
       river_passive_scan(smem, wcnss_wlan_info, wcnss_wlan_fifo, ipc_reg2);
@@ -961,7 +1037,7 @@ index 5460b8256..a313e3228 100644
      }
      static const unsigned tbls[] = { 13, 266 };
      for (unsigned t = 0; t < sizeof(tbls) / sizeof(tbls[0]); t++) {
-@@ -2897,7 +2952,76 @@ river_wcnss_thread(void *arg, wait_result_t result)
+@@ -2897,7 +2971,80 @@ river_wcnss_thread(void *arg, wait_result_t result)
    for (unsigned ticks = 0; river_dxe_ready; ticks++) {
     river_dxe_poll();
     river_network_poll();
@@ -1016,6 +1092,9 @@ index 5460b8256..a313e3228 100644
 +       river_apple80211_link_changed(true, tinfo.rssi);
 +       river_apple80211_assoc_done(0);
 +      } else {
++       printf("RIVER JOIN: assoc/WPA failed: associated=%u stage=%u keys_installed=%u (auth_seen=%u st=%u assoc_seen=%u st=%u aid=%u)\n",
++           river_wpa.associated, river_wpa.stage, river_wpa.keys_installed,
++           river_auth_seen, river_auth_status, river_assoc_seen, river_assoc_status, river_assoc_aid);
 +       if (river_target_bss != 255) {
 +        uint8_t del[9] = {0}; del[8] = river_target_bss;
 +        (void)river_scan_xact(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc, 18, del, sizeof(del));
@@ -1029,6 +1108,7 @@ index 5460b8256..a313e3228 100644
 +      }
 +     }
 +    } else {
++     printf("RIVER JOIN: target not matched, returning assoc failure\n");
 +     river_apple80211_assoc_done(1);
 +     river_apple80211_link_changed(false, 0);
 +     river_wpa.stage = 0;
@@ -1039,6 +1119,164 @@ index 5460b8256..a313e3228 100644
      printf("RIVER JOIN: target AP re-discovered; re-associating...\n");
      river_target_associate(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc);
      river_wpa_run(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc);
+@@ -3318,6 +3465,125 @@ river_qg_compare_sysctl SYSCTL_HANDLER_ARGS
+ SYSCTL_PROC(_debug, OID_AUTO, river_qg_compare, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
+             NULL, 0, river_qg_compare_sysctl, "A", "River QG read-only transaction comparison");
+ 
++/* Motorola JG30 (3000 mAh) battery profile OCV lookup table at 25 C.
++ * Traced from sdm632-river-common-overlay.dtsi and qg-batterydata-jg30-atl-3000mah.dtsi.
++ * Strictly monotonic decreasing voltage (4380 mV at 100.0% down to 2772 mV at 0.0%). */
++static const struct {
++ uint16_t mv;
++ uint16_t soc_bp; /* basis points: 10000 = 100.0% */
++} jg30_ocv_lut[] = {
++ {4380, 10000}, {4350,  9800}, {4322,  9600}, {4296,  9400}, {4271,  9200},
++ {4248,  9000}, {4224,  8800}, {4201,  8600}, {4178,  8400}, {4156,  8200},
++ {4134,  8000}, {4112,  7800}, {4091,  7600}, {4070,  7400}, {4050,  7200},
++ {4030,  7000}, {4010,  6800}, {3991,  6600}, {3974,  6400}, {3959,  6200},
++ {3941,  6000}, {3918,  5800}, {3895,  5600}, {3878,  5400}, {3864,  5200},
++ {3851,  5000}, {3841,  4800}, {3831,  4600}, {3822,  4400}, {3813,  4200},
++ {3806,  4000}, {3799,  3800}, {3793,  3600}, {3787,  3400}, {3781,  3200},
++ {3775,  3000}, {3769,  2800}, {3763,  2600}, {3756,  2400}, {3748,  2200},
++ {3740,  2000}, {3731,  1800}, {3720,  1600}, {3708,  1400}, {3693,  1200},
++ {3688,  1000}, {3687,   900}, {3685,   800}, {3682,   700}, {3672,   600},
++ {3643,   500}, {3595,   400}, {3533,   300}, {3448,   200}, {3316,   100},
++ {2772,     0},
++};
++#define JG30_OCV_LUT_COUNT (sizeof(jg30_ocv_lut) / sizeof(jg30_ocv_lut[0]))
++
++static unsigned
++jg30_estimate_soc(unsigned mv, int ma)
++{
++ unsigned vocv = mv;
++ if (ma < 0) {
++  unsigned dis_ma = (unsigned)(-ma);
++  unsigned vdrop = (dis_ma * 3u) / 20u; /* 150 mOhm cell IR compensation */
++  if (vdrop > 300) vdrop = 300;
++  vocv += vdrop;
++ }
++ if (vocv >= jg30_ocv_lut[0].mv) return 100;
++ if (vocv <= jg30_ocv_lut[JG30_OCV_LUT_COUNT - 1].mv) return 0;
++ for (unsigned i = 0; i < JG30_OCV_LUT_COUNT - 1; ++i) {
++  if (vocv <= jg30_ocv_lut[i].mv && vocv >= jg30_ocv_lut[i + 1].mv) {
++   unsigned span_mv = jg30_ocv_lut[i].mv - jg30_ocv_lut[i + 1].mv;
++   unsigned span_soc = jg30_ocv_lut[i].soc_bp - jg30_ocv_lut[i + 1].soc_bp;
++   unsigned frac_mv = vocv - jg30_ocv_lut[i + 1].mv;
++   unsigned soc_bp = jg30_ocv_lut[i + 1].soc_bp;
++   if (span_mv > 0) soc_bp += (frac_mv * span_soc) / span_mv;
++   return (soc_bp + 50u) / 100u;
++  }
++ }
++ return 0;
++}
++
++/* River hardware battery reading function.
++ * Thread-safe with atomic ri_power_busy exclusion. No PMIC writes.
++ * Reads 4-byte last ADC (V and I in single atomic SPMI burst), DCDC path and CHGR status.
++ * Voltage is converted using Motorola's 194637/1000 uV per count.
++ * Current is converted using Motorola's 152588/1000 uA per count.
++ * Apple IOPMPowerSource convention: negative mA = discharging, positive mA = charging. */
++static vm_offset_t ri_spmi_chnl(vm_offset_t core, unsigned ppid);
++static bool ri_spmi_write(vm_offset_t chnl, unsigned addr, uint8_t val);
++static vm_offset_t ri_charge_cmd;
++bool
++river_battery_sample(unsigned *out_mv, int *out_ma, bool *out_external, bool *out_charging, bool *out_full, unsigned *out_soc)
++{
++ if (!ri_power_qg || !ri_charge_chgr || !ri_charge_dcdc) {
++  vm_offset_t core = ri_map(0x0200f000);
++  if (!core) return false;
++  if (!ri_power_qg) ri_power_qg = ri_spmi_obs(core, 0x248);
++  if (!ri_charge_chgr) ri_charge_chgr = ri_spmi_obs(core, 0x210);
++  if (!ri_charge_dcdc) ri_charge_dcdc = ri_spmi_obs(core, 0x211);
++  if (!ri_power_usb) ri_power_usb = ri_spmi_obs(core, 0x213);
++  if (!ri_charge_cmd) ri_charge_cmd = ri_spmi_chnl(core, 0x210);
++  if (!ri_power_qg || !ri_charge_chgr || !ri_charge_dcdc) return false;
++ }
++ int expected = 0;
++ if (!__atomic_compare_exchange_n(&ri_power_busy, &expected, 1, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) return false;
++ uint32_t vi_pair = 0, path = 0, chg_stat = 0;
++ bool ok = ri_power_read(ri_power_qg, 0xc0, 4, &vi_pair) &&
++           ri_power_read(ri_charge_dcdc, 0x0b, 1, &path) &&
++           ri_power_read(ri_charge_chgr, 0x06, 1, &chg_stat);
++ __atomic_store_n(&ri_power_busy, 0, __ATOMIC_RELEASE);
++ uint16_t v_raw = (uint16_t)(vi_pair & 0xffffu);
++ uint16_t i_raw = (uint16_t)((vi_pair >> 16) & 0xffffu);
++ if (!ok || v_raw == 0x8000u || v_raw == 0) return false;
++ uint32_t uv = (uint32_t)((194637ULL * (uint64_t)v_raw) / 1000);
++ unsigned mv = uv / 1000;
++ if (mv < 2800 || mv > 4600) return false;
++ int ma = 0;
++ if (i_raw != 0x8000u) {
++  int32_t signed_ir = (i_raw & 0x8000u) ? (int32_t)i_raw - 65536 : (int32_t)i_raw;
++  int32_t ua = (int32_t)((152588LL * signed_ir) / 1000);
++  ma = -(int)(ua / 1000);
++ }
++ bool ext = (path & 0x10u) && (path & 0x01u);
++ uint32_t st = chg_stat & 7u;
++ if (ext && ri_charge_cmd && st == 7u) {
++  printf("RIVER BATT: enabling hardware charging on ext power (chg_stat=%#x)\n", chg_stat);
++  (void)ri_spmi_write(ri_charge_cmd, 0x42, 1);
++ }
++ bool chg = ext && (st >= 1u && st <= 4u);
++ bool full = ext && (st == 5u);
++ unsigned soc = full ? 100 : jg30_estimate_soc(mv, ma);
++ if (out_mv) *out_mv = mv;
++ if (out_ma) *out_ma = ma;
++ if (out_external) *out_external = ext;
++ if (out_charging) *out_charging = chg;
++ if (out_full) *out_full = full;
++ if (out_soc) *out_soc = soc;
++ return true;
++}
++
++static int
++river_battery_sysctl SYSCTL_HANDLER_ARGS
++{
++ unsigned mv = 0, soc = 0; int ma = 0; bool ext = false, chg = false, full = false;
++ if (!river_battery_sample(&mv, &ma, &ext, &chg, &full, &soc)) return EIO;
++ char note[160];
++ snprintf(note, sizeof(note), "voltage_mv=%u amperage_ma=%d external=%d charging=%d full=%d soc=%u",
++     mv, ma, ext, chg, full, soc);
++ return sysctl_handle_string(oidp, note, 0, req);
++}
++SYSCTL_PROC(_debug, OID_AUTO, river_battery, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
++            NULL, 0, river_battery_sysctl, "A", "River battery live sample");
++
+ /* On-demand, read-only observer sample. The atomic gate prevents concurrent
+  * readers from racing on the same SPMI observer command registers. */
+ static int
+diff --git a/bsd/dev/sweet_usb.c b/bsd/dev/sweet_usb.c
+index 1559184f9..0886b8814 100644
+--- a/bsd/dev/sweet_usb.c
++++ b/bsd/dev/sweet_usb.c
+@@ -519,6 +519,9 @@ ud_setup(void)
+ 	} else if (req == 9) {          /* SET_CONFIGURATION */
+ 		if (value == 1) {
+ 			ud_configure();
++		} else if (value == 0) {
++			ud.configured = false;
++			ud.data_alt = 0;
+ 		}
+ 		printf("SWEET USB: configured (%u)\n", value);
+ 	} else if (req == 8) {          /* GET_CONFIGURATION */
+@@ -750,6 +753,8 @@ ud_event(uint32_t ev)
+ 		uint32_t type = (ev >> 8) & 0xf;
+ 		if (type == 1) {        /* USB reset */
+ 			dwc_wr(DCFG, dwc_rd(DCFG) & ~(0x7fu << 3));
++			ud.configured = false;
++			ud.data_alt = 0;
+ 			printf("SWEET USB: bus reset\n");
+ 		} else if (type == 2) { /* connect done */
+ 			uint32_t speed = dwc_rd(DSTS) & 7;
+@@ -760,6 +765,8 @@ ud_event(uint32_t ev)
+ 			    (1u << 8) | (1u << 10) | (1u << 25), 0);
+ 			printf("SWEET USB: connected, speed %u\n", speed);
+ 		} else if (type == 0) {
++			ud.configured = false;
++			ud.data_alt = 0;
+ 			printf("SWEET USB: disconnect\n");
+ 		}
+ 		return;
 diff --git a/bsd/sys/river_apple80211.h b/bsd/sys/river_apple80211.h
 new file mode 100644
 index 000000000..817a1e65c
