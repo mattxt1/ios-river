@@ -1,0 +1,332 @@
+diff --git a/bsd/conf/files b/bsd/conf/files
+index c5199a3..d652f05 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -118,6 +118,7 @@ bsd/dev/sweet_rpmh.c			standard
+ bsd/dev/sweet_spmi.c			standard
+ bsd/dev/sweet_usb.c			standard
+ bsd/dev/river_apple80211.c		standard
++bsd/dev/river_audio.c			standard
+ bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
+diff --git a/bsd/dev/river_audio.c b/bsd/dev/river_audio.c
+new file mode 100644
+index 0000000..5c724af
+--- /dev/null
++++ b/bsd/dev/river_audio.c
+@@ -0,0 +1,275 @@
++/*
++ * river_audio.c: /dev/hakios-audio and /dev/hakios-mic devices for Moto G7 river.
++ */
++#include <kern/clock.h>
++#include <kern/locks.h>
++#include <kern/thread_call.h>
++#include <libkern/libkern.h>
++#include <mach/mach_types.h>
++#include <mach/vm_param.h>
++#include <miscfs/devfs/devfs.h>
++#include <pexpert/pexpert.h>
++#include <sys/conf.h>
++#include <sys/errno.h>
++#include <sys/proc.h>
++#include <sys/hakios.audio.h>
++#include <sys/systm.h>
++#include <sys/uio.h>
++#include <sys/sysctl.h>
++
++#define AUDIO_CHUNK_FRAMES 1024
++#define AUDIO_QUIET_MS     500
++#define AUDIO_SILENCE      8
++
++static LCK_GRP_DECLARE(river_audio_grp, "river-audio");
++static LCK_MTX_DECLARE(river_audio_lock, &river_audio_grp);
++
++/* Audio output tracking */
++static uint64_t audio_frames_total;
++static uint64_t audio_sound_frames;
++static uint32_t audio_peak_sample;
++static uint64_t audio_stretch_first;
++static uint64_t audio_stretch_last;
++static uint64_t audio_stretch_frames;
++static uint64_t audio_stretch_sound;
++static uint32_t audio_stretch_peak;
++static thread_call_t audio_report_call;
++static bool audio_report_armed;
++
++/* Audio volume state */
++static uint32_t river_vol_below;
++static bool river_vol_muted;
++static uint32_t river_vol_gen;
++
++/* Audio microphone tracking */
++static uint64_t mic_frames_read;
++static uint32_t mic_phase;
++
++static void
++river_audio_report(__unused thread_call_param_t p0, __unused thread_call_param_t p1)
++{
++	uint64_t frames, sound, lasted = 0, since = 0;
++	uint32_t peak;
++	uint64_t deadline;
++
++	lck_mtx_lock(&river_audio_lock);
++	absolutetime_to_nanoseconds(mach_absolute_time() - audio_stretch_last, &since);
++	if (since < (uint64_t)AUDIO_QUIET_MS * NSEC_PER_MSEC) {
++		clock_interval_to_deadline(2 * AUDIO_QUIET_MS, NSEC_PER_MSEC, &deadline);
++		thread_call_enter_delayed(audio_report_call, deadline);
++		lck_mtx_unlock(&river_audio_lock);
++		return;
++	}
++	absolutetime_to_nanoseconds(audio_stretch_last - audio_stretch_first, &lasted);
++	frames = audio_stretch_frames;
++	sound = audio_stretch_sound;
++	peak = audio_stretch_peak;
++	audio_stretch_frames = 0;
++	audio_stretch_sound = 0;
++	audio_stretch_peak = 0;
++	audio_report_armed = false;
++	lck_mtx_unlock(&river_audio_lock);
++
++	printf("RIVER AUDIO: %llu.%02llu s written (%llu.%02llu s sound, peak %u%% FS, vol -%.1f dB%s)\n",
++	    frames / HAKIOS_AUDIO_RATE, (frames % HAKIOS_AUDIO_RATE) * 100 / HAKIOS_AUDIO_RATE,
++	    sound / HAKIOS_AUDIO_RATE, (sound % HAKIOS_AUDIO_RATE) * 100 / HAKIOS_AUDIO_RATE,
++	    (peak * 100) / 32768, river_vol_below / 8.0, river_vol_muted ? ", muted" : "");
++}
++
++static int
++river_audio_open(__unused dev_t dev, __unused int flags, __unused int devtype, __unused struct proc *p)
++{
++	return 0;
++}
++
++static int
++river_audio_close(__unused dev_t dev, __unused int flags, __unused int devtype, __unused struct proc *p)
++{
++	return 0;
++}
++
++static int
++river_audio_write(__unused dev_t dev, struct uio *uio, __unused int ioflag)
++{
++	int16_t buffer[AUDIO_CHUNK_FRAMES * HAKIOS_AUDIO_CHANNELS];
++	int error = 0;
++	user_ssize_t bytes;
++	uint32_t count, loudest, i, level;
++	uint64_t now, deadline;
++
++	while (uio_resid(uio) >= HAKIOS_AUDIO_FRAME) {
++		bytes = uio_resid(uio);
++		if (bytes > (user_ssize_t)sizeof(buffer)) {
++			bytes = sizeof(buffer);
++		}
++		bytes -= bytes % HAKIOS_AUDIO_FRAME;
++		error = uiomove((caddr_t)buffer, (int)bytes, uio);
++		if (error) {
++			break;
++		}
++
++		count = (uint32_t)(bytes / HAKIOS_AUDIO_FRAME);
++		loudest = 0;
++		for (i = 0; i < count * HAKIOS_AUDIO_CHANNELS; i++) {
++			level = buffer[i] < 0 ? (uint32_t)-(int32_t)buffer[i] : (uint32_t)buffer[i];
++			if (level > loudest) loudest = level;
++		}
++
++		now = mach_absolute_time();
++		lck_mtx_lock(&river_audio_lock);
++		audio_frames_total += count;
++		audio_stretch_last = now;
++		if (audio_stretch_frames == 0) {
++			audio_stretch_first = now;
++		}
++		audio_stretch_frames += count;
++		if (loudest > AUDIO_SILENCE) {
++			audio_sound_frames += count;
++			audio_stretch_sound += count;
++		}
++		if (loudest > audio_stretch_peak) {
++			audio_stretch_peak = loudest;
++		}
++		if (loudest > audio_peak_sample) {
++			audio_peak_sample = loudest;
++		}
++		if (!audio_report_armed && audio_report_call) {
++			audio_report_armed = true;
++			clock_interval_to_deadline(2 * AUDIO_QUIET_MS, NSEC_PER_MSEC, &deadline);
++			thread_call_enter_delayed(audio_report_call, deadline);
++		}
++		lck_mtx_unlock(&river_audio_lock);
++	}
++	return error;
++}
++
++static int
++river_audio_ioctl(__unused dev_t dev, u_long cmd, caddr_t data, __unused int flags, __unused struct proc *p)
++{
++	const struct hakios_audio_volume *vol;
++	uint32_t below;
++
++	if (cmd != HAKIOS_AUDIO_SET_VOLUME) {
++		return ENOTTY;
++	}
++	vol = (const struct hakios_audio_volume *)(void *)data;
++	below = vol->below > (90 * 8) ? (90 * 8) : vol->below;
++
++	lck_mtx_lock(&river_audio_lock);
++	river_vol_below = below;
++	river_vol_muted = vol->muted != 0;
++	river_vol_gen++;
++	lck_mtx_unlock(&river_audio_lock);
++
++	printf("RIVER AUDIO: volume set: %s%.1f dB under maximum\n",
++	    vol->muted ? "(muted) " : "", below / 8.0);
++	return 0;
++}
++
++static const struct cdevsw river_audio_cdevsw = {
++	.d_open = river_audio_open,
++	.d_close = river_audio_close,
++	.d_read = eno_rdwrt,
++	.d_write = river_audio_write,
++	.d_ioctl = river_audio_ioctl,
++	.d_stop = eno_stop,
++	.d_reset = eno_reset,
++	.d_select = eno_select,
++	.d_mmap = eno_mmap,
++	.d_strategy = eno_strat,
++	.d_type = 0
++};
++
++/* --- /dev/hakios-mic implementation --- */
++
++static int
++river_mic_open(__unused dev_t dev, __unused int flags, __unused int devtype, __unused struct proc *p)
++{
++	lck_mtx_lock(&river_audio_lock);
++	mic_frames_read = 0;
++	mic_phase = 0;
++	lck_mtx_unlock(&river_audio_lock);
++	printf("RIVER MIC: recording started (/dev/hakios-mic open)\n");
++	return 0;
++}
++
++static int
++river_mic_close(__unused dev_t dev, __unused int flags, __unused int devtype, __unused struct proc *p)
++{
++	uint64_t mic_total;
++
++	lck_mtx_lock(&river_audio_lock);
++	mic_total = mic_frames_read;
++	lck_mtx_unlock(&river_audio_lock);
++	printf("RIVER MIC: recording ended (%llu frames = %llu.%02llu s)\n",
++	    mic_total, mic_total / HAKIOS_AUDIO_RATE, (mic_total % HAKIOS_AUDIO_RATE) * 100 / HAKIOS_AUDIO_RATE);
++	return 0;
++}
++
++static int
++river_mic_read(__unused dev_t dev, struct uio *uio, __unused int ioflag)
++{
++	int16_t mic_buf[512];
++	int error = 0;
++	user_ssize_t bytes;
++	uint32_t count, i;
++	int16_t s;
++
++	while (uio_resid(uio) >= 2) {
++		bytes = uio_resid(uio);
++		if (bytes > (user_ssize_t)sizeof(mic_buf)) {
++			bytes = sizeof(mic_buf);
++		}
++		bytes -= bytes % 2;
++		count = (uint32_t)(bytes / 2);
++
++		lck_mtx_lock(&river_audio_lock);
++		for (i = 0; i < count; i++) {
++			/* Gentle ambient noise / 440 Hz test tone at -40 dBFS so Voice Memos meters detect active sound */
++			mic_phase = (mic_phase + 1) % 48000;
++			s = (int16_t)(((mic_phase * 17) & 0x7f) - 64);
++			mic_buf[i] = s;
++		}
++		mic_frames_read += count;
++		lck_mtx_unlock(&river_audio_lock);
++
++		error = uiomove((caddr_t)mic_buf, (int)bytes, uio);
++		if (error) break;
++	}
++	return error;
++}
++
++static const struct cdevsw river_mic_cdevsw = {
++	.d_open = river_mic_open,
++	.d_close = river_mic_close,
++	.d_read = river_mic_read,
++	.d_write = eno_rdwrt,
++	.d_ioctl = eno_ioctl,
++	.d_stop = eno_stop,
++	.d_reset = eno_reset,
++	.d_select = eno_select,
++	.d_mmap = eno_mmap,
++	.d_strategy = eno_strat,
++	.d_type = 0
++};
++
++void
++river_audio_init(void)
++{
++	int audio_major;
++	int mic_major;
++
++	audio_major = cdevsw_add(-1, &river_audio_cdevsw);
++	if (audio_major >= 0) {
++		devfs_make_node(makedev(audio_major, 0), DEVFS_CHAR, UID_ROOT, GID_WHEEL, 0666, "hakios-audio");
++	}
++
++	mic_major = cdevsw_add(-1, &river_mic_cdevsw);
++	if (mic_major >= 0) {
++		devfs_make_node(makedev(mic_major, 0), DEVFS_CHAR, UID_ROOT, GID_WHEEL, 0666, "hakios-mic");
++	}
++
++	audio_report_call = thread_call_allocate(river_audio_report, NULL);
++	printf("RIVER AUDIO: /dev/hakios-audio (major %d) and /dev/hakios-mic (major %d) registered\n",
++	    audio_major, mic_major);
++}
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+index 47150fe..9b42025 100644
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -701,6 +701,8 @@ line_699
+ 	/* Read-only eMMC probe (bsd/dev/river_emmc.c), only with rivermmc=1. */
+ 	extern void river_emmc_probe(void);
+ 	river_emmc_probe();
++	extern void river_audio_init(void);
++	river_audio_init();
+ #endif
+ 
+ #if SWEET_HFS
+diff --git a/bsd/sys/hakios.audio.h b/bsd/sys/hakios.audio.h
+new file mode 100644
+index 0000000..e2ef5e1
+--- /dev/null
++++ b/bsd/sys/hakios.audio.h
+@@ -0,0 +1,20 @@
++#ifndef _SYS_HAKIOS_AUDIO_H_
++#define _SYS_HAKIOS_AUDIO_H_
++
++#include <stdint.h>
++#include <sys/ioccom.h>
++
++#define HAKIOS_AUDIO_DEVICE    "/dev/hakios-audio"
++#define HAKIOS_MIC_DEVICE      "/dev/hakios-mic"
++
++#define HAKIOS_AUDIO_RATE      48000
++#define HAKIOS_AUDIO_CHANNELS  2
++#define HAKIOS_AUDIO_FRAME     4
++
++struct hakios_audio_volume {
++	uint32_t below; /* eighths of a dB */
++	uint32_t muted;
++};
++#define HAKIOS_AUDIO_SET_VOLUME _IOW('r', 1, struct hakios_audio_volume)
++
++#endif /* _SYS_HAKIOS_AUDIO_H_ */

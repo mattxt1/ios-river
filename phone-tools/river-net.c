@@ -535,11 +535,11 @@ static int get_80211_state(const char *name) {
  return val;
 }
 
-static void dhcp_daemon_loop(const char *name, int adddefault) {
+static void dhcp_daemon_loop(const char *name, int adddefault, int bg) {
  FILE *log = freopen("/tmp/river-net.log", "a", stdout);
  if (log) setvbuf(stdout, NULL, _IOLBF, 0);
  (void)freopen("/tmp/river-net.log", "a", stderr);
- (void)daemon(1, 1);
+ if (bg) (void)daemon(1, 1);
  int nullfd = open("/dev/null", O_RDONLY);
  if (nullfd >= 0) { dup2(nullfd, 0); close(nullfd); }
  puts("Entering river-net background monitor/renewal loop");
@@ -606,7 +606,8 @@ int main(int argc,char**argv){
  if(argc==4&&!strcmp(argv[1],"route-check")){uint8_t ip[4];if(inet_pton(AF_INET,argv[3],ip)!=1)return 2;if(!route_check(argv[2],ip)){fprintf(stderr,"matching default route absent\n");return 1;}puts("matching default route verified");return 0;}
  if(argc==5&&!strcmp(argv[1],"tcp")){unsigned p=(unsigned)strtoul(argv[4],NULL,10);if(!p||p>65535)return 2;tcp_probe(argv[2],argv[3],p);return 0;}
  if(argc>=3&&!strcmp(argv[1],"dhcp")){return dhcp(argv[2],argc==4&&!strcmp(argv[3],"--default"))?0:1;}
- if(argc>=3&&(!strcmp(argv[1],"daemon")||!strcmp(argv[1],"monitor"))){dhcp_daemon_loop(argv[2],argc==4&&!strcmp(argv[3],"--default"));return 0;}
+ if(argc>=3&&!strcmp(argv[1],"daemon")){dhcp_daemon_loop(argv[2],argc==4&&!strcmp(argv[3],"--default"),1);return 0;}
+ if(argc>=3&&!strcmp(argv[1],"monitor")){dhcp_daemon_loop(argv[2],argc==4&&!strcmp(argv[3],"--default"),0);return 0;}
  if(argc==3&&!strcmp(argv[1],"renew")){return dhcp_renew_attempt(argv[2])?0:1;}
  if(argc>=5&&!strcmp(argv[1],"sc-setup")){
   uint8_t ip[4]={192,168,1,232},m[4]={255,255,255,0},gw[4],dn[4];
