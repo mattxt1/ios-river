@@ -775,16 +775,34 @@
 +		memcpy(pending_join.bssid, asked->bssid, 6);
 +		if (asked->key_length == 0) {
 +			pending_join.has_pmk = false;
++		} else if (asked->key_length == 32) {
++			memcpy(pending_join.pmk, asked->key, 32);
++			pending_join.has_pmk = true;
++		} else if (asked->key_length == 64) {
++			bool hex_ok = true;
++			for (unsigned i = 0; i < 32 && hex_ok; i++) {
++				uint8_t hi = asked->key[2 * i], lo = asked->key[2 * i + 1];
++				int h = (hi >= '0' && hi <= '9') ? hi - '0' :
++				    (hi >= 'a' && hi <= 'f') ? hi - 'a' + 10 :
++				    (hi >= 'A' && hi <= 'F') ? hi - 'A' + 10 : -1;
++				int l = (lo >= '0' && lo <= '9') ? lo - '0' :
++				    (lo >= 'a' && lo <= 'f') ? lo - 'a' + 10 :
++				    (lo >= 'A' && lo <= 'F') ? lo - 'A' + 10 : -1;
++				if (h < 0 || l < 0) hex_ok = false;
++				else pending_join.pmk[i] = (uint8_t)((h << 4) | l);
++			}
++			if (hex_ok) {
++				pending_join.has_pmk = true;
++			}
 +		} else if (asked->key_length >= 8 && asked->key_length <= 63) {
 +			char pass[65] = {0};
 +			memcpy(pass, asked->key, asked->key_length);
 +			river_pbkdf2_pmk(pass, (const char *)pending_join.ssid, pending_join.ssid_len, pending_join.pmk);
 +			pending_join.has_pmk = true;
 +			memset_s(pass, sizeof(pass), 0, sizeof(pass));
-+		} else if (asked->key_length == 32) {
-+			memcpy(pending_join.pmk, asked->key, 32);
-+			pending_join.has_pmk = true;
 +		}
++		printf("river_apple80211: join req key_len=%u key_cipher=%u has_pmk=%u\n",
++		    asked->key_length, asked->key_cipher, pending_join.has_pmk);
 +		join_pending_flag = true;
 +		join_result = 0;
 +		active_phase = PHASE_JOINING;
@@ -1194,12 +1212,15 @@
    }
    (void)river_target_link(smem, info, fifo, ipc, 0);
   }
-@@ -1451,7 +1488,8 @@
+@@ -1451,7 +1488,11 @@
     read_random(river_wpa.snonce, 32); memcpy(river_wpa.anonce, msg+17, 32);
     memcpy(river_wpa.replay, msg+9, 8); river_derive_ptk(); river_wpa.stage = 1;
-   } else if (!river_constant_equal(msg+17, river_wpa.anonce, 32) ||
+-  } else if (!river_constant_equal(msg+17, river_wpa.anonce, 32) ||
 -      !river_constant_equal(msg+9, river_wpa.replay, 8)) goto done;
-+      memcmp(msg+9, river_wpa.replay, 8) < 0) goto done;
++  } else if (!river_constant_equal(msg+17, river_wpa.anonce, 32)) {
++   read_random(river_wpa.snonce, 32); memcpy(river_wpa.anonce, msg+17, 32);
++   memcpy(river_wpa.replay, msg+9, 8); river_derive_ptk(); river_wpa.stage = 1;
++  } else if (memcmp(msg+9, river_wpa.replay, 8) < 0) goto done;
 +  memcpy(river_wpa.replay, msg+9, 8);
    bool ok = river_wpa_reply(0x010a, msg+9, true, true);
    printf("RIVER WPA: M1 accepted, M2 DMA=%u\n", ok);

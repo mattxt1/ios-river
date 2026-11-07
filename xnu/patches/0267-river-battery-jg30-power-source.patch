@@ -57,6 +57,7 @@
 + * Voltage is converted using Motorola's 194637/1000 uV per count.
 + * Current is converted using Motorola's 152588/1000 uA per count.
 + * Apple IOPMPowerSource convention: negative mA = discharging, positive mA = charging. */
++static vm_offset_t ri_charge_cmd;
 +bool
 +river_battery_sample(unsigned *out_mv, int *out_ma, bool *out_external, bool *out_charging, bool *out_full, unsigned *out_soc)
 +{
@@ -67,6 +68,7 @@
 +  if (!ri_charge_chgr) ri_charge_chgr = ri_spmi_obs(core, 0x210);
 +  if (!ri_charge_dcdc) ri_charge_dcdc = ri_spmi_obs(core, 0x211);
 +  if (!ri_power_usb) ri_power_usb = ri_spmi_obs(core, 0x213);
++  if (!ri_charge_cmd) ri_charge_cmd = ri_spmi_chnl(core, 0x210);
 +  if (!ri_power_qg || !ri_charge_chgr || !ri_charge_dcdc) return false;
 + }
 + int expected = 0;
@@ -90,6 +92,10 @@
 + }
 + bool ext = (path & 0x10u) && (path & 0x01u);
 + uint32_t st = chg_stat & 7u;
++ if (ext && ri_charge_cmd && st == 7u) {
++  printf("RIVER BATT: enabling hardware charging on ext power (chg_stat=%#x)\n", chg_stat);
++  (void)ri_spmi_write(ri_charge_cmd, 0x42, 1);
++ }
 + bool chg = ext && (st >= 1u && st <= 4u);
 + bool full = ext && (st == 5u);
 + unsigned soc = full ? 100 : jg30_estimate_soc(mv, ma);
