@@ -5,6 +5,53 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River Backlight Control and CoreBrightness Integration (2026-11-07)
+
+Implemented full backlight brightness control integration for Motorola Moto G7 (`river`) running iOS 16.
+Resolved the missing IOKit display module registration preventing iOS `CoreBrightness`, `backboardd`, and
+SpringBoard from controlling the Tianma DSI DCS panel backlight.
+
+### 1. Root Cause Analysis: Missing `AppleARMBacklight` Service
+- `CoreBrightness.framework` (`-[CBDisplayContaineriOS findBacklight]`), `backboardd`, and `SpringBoard`
+  query IOKit for services matching `{IOPropertyMatch: {backlight-control: true}}` conforming to `AppleARMBacklight`.
+- In `SweetFramebuffer.cpp`, `AppleARMBacklight` instantiation and publication were previously compiled
+  only under `#if !defined(RIVER)`. On River, `riverMdpSetup()` mapped the DSI0 command DMA registers when
+  `riverbl=1`, but did not instantiate or publish `AppleARMBacklight` under `AppleCLCD`.
+- Consequently, `backboardd` logged:
+  `IOK backboardd: matching <dict ... backlight-control: true ...> -> 0 found`
+  leaving CoreBrightness with no display module, disabling brightness slider adjustment in iOS Control Center
+  and Settings -> Display & Brightness.
+
+### 2. Live Hardware DSI DCS 0x51 Validation
+- Built native test tool `test_brightness` targeting `AppleCLCD::setProperties` (`IOMFBBrightnessLevel`):
+  - Setting 250 nits: `SWEET BL: iomfb set IOMFBBrightnessLevel = OSNumber 16384000` -> `SWEET FB: panel level 0x3ff: done`.
+  - Setting 500 nits: `SWEET BL: iomfb set IOMFBBrightnessLevel = OSNumber 32768000` -> `SWEET FB: panel level 0x7ff: done`.
+  - Setting 50 nits: `SWEET BL: iomfb set IOMFBBrightnessLevel = OSNumber 3276800` -> `SWEET FB: panel level 0xcc: done`.
+- Confirmed that the hardware DSI0 command-DMA engine (`dsiDcsLong`, DCS 0x51 `set_display_brightness`)
+  smoothly and immediately adjusts physical panel luminance without stalls or frame drops.
+
+### 3. Implementation (Patch 0269)
+- `iokit/Kernel/arm/SweetFramebuffer.cpp`:
+  - In `AppleCLCD::riverMdpSetup()`: when `riverbl=1` and `fDsi != NULL`, set initial `IOMFBBrightnessLevel = 300 << 16`
+    on `AppleCLCD`, instantiate `AppleARMBacklight`, set `backlight-control = true`, `brightness-nits = 300`,
+    `max-nits = 500`, and publish the service via `blService->attach(this)` and `registerService()`.
+  - In `AppleCLCD::setProperties()`: updated nits-to-DBV conversion to handle River's 12-bit Tianma panel
+    (`0..0xfff` / 4095 levels, default `0x999` / 2457 = ~60% brightness), allowing 500 nits to scale to `0xfff` (100% full brightness)
+    instead of capping at Topaz's 11-bit `0x7ff` (50% brightness).
+  - In `AppleARMBacklight::setProperties()`: receives `brightness-nits` from CoreBrightness (`SetBLDriverNitsValue`),
+    forwards `IOMFBBrightnessLevel` (16.16 nits) to `AppleCLCD`, and updates `brightness-nits` in IORegistry.
+
+### 4. Live Verification on Booted Hardware
+- Rebuilt kernel with patch 0269 (commit `0846941`) and booted `river-wifi-boot.img`:
+  - IORegistry confirmed `AppleARMBacklight` registered, matched, active under `AppleCLCD`:
+    `max-nits = 500`, `backlight-control = Yes`, `brightness-nits = 300`.
+  - `backboardd` log confirmed service matching:
+    `IOK backboardd: matching <dict ... backlight-control: true ...> -> AppleARMBacklight (1 found)`.
+  - `SpringBoard` log confirmed service matching:
+    `IOK SpringBoard: matching1 <dict ... backlight-control: true ...> -> AppleARMBacklight`.
+  - Tested `test_armbacklight 400`:
+    `SWEET BL: backlight set brightness-nits = OSNumber 400` -> `SWEET BL: iomfb set IOMFBBrightnessLevel = OSNumber 26214400` -> `SWEET FB: panel level 0xccc: done`.
+
 ## River Wi-Fi EAPOL Handshake, Hardware Battery Charging, and Safari Web Browsing (2026-11-07)
 
 Implemented full Wi-Fi authentication, PMIC battery charging, USB cable hotplug recovery,
