@@ -64,7 +64,7 @@ int main(int argc, char **argv)
 				exit(1);
 			}
 			stream = [[NSClassFromString(@"OSLogEventLiveStream") alloc] initWithLiveSource:source];
-			[stream setFlags:levels ? 0x1 | 0x2 | 0x4 : 0];	/* info, debug */
+			[stream setFlags:levels ? 0x3f : 0x3f];	/* info, debug */
 			[stream setEventHandler:^(OSLogEventProxy *e) {
 				NSString *p = e.process ?: @"?";
 				if (procs.count) {

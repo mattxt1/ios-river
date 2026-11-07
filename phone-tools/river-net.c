@@ -1,4 +1,6 @@
 #include <notify.h>
+#include <spawn.h>
+#include <sys/wait.h>
 /* Temporary on-phone DHCP/IPv4 bring-up helper; no credentials or persistence.
  * Includes DHCP lease client, renewal daemon, system DNS, and SCDynamicStore integration. */
 #include <arpa/inet.h>
@@ -149,7 +151,7 @@ static int route_matches(const uint8_t *buf,size_t len,unsigned index,const uint
    if(bit==RTA_NETMASK)for(unsigned k=4;k<n;k++)if(buf[pos+k])zero_mask=0;
    pos+=step;
   }
-  if(valid&&h.rtm_version==RTM_VERSION&&h.rtm_index==index&&
+  if(valid&&h.rtm_version==RTM_VERSION&&(h.rtm_index==index||h.rtm_index==0)&&
      (h.rtm_flags&(RTF_UP|RTF_GATEWAY|RTF_HOST))==(RTF_UP|RTF_GATEWAY)&&
      dst&&gw&&dlen>=8&&glen>=8&&dst[1]==AF_INET&&gw[1]==AF_INET&&
      !memcmp(dst+4,"\0\0\0\0",4)&&!memcmp(gw+4,want,4)&&zero_mask)return 1;
@@ -167,7 +169,7 @@ static int route_check(const char*name,const uint8_t want[4]){
 static void default_route(const char*name){
  if(route_check(name,gateway)){puts("default route already present");return;}
  struct{struct rt_msghdr h;struct sockaddr_in dst,gw,mask;}r={0};
- r.h.rtm_msglen=sizeof(r);r.h.rtm_version=RTM_VERSION;r.h.rtm_type=RTM_ADD;r.h.rtm_index=if_nametoindex(name);r.h.rtm_flags=RTF_UP|RTF_GATEWAY|RTF_STATIC;r.h.rtm_addrs=RTA_DST|RTA_GATEWAY|RTA_NETMASK;r.h.rtm_seq=1;r.h.rtm_pid=getpid();
+ r.h.rtm_msglen=sizeof(r);r.h.rtm_version=RTM_VERSION;r.h.rtm_type=RTM_ADD;r.h.rtm_index=0;r.h.rtm_flags=RTF_UP|RTF_GATEWAY|RTF_STATIC;r.h.rtm_addrs=RTA_DST|RTA_GATEWAY|RTA_NETMASK;r.h.rtm_seq=1;r.h.rtm_pid=getpid();
  r.dst.sin_len=r.gw.sin_len=r.mask.sin_len=sizeof(r.dst);r.dst.sin_family=r.gw.sin_family=r.mask.sin_family=AF_INET;memcpy(&r.gw.sin_addr,gateway,4);
  int fd=socket(PF_ROUTE,SOCK_RAW,AF_INET);if(fd<0)fail("route socket");
  if(write(fd,&r,sizeof(r))!=sizeof(r)){if(errno==EEXIST){close(fd);puts("default route already exists");return;}fail("default route write");}
@@ -291,14 +293,22 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
 
  const void *dns_addrs[2] = { cf_dns, cf_pubdns };
  CFArrayRef cf_dns_arr = CFArrayCreate(NULL, dns_addrs, 2, &kCFTypeArrayCallBacks);
- const void *dns_k[1] = { CFSTR("ServerAddresses") };
- const void *dns_v[1] = { cf_dns_arr };
- CFDictionaryRef cf_dns_dict = CFDictionaryCreate(NULL, dns_k, dns_v, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+ int flags_val = 2;
+ int order_val = 0;
+ CFNumberRef cf_flags = CFNumberCreate(NULL, kCFNumberIntType, &flags_val);
+ CFNumberRef cf_order = CFNumberCreate(NULL, kCFNumberIntType, &order_val);
+ CFStringRef cf_cfgid = CFStringCreateWithFormat(NULL, NULL, CFSTR("Default: %s 0"), svc_id);
+
+ const void *dns_k[4] = { CFSTR("ServerAddresses"), CFSTR("__CONFIGURATION_ID__"), CFSTR("__FLAGS__"), CFSTR("__ORDER__") };
+ const void *dns_v[4] = { cf_dns_arr, cf_cfgid, cf_flags, cf_order };
+ CFDictionaryRef cf_dns_dict = CFDictionaryCreate(NULL, dns_k, dns_v, 4, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
  fn_SetValue(ds, CFSTR("State:/Network/Global/DNS"), cf_dns_dict);
 
- const void *gipv4_k[3] = { CFSTR("PrimaryInterface"), CFSTR("PrimaryService"), CFSTR("Router") };
- const void *gipv4_v[3] = { cf_ifname, cf_svcid, cf_gw };
- CFDictionaryRef cf_gipv4_dict = CFDictionaryCreate(NULL, gipv4_k, gipv4_v, 3, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+ const void *order_v[1] = { cf_svcid };
+ CFArrayRef order_arr = CFArrayCreate(NULL, order_v, 1, &kCFTypeArrayCallBacks);
+ const void *gipv4_k[4] = { CFSTR("PrimaryInterface"), CFSTR("PrimaryService"), CFSTR("Router"), CFSTR("ServiceOrder") };
+ const void *gipv4_v[4] = { cf_ifname, cf_svcid, cf_gw, order_arr };
+ CFDictionaryRef cf_gipv4_dict = CFDictionaryCreate(NULL, gipv4_k, gipv4_v, 4, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
  fn_SetValue(ds, CFSTR("State:/Network/Global/IPv4"), cf_gipv4_dict);
 
  const void *addrs_v[1] = { cf_ip };
@@ -306,15 +316,27 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
  const void *masks_v[1] = { cf_mask };
  CFArrayRef cf_masks_arr = CFArrayCreate(NULL, masks_v, 1, &kCFTypeArrayCallBacks);
 
- const void *sipv4_k[5] = { CFSTR("Addresses"), CFSTR("SubnetMasks"), CFSTR("InterfaceName"), CFSTR("Router"), CFSTR("ConfigMethod") };
- const void *sipv4_v[5] = { cf_addrs_arr, cf_masks_arr, cf_ifname, cf_gw, CFSTR("Manual") };
- CFDictionaryRef cf_sipv4_dict = CFDictionaryCreate(NULL, sipv4_k, sipv4_v, 5, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+ const void *sipv4_k[6] = { CFSTR("Addresses"), CFSTR("SubnetMasks"), CFSTR("InterfaceName"), CFSTR("ConfirmedInterfaceName"), CFSTR("Router"), CFSTR("ConfigMethod") };
+ const void *sipv4_v[6] = { cf_addrs_arr, cf_masks_arr, cf_ifname, cf_ifname, cf_gw, CFSTR("Manual") };
+ CFDictionaryRef cf_sipv4_dict = CFDictionaryCreate(NULL, sipv4_k, sipv4_v, 6, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 
  CFStringRef cf_svc_ipv4 = CFStringCreateWithFormat(NULL, NULL, CFSTR("State:/Network/Service/%s/IPv4"), svc_id);
  fn_SetValue(ds, cf_svc_ipv4, cf_sipv4_dict);
 
+ const void *sdns_k[3] = { CFSTR("ServerAddresses"), CFSTR("InterfaceName"), CFSTR("__FLAGS__") };
+ const void *sdns_v[3] = { cf_dns_arr, cf_ifname, cf_flags };
+ CFDictionaryRef cf_sdns_dict = CFDictionaryCreate(NULL, sdns_k, sdns_v, 3, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
  CFStringRef cf_svc_dns = CFStringCreateWithFormat(NULL, NULL, CFSTR("State:/Network/Service/%s/DNS"), svc_id);
- fn_SetValue(ds, cf_svc_dns, cf_dns_dict);
+ fn_SetValue(ds, cf_svc_dns, cf_sdns_dict);
+ CFRelease(cf_sdns_dict); CFRelease(cf_svc_dns);
+
+ pid_t sp_pid;
+ char *sp_argv[] = { "/usr/sbin/addNetworkInterface", "-i", (char *)name, NULL };
+ extern char **environ;
+ if (posix_spawn(&sp_pid, "/usr/sbin/addNetworkInterface", NULL, NULL, sp_argv, environ) == 0) {
+  int sp_status;
+  waitpid(sp_pid, &sp_status, 0);
+ }
 
  const void *rank_k[1] = { CFSTR("PrimaryRank") };
  const void *rank_v[1] = { CFSTR("First") };
