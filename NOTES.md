@@ -5,6 +5,55 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River Wi-Fi EAPOL Handshake, Hardware Battery Charging, and Safari Web Browsing (2026-11-07)
+
+Implemented full Wi-Fi authentication, PMIC battery charging, USB cable hotplug recovery,
+and system-wide networking on Motorola Moto G7 (`river`) running iOS 16. Achieved full
+web browsing in MobileSafari over Wi-Fi with status bar indicators.
+
+### 1. Hardware Battery Charging While Running iOS
+- Traced PMIC charging registers over SPMI: configured `ri_spmi_write(ri_charge_cmd, 0x42, 1)`
+  in `bsd/dev/sweet_keys.c` to enable PMIC battery charging upon kernel initialization.
+- Live verification via `/usr/local/bin/battcheck`:
+  `Voltage = 3689 mV`, `Amperage = +17 mA` (charging), `IsCharging = 1`, `ExternalConnected = 1`.
+- Verified live screen capture: status bar displays the charging lightning bolt icon ⚡.
+
+### 2. Physical USB Replug Auto-Recovery
+- Reset `ud.configured = false; ud.data_alt = 0;` on bus reset, disconnect, and
+  `SET_CONFIGURATION(0)` in `bsd/dev/sweet_usb.c`.
+- USB CDC-ECM and SSH now recover cleanly across physical cable unplug/replug events
+  without requiring a reboot or hanging the kernel.
+
+### 3. WPA2 EAPOL 4-Way Handshake & Settings UI Checkmark
+- Fixed EAPOL frame submission and DMA processing in `bsd/dev/river_apple80211.c`:
+  `M1 accepted, M2 DMA=1` -> `M3 accepted (len=155)` -> `PTK/GTK installed once; M4 DMA complete; handshake gate passed` -> `river_apple80211: link UP (rssi=-54 dBm)` -> `assoc finished, status=0 join_result=0`.
+- In iOS Settings: identified network service UUID `FFDA1629-8D33-441B-A817-388311CC2458`
+  in `/Library/Preferences/SystemConfiguration/preferences.plist`.
+- Updated `phone-tools/river-net.c`: mapped `en0` to service `FFDA1629-8D33-441B-A817-388311CC2458`,
+  published `PrimaryRank = First`, and retained the SCDynamicStore session in the background daemon.
+- Verified live screen capture: blue checkmark displayed beside the connected network.
+
+### 4. Unscoped Default Route & System DNS Resolution for Safari
+- Diagnosed root causes of Safari "iPhone is not connected to the Internet":
+  1. **Scoped Default Route (`ENETUNREACH`)**:
+     - Kernel default route was installed with `rtm_index = if_nametoindex("en0")`, causing XNU
+       to mark it as `RTF_IFSCOPE` (scoped).
+     - In Darwin, scoped routes return `ENETUNREACH` (errno 51) for all standard unbound sockets
+       (such as `mDNSResponder`, WebKit Network Process, and Safari).
+     - Changed `default_route` in `river-net.c` to `rtm_index = 0` (unscoped system-wide default route).
+  2. **mDNSResolver `no-dns-service`**:
+     - `mDNSResponder` was suppressing all domain queries with `reason: no-dns-service` because
+       `preferences.plist` lacked DNS nameservers and `State:/Network/Global/DNS` was missing required
+       metadata fields (`__CONFIGURATION_ID__`, `__FLAGS__ = 2`, `__ORDER__ = 0`).
+     - Added `ServerAddresses` to `preferences.plist`, updated `river-net.c` to publish complete
+       `State:/Network/Global/DNS` and `State:/Network/Global/IPv4` dictionaries, and triggered
+       `/usr/sbin/addNetworkInterface -i en0` via `posix_spawn`.
+- Live verification:
+  - `getaddrinfo("apple.com")` resolved immediately to `17.253.144.10`.
+  - Status bar displays the 3-bar Wi-Fi icon 📶.
+  - MobileSafari successfully loaded and rendered `apple.com` with HTTPS TLS lock, retina graphics,
+    navigation bar, and marketing assets.
+
 ## River Wi-Fi Apple80211 Stack and iOS Settings Integration (2026-11-06)
 
 Implemented native Apple80211 stack and IOKit integration for Motorola Moto G7 (river / WCN3660B)

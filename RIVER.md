@@ -2215,3 +2215,24 @@ composition be changed. No kernel build, boot, or root write was done here.
   - Resolved early XNU startup panic (`sysctl_register_oid_early`) and SPMI write opcode handling.
   - *Current Status (r152)*: Kernel boots and initializes reset line; initial I2C chip ID probe currently returns QUP transfer error (`status=0xd1300c8`, NACK), investigation ongoing.
 
+## Full Wi-Fi Stack, SPMI Hardware Charging, and Safari Web Browsing (2026-11-07)
+
+- **Hardware Battery Charging**:
+  - Traced SPMI charger control and configured `ri_spmi_write(ri_charge_cmd, 0x42, 1)` in `bsd/dev/sweet_keys.c`.
+  - Enabled PMIC charging while iOS is running; verified live at `3689 mV`, `+17 mA` (charging) with status bar lightning bolt ⚡.
+- **Physical USB Replug Auto-Recovery**:
+  - Implemented state reset `ud.configured = false; ud.data_alt = 0;` in `bsd/dev/sweet_usb.c` on bus reset and disconnect.
+  - USB CDC-ECM and SSH recover across physical cable unplug/replug without rebooting.
+- **WPA2 4-Way Handshake & Settings UI**:
+  - Verified complete EAPOL M1–M4 exchange and key installation in `bsd/dev/river_apple80211.c`.
+  - Mapped interface `en0` to Wi-Fi service UUID `FFDA1629-8D33-441B-A817-388311CC2458` in `phone-tools/river-net.c`.
+  - Settings UI displays blue checkmark beside connected network.
+- **Unscoped Default Routing & System DNS**:
+  - Replaced scoped route (`rtm_index = if_nametoindex("en0")`) with unscoped default route (`rtm_index = 0`) to resolve `ENETUNREACH` (errno 51) on unbound sockets.
+  - Added nameservers to `/Library/Preferences/SystemConfiguration/preferences.plist`, published complete `State:/Network/Global/DNS` and `State:/Network/Global/IPv4` dictionaries, and triggered `/usr/sbin/addNetworkInterface -i en0`.
+  - `mDNSResponder` assigned DNS service and resolved hostnames (`apple.com` -> `17.253.144.10`).
+  - Status bar displays 3-bar Wi-Fi icon 📶.
+- **MobileSafari Verified**:
+  - `MobileSafari` (`com.apple.mobilesafari`) fully rendered `apple.com` live over Wi-Fi with HTTPS TLS lock, retina images, navigation controls, and marketing assets.
+
+
