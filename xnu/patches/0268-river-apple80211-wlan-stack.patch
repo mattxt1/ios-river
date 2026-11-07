@@ -10,8 +10,710 @@ index 2da8bc6fd..d539ad25e 100644
  bsd/dev/mem.c				standard
  bsd/dev/munge.c 			optional config_requires_u32_munging
  bsd/dev/unix_startup.c			standard
+diff --git a/bsd/dev/river_apple80211.c b/bsd/dev/river_apple80211.c
+new file mode 100644
+index 000000000..46ff419ae
+--- /dev/null
++++ b/bsd/dev/river_apple80211.c
+@@ -0,0 +1,696 @@
++/*
++ * river_apple80211.c: Apple80211 ioctl and event engine for Moto G7 river.
++ */
++
++#include <kern/kalloc.h>
++#include <kern/locks.h>
++#include <libkern/libkern.h>
++#include <libkern/crypto/sha1.h>
++#include <sys/errno.h>
++#include <sys/kern_event.h>
++#include <sys/kernel.h>
++#include <sys/proc.h>
++#include <sys/river_apple80211.h>
++#include <sys/sockio.h>
++#include <sys/systm.h>
++
++static LCK_GRP_DECLARE(river_apple80211_lck_grp, "river-apple80211");
++static LCK_MTX_DECLARE(river_apple80211_mtx, &river_apple80211_lck_grp);
++
++static const char interface_name[16] = "en0";
++static const uint8_t river_test_mac[6] = {0x02, 0, 0, 0x36, 0x60, 1};
++
++#define RIVER_MAX_BSS 32
++struct river_apple80211_bss {
++	uint8_t bssid[6];
++	uint8_t ssid[32];
++	uint8_t ssid_len;
++	uint8_t channel;
++	uint16_t freq;
++	int16_t rssi;
++	uint16_t beacon_int;
++	uint16_t caps;
++	uint32_t age_ms;
++	uint16_t ies_len;
++	uint8_t ies[768];
++};
++
++static struct river_apple80211_bss river_bss_table[RIVER_MAX_BSS];
++static unsigned river_bss_count = 0;
++static unsigned scan_result_idx = 0;
++static bool scan_pending_flag = false;
++
++static struct river_apple80211_join_req pending_join;
++static bool join_pending_flag = false;
++static uint32_t join_result = 0;
++
++enum river_wifi_phase {
++	PHASE_IDLE = 0,
++	PHASE_SCANNING = 1,
++	PHASE_JOINING = 2,
++	PHASE_JOINED = 4,
++};
++static int river_power_state = 1;
++static enum river_wifi_phase active_phase = PHASE_IDLE;
++static struct river_apple80211_bss active_bss;
++
++static void
++hmac_sha1(const uint8_t *key, size_t key_len, const uint8_t *data, size_t data_len, uint8_t mac[20])
++{
++	SHA1_CTX ctx;
++	uint8_t k_pad[64];
++	uint8_t tk[20];
++	size_t i;
++
++	if (key_len > 64) {
++		SHA1Init(&ctx);
++		SHA1Update(&ctx, key, key_len);
++		SHA1Final(tk, &ctx);
++		key = tk;
++		key_len = 20;
++	}
++
++	memset(k_pad, 0x36, sizeof(k_pad));
++	for (i = 0; i < key_len; i++) {
++		k_pad[i] ^= key[i];
++	}
++	SHA1Init(&ctx);
++	SHA1Update(&ctx, k_pad, 64);
++	SHA1Update(&ctx, data, data_len);
++	SHA1Final(mac, &ctx);
++
++	memset(k_pad, 0x5c, sizeof(k_pad));
++	for (i = 0; i < key_len; i++) {
++		k_pad[i] ^= key[i];
++	}
++	SHA1Init(&ctx);
++	SHA1Update(&ctx, k_pad, 64);
++	SHA1Update(&ctx, mac, 20);
++	SHA1Final(mac, &ctx);
++}
++
++void
++river_pbkdf2_pmk(const char *passphrase, const char *ssid, size_t ssid_len, uint8_t pmk[32])
++{
++	size_t pass_len = strlen(passphrase);
++	uint8_t salt[64];
++	uint8_t u[20];
++	uint8_t f[20];
++	uint32_t b, i, j;
++
++	for (b = 1; b <= 2; b++) {
++		memcpy(salt, ssid, ssid_len);
++		salt[ssid_len + 0] = (uint8_t)(b >> 24);
++		salt[ssid_len + 1] = (uint8_t)(b >> 16);
++		salt[ssid_len + 2] = (uint8_t)(b >> 8);
++		salt[ssid_len + 3] = (uint8_t)(b & 0xff);
++
++		hmac_sha1((const uint8_t *)passphrase, pass_len, salt, ssid_len + 4, u);
++		memcpy(f, u, 20);
++
++		for (i = 1; i < 4096; i++) {
++			hmac_sha1((const uint8_t *)passphrase, pass_len, u, 20, u);
++			for (j = 0; j < 20; j++) {
++				f[j] ^= u[j];
++			}
++		}
++
++		if (b == 1) {
++			memcpy(pmk, f, 20);
++		} else {
++			memcpy(pmk + 20, f, 12);
++		}
++	}
++}
++
++static void
++post(uint32_t code, const void *data, uint32_t length)
++{
++	struct kev_msg message = {
++		.vendor_code = KEV_VENDOR_APPLE,
++		.kev_class = KEV_IEEE80211_CLASS,
++		.kev_subclass = 1,
++		.event_code = code,
++	};
++	char name[16];
++	memcpy(name, interface_name, sizeof(name));
++	message.dv[0].data_length = sizeof(name);
++	message.dv[0].data_ptr = name;
++	if (length != 0) {
++		message.dv[1].data_length = length;
++		message.dv[1].data_ptr = __DECONST(void *, data);
++	}
++	kev_post_msg(&message);
++}
++
++static int
++give(const struct apple80211req *request, const void *data, size_t length)
++{
++	return request->req_data == USER_ADDR_NULL ? 0 :
++	    copyout(data, request->req_data, length < request->req_len ? length : request->req_len);
++}
++
++static void
++channel_fill(struct apple80211_channel *channel, unsigned ch)
++{
++	channel->version = 1;
++	channel->channel = ch;
++	channel->flags = CHANNEL_20MHZ | CHANNEL_2GHZ | CHANNEL_ACTIVE;
++}
++
++static int
++give_network(const struct apple80211req *request, const struct river_apple80211_bss *bss)
++{
++	struct apple80211_scan_result *result = kalloc_data(sizeof(*result), Z_WAITOK | Z_ZERO);
++	unsigned room = sizeof(result->elements);
++	int error;
++
++	if (result == NULL) {
++		return ENOMEM;
++	}
++	if (request->req_len >= sizeof(*result) &&
++	    copyin(request->req_data, result, offsetof(struct apple80211_scan_result, elements)) == 0 &&
++	    result->elements_length < room) {
++		room = result->elements_length;
++	}
++	bzero(result, sizeof(*result));
++	result->version = 1;
++	channel_fill(&result->channel, bss->channel);
++	result->rssi = bss->rssi;
++	result->beacon_interval = bss->beacon_int;
++	result->capability = bss->caps;
++	memcpy(result->bssid, bss->bssid, 6);
++	result->ssid_length = bss->ssid_len;
++	memcpy(result->ssid, bss->ssid, bss->ssid_len);
++	result->age_ms = bss->age_ms;
++	result->elements_length = (uint16_t)(bss->ies_len <= room ? bss->ies_len : 0);
++	if (result->elements_length > 0) {
++		memcpy(result->elements, bss->ies, result->elements_length);
++	}
++	for (unsigned at = 0; at + 2 <= bss->ies_len && at + 2 + bss->ies[at + 1] <= bss->ies_len;
++	    at += 2 + bss->ies[at + 1]) {
++		if (bss->ies[at] == 1 || bss->ies[at] == 50) {
++			for (unsigned i = 0; i < bss->ies[at + 1]; i++) {
++				unsigned rate = (bss->ies[at + 2 + i] & 0x7f) / 2;
++				if (rate != 0 && rate <= 54 && result->rate_count < 15) {
++					result->rates[result->rate_count++] = rate;
++				}
++			}
++		}
++	}
++	error = give(request, result, sizeof(*result));
++	kfree_data(result, sizeof(*result));
++	return error;
++}
++
++static int
++get(struct apple80211req *request)
++{
++	int error = 0;
++	lck_mtx_lock(&river_apple80211_mtx);
++	switch (request->req_type) {
++		case 37: {
++		static const char cc[4] = "US";
++		error = give(request, cc, 2);
++		break;
++	}
++	case 14:
++		error = give(request, river_test_mac, 6);
++		break;
++	case 23:
++		request->req_val = 20;
++		error = 0;
++		break;
++	case 43:
++	case 44: {
++		static const char name[256] = "river: Qualcomm SDM632 (WCN36xx)";
++		error = give(request, name, sizeof(name));
++		break;
++	}
++	case 12: {
++		uint8_t bits[13] = { 0 };
++		static const uint8_t has[] = { 2, 3, 6, 9, 10, 14, 17, 19 };
++		for (unsigned i = 0; i < sizeof(has); i++) {
++			bits[has[i] / 8] |= (uint8_t)(1u << (has[i] % 8));
++		}
++		error = give(request, bits, sizeof(bits));
++		break;
++	}
++	case 19: {
++		struct {
++			uint32_t version, radios, state[4];
++		} answer = { .version = 1, .radios = 1, .state = { river_power_state ? 1 : 0 } };
++		request->req_val = river_power_state ? 1 : 0;
++		error = give(request, &answer, sizeof(answer));
++		break;
++	}
++	case 15:
++		request->req_val = 1;
++		error = 0;
++		break;
++	case 27:
++	case 254: {
++		struct apple80211_channels *answer = kalloc_data(sizeof(*answer), Z_WAITOK | Z_ZERO);
++		if (!answer) { error = ENOMEM; break; }
++		answer->version = 1;
++		answer->count = 11;
++		for (unsigned i = 0; i < 11; i++) {
++			channel_fill(&answer->channels[i], i + 1);
++		}
++		error = give(request, answer, sizeof(*answer));
++		kfree_data(answer, sizeof(*answer));
++		break;
++	}
++	case 207: {
++		struct apple80211_channels_info *answer = kalloc_data(sizeof(*answer), Z_WAITOK | Z_ZERO);
++		if (!answer) { error = ENOMEM; break; }
++		answer->count = 11;
++		for (unsigned i = 0; i < 11; i++) {
++			struct apple80211_channel ch;
++			channel_fill(&ch, i + 1);
++			answer->number[i] = (uint8_t)(i + 1);
++			answer->dfs[i] = 0;
++			answer->passive[i] = 0;
++			answer->flags[i] = ch.flags;
++		}
++		error = give(request, answer, sizeof(*answer));
++		kfree_data(answer, sizeof(*answer));
++		break;
++	}
++	case 21:
++		request->req_val = (int32_t)join_result;
++		error = 0;
++		break;
++	case 11: {
++		if (scan_result_idx < river_bss_count) {
++			error = give_network(request, &river_bss_table[scan_result_idx++]);
++		} else {
++			error = EIO;
++		}
++		break;
++	}
++	case 13:
++		request->req_val = (active_phase == PHASE_JOINED ? 4 :
++		    (active_phase == PHASE_JOINING ? 2 :
++		    (active_phase == PHASE_SCANNING ? 1 : 0)));
++		error = 0;
++		break;
++	case 1:
++		if (active_phase != PHASE_JOINED) {
++			error = ENXIO;
++		} else if ((error = give(request, active_bss.ssid, active_bss.ssid_len)) == 0) {
++			request->req_len = active_bss.ssid_len;
++		}
++		break;
++	case 9:
++		error = (active_phase != PHASE_JOINED) ? ENXIO : give(request, active_bss.bssid, 6);
++		break;
++	case 4: {
++		struct {
++			uint32_t version;
++			struct apple80211_channel channel;
++		} answer = { .version = 1 };
++		if (active_phase != PHASE_JOINED) {
++			error = ENXIO;
++		} else {
++			channel_fill(&answer.channel, active_bss.channel);
++			error = give(request, &answer, sizeof(answer));
++		}
++		break;
++	}
++	case 16: {
++		struct {
++			uint32_t version, radios, unit;
++			int32_t each[4], all, each_ext[4], all_ext;
++		} answer = {
++			.version = 1, .radios = 1,
++			.each = { active_bss.rssi }, .all = active_bss.rssi,
++			.each_ext = { active_bss.rssi }, .all_ext = active_bss.rssi,
++		};
++		error = (active_phase != PHASE_JOINED) ? ENXIO : give(request, &answer, sizeof(answer));
++		break;
++	}
++	case 103:
++		error = (active_phase != PHASE_JOINED) ? ENXIO : give_network(request, &active_bss);
++		break;
++	case 2: {
++		struct {
++			uint32_t version, lower, upper, extended;
++		} answer = { .version = 1, .lower = 1, .upper = 8 };
++		error = (active_phase != PHASE_JOINED) ? ENXIO : give(request, &answer, sizeof(answer));
++		break;
++	}
++	default:
++		error = EOPNOTSUPP;
++		break;
++	}
++	lck_mtx_unlock(&river_apple80211_mtx);
++	return error;
++}
++
++static int
++set(const struct apple80211req *request)
++{
++	int error = 0;
++	switch (request->req_type) {
++	case 10: {
++		lck_mtx_lock(&river_apple80211_mtx);
++		if (active_phase == PHASE_JOINED) {
++			scan_pending_flag = false;
++			scan_result_idx = 0;
++			lck_mtx_unlock(&river_apple80211_mtx);
++			river_apple80211_scan_done(0);
++			break;
++		}
++		scan_pending_flag = true;
++		scan_result_idx = 0;
++		active_phase = PHASE_SCANNING;
++		lck_mtx_unlock(&river_apple80211_mtx);
++		break;
++	}
++	case 20: {
++		struct apple80211_assoc *asked = kalloc_data(sizeof(*asked), Z_WAITOK | Z_ZERO);
++		if (!asked) return ENOMEM;
++		if (copyin(request->req_data, asked, offsetof(struct apple80211_assoc, rest)) != 0) {
++			kfree_data(asked, sizeof(*asked));
++			return EFAULT;
++		}
++		if (asked->ssid_length == 0 || asked->ssid_length > 32) {
++			kfree_data(asked, sizeof(*asked));
++			return EINVAL;
++		}
++		lck_mtx_lock(&river_apple80211_mtx);
++		memset(&pending_join, 0, sizeof(pending_join));
++		pending_join.ssid_len = (uint8_t)asked->ssid_length;
++		memcpy(pending_join.ssid, asked->ssid, asked->ssid_length);
++		memcpy(pending_join.bssid, asked->bssid, 6);
++		if (asked->key_length == 0) {
++			pending_join.has_pmk = false;
++		} else if (asked->key_length == 32) {
++			memcpy(pending_join.pmk, asked->key, 32);
++			pending_join.has_pmk = true;
++		} else if (asked->key_length == 64) {
++			bool hex_ok = true;
++			for (unsigned i = 0; i < 32 && hex_ok; i++) {
++				uint8_t hi = asked->key[2 * i], lo = asked->key[2 * i + 1];
++				int h = (hi >= '0' && hi <= '9') ? hi - '0' :
++				    (hi >= 'a' && hi <= 'f') ? hi - 'a' + 10 :
++				    (hi >= 'A' && hi <= 'F') ? hi - 'A' + 10 : -1;
++				int l = (lo >= '0' && lo <= '9') ? lo - '0' :
++				    (lo >= 'a' && lo <= 'f') ? lo - 'a' + 10 :
++				    (lo >= 'A' && lo <= 'F') ? lo - 'A' + 10 : -1;
++				if (h < 0 || l < 0) hex_ok = false;
++				else pending_join.pmk[i] = (uint8_t)((h << 4) | l);
++			}
++			if (hex_ok) {
++				pending_join.has_pmk = true;
++			}
++		} else if (asked->key_length >= 8 && asked->key_length <= 63) {
++			char pass[65] = {0};
++			memcpy(pass, asked->key, asked->key_length);
++			river_pbkdf2_pmk(pass, (const char *)pending_join.ssid, pending_join.ssid_len, pending_join.pmk);
++			pending_join.has_pmk = true;
++			memset_s(pass, sizeof(pass), 0, sizeof(pass));
++		}
++		printf("river_apple80211: join req key_len=%u key_cipher=%u has_pmk=%u\n",
++		    asked->key_length, asked->key_cipher, pending_join.has_pmk);
++		join_pending_flag = true;
++		join_result = 0;
++		active_phase = PHASE_JOINING;
++		lck_mtx_unlock(&river_apple80211_mtx);
++		memset_s(asked, sizeof(*asked), 0, sizeof(*asked));
++		kfree_data(asked, sizeof(*asked));
++		break;
++	}
++	case 22: {
++		lck_mtx_lock(&river_apple80211_mtx);
++		active_phase = PHASE_IDLE;
++		bzero(&active_bss, sizeof(active_bss));
++		lck_mtx_unlock(&river_apple80211_mtx);
++		river_apple80211_link_changed(false, 0);
++		break;
++	}
++	case 19: {
++		lck_mtx_lock(&river_apple80211_mtx);
++		int pwr = request->req_val;
++		if (request->req_data != USER_ADDR_NULL && request->req_len >= 12) {
++			struct {
++				uint32_t version, radios, state[4];
++			} ps = {0};
++			if (copyin(request->req_data, &ps, sizeof(ps)) == 0) {
++				pwr = (int)ps.state[0];
++			}
++		}
++		river_power_state = (pwr != 0);
++		if (!river_power_state) {
++			active_phase = PHASE_IDLE;
++			bzero(&active_bss, sizeof(active_bss));
++		}
++		lck_mtx_unlock(&river_apple80211_mtx);
++		if (!river_power_state) {
++			river_apple80211_link_changed(false, 0);
++		}
++		post(EVENT_POWER_CHANGED, NULL, 0);
++		break;
++	}
++	default:
++		error = EOPNOTSUPP;
++		break;
++	}
++	return error;
++}
++
++void
++river_apple80211_add_bss(const uint8_t *bssid, const uint8_t *ssid, uint8_t ssid_len,
++    uint16_t freq, int16_t rssi, uint16_t beacon_int, uint16_t caps,
++    const uint8_t *ies, uint16_t ies_len)
++{
++	lck_mtx_lock(&river_apple80211_mtx);
++	unsigned i;
++	for (i = 0; i < river_bss_count; i++) {
++		if (memcmp(river_bss_table[i].bssid, bssid, 6) == 0) {
++			break;
++		}
++	}
++	if (i == river_bss_count && i < RIVER_MAX_BSS) {
++		river_bss_count++;
++	}
++	if (i < RIVER_MAX_BSS) {
++		memcpy(river_bss_table[i].bssid, bssid, 6);
++		river_bss_table[i].ssid_len = ssid_len < 32 ? ssid_len : 32;
++		memcpy(river_bss_table[i].ssid, ssid, river_bss_table[i].ssid_len);
++		river_bss_table[i].freq = freq;
++		river_bss_table[i].channel = freq == 2484 ? 14 : (freq < 4000 ? (freq - 2407) / 5 : (freq - 5000) / 5);
++		river_bss_table[i].rssi = rssi;
++		river_bss_table[i].beacon_int = beacon_int;
++		river_bss_table[i].caps = caps;
++		river_bss_table[i].age_ms = 0;
++		river_bss_table[i].ies_len = ies_len < sizeof(river_bss_table[i].ies) ? ies_len : sizeof(river_bss_table[i].ies);
++		if (river_bss_table[i].ies_len > 0 && ies != NULL) {
++			memcpy(river_bss_table[i].ies, ies, river_bss_table[i].ies_len);
++		}
++	}
++	lck_mtx_unlock(&river_apple80211_mtx);
++}
++
++void
++river_apple80211_clear_scan(void)
++{
++	lck_mtx_lock(&river_apple80211_mtx);
++	river_bss_count = 0;
++	scan_result_idx = 0;
++	lck_mtx_unlock(&river_apple80211_mtx);
++}
++
++bool
++river_apple80211_find_target(const struct river_apple80211_join_req *req, struct river_apple80211_target_info *info)
++{
++	lck_mtx_lock(&river_apple80211_mtx);
++	const struct river_apple80211_bss *target = NULL;
++	for (unsigned i = 0; i < river_bss_count; i++) {
++		if (river_bss_table[i].ssid_len == req->ssid_len &&
++		    memcmp(river_bss_table[i].ssid, req->ssid, req->ssid_len) == 0) {
++			bool bssid_zero = true;
++			for (unsigned k = 0; k < 6; k++) if (req->bssid[k]) bssid_zero = false;
++			if (bssid_zero || memcmp(river_bss_table[i].bssid, req->bssid, 6) == 0) {
++				target = &river_bss_table[i];
++				break;
++			}
++		}
++	}
++	if (!target) {
++		for (unsigned i = 0; i < river_bss_count; i++) {
++			if (river_bss_table[i].ssid_len == req->ssid_len &&
++			    memcmp(river_bss_table[i].ssid, req->ssid, req->ssid_len) == 0) {
++				target = &river_bss_table[i];
++				break;
++			}
++		}
++	}
++	if (!target) {
++		lck_mtx_unlock(&river_apple80211_mtx);
++		return false;
++	}
++	bzero(info, sizeof(*info));
++	memcpy(info->bssid, target->bssid, 6);
++	info->channel = target->channel ? target->channel : 1;
++	info->beacon = target->beacon_int;
++	info->caps = target->caps;
++	info->dtim = 1;
++	info->rssi = target->rssi;
++
++	static const uint8_t supported[] = {2, 4, 11, 22, 12, 18, 24, 36, 48, 72, 96, 108};
++	for (unsigned off = 0; off + 2 <= target->ies_len;) {
++		unsigned id = target->ies[off], n = target->ies[off + 1];
++		off += 2;
++		if (n > target->ies_len - off) break;
++		if (id == 1 || id == 50) {
++			for (unsigned k = 0; k < n; k++) {
++				unsigned v = target->ies[off + k], j;
++				for (j = 0; j < sizeof(supported) && (v & 127) != supported[j]; j++) {}
++				if (j == sizeof(supported)) continue;
++				for (j = 0; j < info->nrates && (info->rates[j] & 127) != (v & 127); j++) {}
++				if (j < info->nrates) info->rates[j] |= (v & 128);
++				else if (j < 12) info->rates[info->nrates++] = v;
++			}
++		}
++		if (id == 5 && n >= 2 && target->ies[off + 1]) {
++			info->dtim = target->ies[off + 1];
++		}
++		if (id == 48) {
++			static const uint8_t rsn_std[] = {48, 20, 1, 0, 0, 15, 172, 4, 1, 0, 0, 15, 172, 4, 1, 0, 0, 15, 172, 2, 0, 0};
++			memcpy(info->rsn, rsn_std, sizeof(rsn_std));
++			info->rsn_len = sizeof(rsn_std);
++			info->ap_rsn_len = n + 2;
++			info->ap_rsn[0] = 48;
++			info->ap_rsn[1] = n;
++			memcpy(info->ap_rsn + 2, target->ies + off, n);
++		}
++		off += n;
++	}
++	if (info->nrates == 0) {
++		static const uint8_t default_rates[] = {0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24, 0x30, 0x48, 0x60, 0x6c};
++		info->nrates = sizeof(default_rates);
++		memcpy(info->rates, default_rates, sizeof(default_rates));
++	}
++	lck_mtx_unlock(&river_apple80211_mtx);
++	return true;
++}
++
++void
++river_apple80211_scan_done(int status)
++{
++	(void)status;
++	lck_mtx_lock(&river_apple80211_mtx);
++	scan_result_idx = 0;
++	scan_pending_flag = false;
++	if (active_phase == PHASE_SCANNING) {
++		active_phase = PHASE_IDLE;
++	}
++	lck_mtx_unlock(&river_apple80211_mtx);
++	post(EVENT_SCAN_DONE, NULL, 0);
++	printf("river_apple80211: scan complete, posted EVENT_SCAN_DONE (%u BSS found)\n", river_bss_count);
++}
++
++void
++river_apple80211_assoc_done(int status)
++{
++	lck_mtx_lock(&river_apple80211_mtx);
++	join_result = (uint32_t)status;
++	join_pending_flag = false;
++	if (status == 0) {
++		active_phase = PHASE_JOINED;
++		for (unsigned i = 0; i < river_bss_count; i++) {
++			if (river_bss_table[i].ssid_len == pending_join.ssid_len &&
++			    memcmp(river_bss_table[i].ssid, pending_join.ssid, pending_join.ssid_len) == 0) {
++				memcpy(&active_bss, &river_bss_table[i], sizeof(active_bss));
++				break;
++			}
++		}
++	} else {
++		active_phase = PHASE_IDLE;
++		bzero(&active_bss, sizeof(active_bss));
++	}
++	lck_mtx_unlock(&river_apple80211_mtx);
++	post(EVENT_ASSOC_DONE, NULL, 0);
++	printf("river_apple80211: assoc finished, status=%d join_result=%u, posted EVENT_ASSOC_DONE\n",
++	    status, join_result);
++}
++
++void
++river_apple80211_link_changed(bool up, int16_t rssi)
++{
++	lck_mtx_lock(&river_apple80211_mtx);
++	if (up) {
++		active_phase = PHASE_JOINED;
++		for (unsigned i = 0; i < river_bss_count; i++) {
++			if (river_bss_table[i].ssid_len == pending_join.ssid_len &&
++			    memcmp(river_bss_table[i].ssid, pending_join.ssid, pending_join.ssid_len) == 0) {
++				memcpy(&active_bss, &river_bss_table[i], sizeof(active_bss));
++				break;
++			}
++		}
++		active_bss.rssi = rssi;
++	} else {
++		active_phase = PHASE_IDLE;
++		bzero(&active_bss, sizeof(active_bss));
++	}
++	struct apple80211_link_changed link = {
++		.down = !up,
++		.involuntary = !up,
++		.rssi = rssi,
++		.reason = up ? 0 : 4,
++	};
++	lck_mtx_unlock(&river_apple80211_mtx);
++
++	post(EVENT_SSID_CHANGED, NULL, 0);
++	post(EVENT_BSSID_CHANGED, NULL, 0);
++	post(EVENT_LINK_CHANGED, &link, sizeof(link));
++	printf("river_apple80211: link %s (rssi=%d dBm), posted EVENT_LINK_CHANGED\n",
++	    up ? "UP" : "DOWN", rssi);
++}
++
++bool
++river_apple80211_scan_pending(void)
++{
++	lck_mtx_lock(&river_apple80211_mtx);
++	bool pending = scan_pending_flag && (active_phase != PHASE_JOINED);
++	lck_mtx_unlock(&river_apple80211_mtx);
++	return pending;
++}
++
++bool
++river_apple80211_join_pending(struct river_apple80211_join_req *req)
++{
++	lck_mtx_lock(&river_apple80211_mtx);
++	bool pending = join_pending_flag;
++	if (pending && req != NULL) {
++		memcpy(req, &pending_join, sizeof(*req));
++	}
++	join_pending_flag = false;
++	lck_mtx_unlock(&river_apple80211_mtx);
++	return pending;
++}
++
++void
++river_apple80211_init(void)
++{
++	static bool initialized = false;
++	if (initialized) return;
++	initialized = true;
++	printf("river_apple80211: initialized Apple80211 interface\n");
++}
++
++errno_t
++river_apple80211_ioctl(u_long command, void *data)
++{
++	struct apple80211req *request = data;
++	bool is_set = (command == SIOCSA80211);
++	int error;
++
++	if (command != SIOCSA80211 && command != SIOCGA80211) {
++		return EOPNOTSUPP;
++	}
++	error = is_set ? set(request) : get(request);
++	return error;
++}
 diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
-index 4c8efa13d..a313e3228 100644
+index 5460b8256..a313e3228 100644
 --- a/bsd/dev/sweet_keys.c
 +++ b/bsd/dev/sweet_keys.c
 @@ -19,6 +19,9 @@
@@ -337,260 +1039,378 @@ index 4c8efa13d..a313e3228 100644
      printf("RIVER JOIN: target AP re-discovered; re-associating...\n");
      river_target_associate(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc);
      river_wpa_run(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc);
-@@ -3318,6 +3442,125 @@ river_qg_compare_sysctl SYSCTL_HANDLER_ARGS
- SYSCTL_PROC(_debug, OID_AUTO, river_qg_compare, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
-             NULL, 0, river_qg_compare_sysctl, "A", "River QG read-only transaction comparison");
- 
-+/* Motorola JG30 (3000 mAh) battery profile OCV lookup table at 25 C.
-+ * Traced from sdm632-river-common-overlay.dtsi and qg-batterydata-jg30-atl-3000mah.dtsi.
-+ * Strictly monotonic decreasing voltage (4380 mV at 100.0% down to 2772 mV at 0.0%). */
-+static const struct {
-+ uint16_t mv;
-+ uint16_t soc_bp; /* basis points: 10000 = 100.0% */
-+} jg30_ocv_lut[] = {
-+ {4380, 10000}, {4350,  9800}, {4322,  9600}, {4296,  9400}, {4271,  9200},
-+ {4248,  9000}, {4224,  8800}, {4201,  8600}, {4178,  8400}, {4156,  8200},
-+ {4134,  8000}, {4112,  7800}, {4091,  7600}, {4070,  7400}, {4050,  7200},
-+ {4030,  7000}, {4010,  6800}, {3991,  6600}, {3974,  6400}, {3959,  6200},
-+ {3941,  6000}, {3918,  5800}, {3895,  5600}, {3878,  5400}, {3864,  5200},
-+ {3851,  5000}, {3841,  4800}, {3831,  4600}, {3822,  4400}, {3813,  4200},
-+ {3806,  4000}, {3799,  3800}, {3793,  3600}, {3787,  3400}, {3781,  3200},
-+ {3775,  3000}, {3769,  2800}, {3763,  2600}, {3756,  2400}, {3748,  2200},
-+ {3740,  2000}, {3731,  1800}, {3720,  1600}, {3708,  1400}, {3693,  1200},
-+ {3688,  1000}, {3687,   900}, {3685,   800}, {3682,   700}, {3672,   600},
-+ {3643,   500}, {3595,   400}, {3533,   300}, {3448,   200}, {3316,   100},
-+ {2772,     0},
+diff --git a/bsd/sys/river_apple80211.h b/bsd/sys/river_apple80211.h
+new file mode 100644
+index 000000000..817a1e65c
+--- /dev/null
++++ b/bsd/sys/river_apple80211.h
+@@ -0,0 +1,162 @@
++#ifndef _SYS_RIVER_APPLE80211_H_
++#define _SYS_RIVER_APPLE80211_H_
++
++#include <sys/types.h>
++#include <sys/socket.h>
++
++#define SIOCSA80211             0x802869c8u     /* _IOW('i', 200, struct apple80211req) */
++#define SIOCGA80211             0xc02869c9u     /* _IOWR('i', 201, struct apple80211req) */
++
++struct apple80211req {
++	char req_if_name[16];
++	int32_t req_type;
++	int32_t req_val;
++	uint32_t req_len;
++	user_addr_t req_data __attribute__((aligned(8)));
 +};
-+#define JG30_OCV_LUT_COUNT (sizeof(jg30_ocv_lut) / sizeof(jg30_ocv_lut[0]))
 +
-+static unsigned
-+jg30_estimate_soc(unsigned mv, int ma)
++#define CHANNEL_20MHZ           0x2u
++#define CHANNEL_2GHZ            0x8u
++#define CHANNEL_5GHZ            0x10u
++#define CHANNEL_ACTIVE          0x80u
++#define CHANNEL_DFS             0x100u
++
++#define CIPHER_PMK              6
++#define CIPHER_PASSPHRASE       10
++
++enum {
++	EVENT_POWER_CHANGED = 1,
++	EVENT_SSID_CHANGED = 2,
++	EVENT_BSSID_CHANGED = 3,
++	EVENT_LINK_CHANGED = 4,
++	EVENT_ASSOC_DONE = 9,
++	EVENT_SCAN_DONE = 10,
++};
++
++struct apple80211_channel {
++	uint32_t version, channel, flags;
++};
++
++struct apple80211_channels {
++	uint32_t version, count;
++	struct apple80211_channel channels[401];
++	uint32_t unused;
++};
++
++struct apple80211_channels_info {
++	uint8_t unknown_0[12];
++	uint16_t count;
++	uint8_t unknown_1[800];
++	uint8_t number[400], indoor[400], dfs[400], passive[400], wide_40[400], wide_80[400];
++	uint8_t unknown_2[1602];
++	uint32_t flags[400];
++	uint8_t unknown_3[3600];
++} __attribute__((packed));
++
++struct apple80211_scan_request {
++	uint32_t version, bss_type;
++	uint8_t bssid[6], unused_0[2];
++	uint32_t ssid_length;
++	uint8_t ssid[32];
++	uint32_t scan_type;
++	uint32_t phy_mode;
++	uint16_t dwell_ms, unused_1;
++	uint32_t rest_ms;
++	uint32_t channel_count;
++	struct apple80211_channel channels[400];
++	uint64_t flags;
++	uint32_t unused_2;
++	uint32_t name_count;
++	uint8_t names[10][56];
++	uint32_t short_ssid, unused_3;
++};
++
++struct apple80211_scan_result {
++	uint32_t version;
++	struct apple80211_channel channel;
++	uint16_t noise_known;
++	int16_t noise, snr, rssi;
++	uint16_t beacon_interval, capability;
++	uint8_t bssid[6];
++	uint8_t rate_count, unused_0;
++	uint32_t rates[15];
++	uint8_t ssid_length, ssid[32], unused_1[3];
++	uint32_t age_ms;
++	uint8_t flags, unused_2;
++	uint16_t elements_length;
++	uint8_t elements[1024];
++};
++
++struct apple80211_assoc {
++	uint32_t version;
++	uint16_t mode, auth_lower, auth_upper, unused_0;
++	uint32_t ssid_length;
++	uint8_t ssid[32];
++	uint8_t bssid[6], unused_1[2];
++	uint32_t key_version, key_length, key_cipher;
++	uint16_t key_flags, key_index;
++	uint8_t key[64];
++	uint8_t rest[0x250 - 0x88];
++};
++
++struct apple80211_link_changed {
++	uint8_t down, unused_0[3];
++	int32_t rssi;
++	uint16_t snr, noise;
++	uint8_t unused_1[4];
++	uint8_t involuntary, unused_2[3];
++	uint32_t reason, subreason;
++	uint8_t unused_3[4];
++};
++
++struct river_apple80211_join_req {
++	uint8_t ssid[32];
++	uint8_t ssid_len;
++	uint8_t bssid[6];
++	uint8_t passphrase[64];
++	uint8_t passphrase_len;
++	uint8_t pmk[32];
++	bool has_pmk;
++};
++
++struct river_apple80211_target_info {
++	uint8_t bssid[6];
++	uint8_t channel;
++	uint16_t beacon;
++	uint16_t caps;
++	uint8_t dtim;
++	int16_t rssi;
++	uint8_t nrates;
++	uint8_t rates[12];
++	uint8_t rsn_len;
++	uint8_t rsn[22];
++	uint8_t ap_rsn_len;
++	uint8_t ap_rsn[257];
++};
++
++struct river_ifmediareq {
++	char ifm_name[16];
++	int ifm_current;
++	int ifm_mask;
++	int ifm_status;
++	int ifm_active;
++	int ifm_count;
++};
++
++#ifdef KERNEL
++void river_apple80211_init(void);
++errno_t river_apple80211_ioctl(u_long command, void *data);
++void river_apple80211_add_bss(const uint8_t *bssid, const uint8_t *ssid, uint8_t ssid_len,
++    uint16_t freq, int16_t rssi, uint16_t beacon_int, uint16_t caps,
++    const uint8_t *ies, uint16_t ies_len);
++void river_apple80211_clear_scan(void);
++void river_apple80211_scan_done(int status);
++void river_apple80211_assoc_done(int status);
++void river_apple80211_link_changed(bool up, int16_t rssi);
++bool river_apple80211_scan_pending(void);
++bool river_apple80211_join_pending(struct river_apple80211_join_req *req);
++bool river_apple80211_find_target(const struct river_apple80211_join_req *req, struct river_apple80211_target_info *info);
++void river_pbkdf2_pmk(const char *passphrase, const char *ssid, size_t ssid_len, uint8_t pmk[32]);
++#endif
++
++#endif /* _SYS_RIVER_APPLE80211_H_ */
+diff --git a/iokit/Kernel/arm/RiverWLAN.cpp b/iokit/Kernel/arm/RiverWLAN.cpp
+new file mode 100644
+index 000000000..1859fd8aa
+--- /dev/null
++++ b/iokit/Kernel/arm/RiverWLAN.cpp
+@@ -0,0 +1,198 @@
++/*
++ * RiverWLAN: Apple80211 IOKit registry services and MiniIONetworkStack stand-in
++ * for Moto G7 (river) WCN36xx Wi-Fi.
++ */
++
++#include <IOKit/IOLib.h>
++#include <IOKit/IOPlatformExpert.h>
++#include <IOKit/IOService.h>
++#include <IOKit/IOUserClient.h>
++#include <IOKit/IOKitKeys.h>
++#include <libkern/c++/OSData.h>
++#include <libkern/c++/OSNumber.h>
++#include <sys/systm.h>
++#include <sys/proc.h>
++
++extern "C" void RiverWLANStart(const char * interface, const uint8_t * address);
++extern "C" void MiniIONetworkStackStart(void);
++
++class IO80211Controller : public IOService
 +{
-+ unsigned vocv = mv;
-+ if (ma < 0) {
-+  unsigned dis_ma = (unsigned)(-ma);
-+  unsigned vdrop = (dis_ma * 3u) / 20u; /* 150 mOhm cell IR compensation */
-+  if (vdrop > 300) vdrop = 300;
-+  vocv += vdrop;
-+ }
-+ if (vocv >= jg30_ocv_lut[0].mv) return 100;
-+ if (vocv <= jg30_ocv_lut[JG30_OCV_LUT_COUNT - 1].mv) return 0;
-+ for (unsigned i = 0; i < JG30_OCV_LUT_COUNT - 1; ++i) {
-+  if (vocv <= jg30_ocv_lut[i].mv && vocv >= jg30_ocv_lut[i + 1].mv) {
-+   unsigned span_mv = jg30_ocv_lut[i].mv - jg30_ocv_lut[i + 1].mv;
-+   unsigned span_soc = jg30_ocv_lut[i].soc_bp - jg30_ocv_lut[i + 1].soc_bp;
-+   unsigned frac_mv = vocv - jg30_ocv_lut[i + 1].mv;
-+   unsigned soc_bp = jg30_ocv_lut[i + 1].soc_bp;
-+   if (span_mv > 0) soc_bp += (frac_mv * span_soc) / span_mv;
-+   return (soc_bp + 50u) / 100u;
-+  }
-+ }
-+ return 0;
++	OSDeclareDefaultStructors(IO80211Controller);
++};
++
++OSDefineMetaClassAndStructors(IO80211Controller, IOService);
++
++class IONetworkInterface : public IOService
++{
++	OSDeclareDefaultStructors(IONetworkInterface);
++};
++
++OSDefineMetaClassAndStructors(IONetworkInterface, IOService);
++
++class RiverWLAN : public IONetworkInterface
++{
++	OSDeclareDefaultStructors(RiverWLAN);
++
++public:
++	virtual IOReturn newUserClient(task_t owningTask, void * securityID, UInt32 type, OSDictionary * properties,
++	    IOUserClient ** handler) APPLE_KEXT_OVERRIDE;
++};
++
++OSDefineMetaClassAndStructors(RiverWLAN, IONetworkInterface);
++
++IOReturn
++RiverWLAN::newUserClient(task_t owningTask, void * securityID, UInt32 type, OSDictionary * properties, IOUserClient ** handler)
++{
++	static unsigned said;
++	if (said++ < 8) {
++		IOLog("RiverWLAN: newUserClient type %u requested -> returning kIOReturnUnsupported for fallback to IOCTL path\n", (unsigned)type);
++	}
++	return kIOReturnUnsupported;
 +}
 +
-+/* River hardware battery reading function.
-+ * Thread-safe with atomic ri_power_busy exclusion. No PMIC writes.
-+ * Reads 4-byte last ADC (V and I in single atomic SPMI burst), DCDC path and CHGR status.
-+ * Voltage is converted using Motorola's 194637/1000 uV per count.
-+ * Current is converted using Motorola's 152588/1000 uA per count.
-+ * Apple IOPMPowerSource convention: negative mA = discharging, positive mA = charging. */
-+static vm_offset_t ri_spmi_chnl(vm_offset_t core, unsigned ppid);
-+static bool ri_spmi_write(vm_offset_t chnl, unsigned addr, uint8_t val);
-+static vm_offset_t ri_charge_cmd;
++static IOService *
++publish(IOService * service, IOService * provider, const char * name)
++{
++	if (service == NULL || !service->attach(provider)) {
++		OSSafeReleaseNULL(service);
++		return NULL;
++	}
++	service->setName(name);
++	if (!service->start(provider)) {
++		service->detach(provider);
++		service->release();
++		return NULL;
++	}
++	service->registerService();
++	return service;
++}
++
++void
++RiverWLANStart(const char * interface, const uint8_t * address)
++{
++	IOService * platform = IOService::getPlatform();
++	IO80211Controller * controller = OSTypeAlloc(IO80211Controller);
++	RiverWLAN * wlan = OSTypeAlloc(RiverWLAN);
++	OSData * mac;
++	OSNumber * number;
++
++	if (platform == NULL || controller == NULL || wlan == NULL || !controller->init() || !wlan->init()) {
++		OSSafeReleaseNULL(controller);
++		OSSafeReleaseNULL(wlan);
++		IOLog("RiverWLAN: cannot create the services\n");
++		return;
++	}
++	if ((mac = OSData::withBytes(address, 6)) != NULL) {
++		controller->setProperty("IOMACAddress", mac);
++		mac->release();
++	}
++	controller->setProperty("IOBuiltin", true);
++	if ((controller = (IO80211Controller *) publish(controller, platform, "RiverWLANController")) == NULL) {
++		wlan->release();
++		IOLog("RiverWLAN: controller did not start\n");
++		return;
++	}
++
++	wlan->setProperty("IOInterfaceName", interface);
++	wlan->setProperty("BSD Name", interface);
++	wlan->setProperty("IOInterfaceNamePrefix", "en");
++	if ((number = OSNumber::withNumber(6ULL, 32)) != NULL) { /* IFT_ETHER */
++		wlan->setProperty("IOInterfaceType", number);
++		number->release();
++	}
++	if ((number = OSNumber::withNumber((unsigned long long)(interface[2] - '0'), 32)) != NULL) {
++		wlan->setProperty("IOInterfaceUnit", number);
++		number->release();
++	}
++	wlan->setProperty("IOBuiltin", true);
++	wlan->setProperty("IOPrimaryInterface", true);
++	wlan->setProperty("IO80211InterfaceRole", "Infrastructure");
++	if (publish(wlan, controller, "RiverWLAN") == NULL) {
++		IOLog("RiverWLAN: service did not start\n");
++	} else {
++		wlan->release();
++	}
++	controller->release();
++	IOLog("RiverWLAN: published %s as Apple80211 Infrastructure interface\n", interface);
++}
++
++class IONetworkStack : public IOService
++{
++	OSDeclareDefaultStructors(IONetworkStack);
++
++public:
++	virtual bool start(IOService * provider) APPLE_KEXT_OVERRIDE;
++};
++
++OSDefineMetaClassAndStructors(IONetworkStack, IOService);
++
 +bool
-+river_battery_sample(unsigned *out_mv, int *out_ma, bool *out_external, bool *out_charging, bool *out_full, unsigned *out_soc)
++IONetworkStack::start(IOService * provider)
 +{
-+ if (!ri_power_qg || !ri_charge_chgr || !ri_charge_dcdc) {
-+  vm_offset_t core = ri_map(0x0200f000);
-+  if (!core) return false;
-+  if (!ri_power_qg) ri_power_qg = ri_spmi_obs(core, 0x248);
-+  if (!ri_charge_chgr) ri_charge_chgr = ri_spmi_obs(core, 0x210);
-+  if (!ri_charge_dcdc) ri_charge_dcdc = ri_spmi_obs(core, 0x211);
-+  if (!ri_power_usb) ri_power_usb = ri_spmi_obs(core, 0x213);
-+  if (!ri_charge_cmd) ri_charge_cmd = ri_spmi_chnl(core, 0x210);
-+  if (!ri_power_qg || !ri_charge_chgr || !ri_charge_dcdc) return false;
-+ }
-+ int expected = 0;
-+ if (!__atomic_compare_exchange_n(&ri_power_busy, &expected, 1, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) return false;
-+ uint32_t vi_pair = 0, path = 0, chg_stat = 0;
-+ bool ok = ri_power_read(ri_power_qg, 0xc0, 4, &vi_pair) &&
-+           ri_power_read(ri_charge_dcdc, 0x0b, 1, &path) &&
-+           ri_power_read(ri_charge_chgr, 0x06, 1, &chg_stat);
-+ __atomic_store_n(&ri_power_busy, 0, __ATOMIC_RELEASE);
-+ uint16_t v_raw = (uint16_t)(vi_pair & 0xffffu);
-+ uint16_t i_raw = (uint16_t)((vi_pair >> 16) & 0xffffu);
-+ if (!ok || v_raw == 0x8000u || v_raw == 0) return false;
-+ uint32_t uv = (uint32_t)((194637ULL * (uint64_t)v_raw) / 1000);
-+ unsigned mv = uv / 1000;
-+ if (mv < 2800 || mv > 4600) return false;
-+ int ma = 0;
-+ if (i_raw != 0x8000u) {
-+  int32_t signed_ir = (i_raw & 0x8000u) ? (int32_t)i_raw - 65536 : (int32_t)i_raw;
-+  int32_t ua = (int32_t)((152588LL * signed_ir) / 1000);
-+  ma = -(int)(ua / 1000);
-+ }
-+ bool ext = (path & 0x10u) && (path & 0x01u);
-+ uint32_t st = chg_stat & 7u;
-+ if (ext && ri_charge_cmd && st == 7u) {
-+  printf("RIVER BATT: enabling hardware charging on ext power (chg_stat=%#x)\n", chg_stat);
-+  (void)ri_spmi_write(ri_charge_cmd, 0x42, 1);
-+ }
-+ bool chg = ext && (st >= 1u && st <= 4u);
-+ bool full = ext && (st == 5u);
-+ unsigned soc = full ? 100 : jg30_estimate_soc(mv, ma);
-+ if (out_mv) *out_mv = mv;
-+ if (out_ma) *out_ma = ma;
-+ if (out_external) *out_external = ext;
-+ if (out_charging) *out_charging = chg;
-+ if (out_full) *out_full = full;
-+ if (out_soc) *out_soc = soc;
-+ return true;
-+}
-+
-+static int
-+river_battery_sysctl SYSCTL_HANDLER_ARGS
-+{
-+ unsigned mv = 0, soc = 0; int ma = 0; bool ext = false, chg = false, full = false;
-+ if (!river_battery_sample(&mv, &ma, &ext, &chg, &full, &soc)) return EIO;
-+ char note[160];
-+ snprintf(note, sizeof(note), "voltage_mv=%u amperage_ma=%d external=%d charging=%d full=%d soc=%u",
-+     mv, ma, ext, chg, full, soc);
-+ return sysctl_handle_string(oidp, note, 0, req);
-+}
-+SYSCTL_PROC(_debug, OID_AUTO, river_battery, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
-+            NULL, 0, river_battery_sysctl, "A", "River battery live sample");
-+
- /* On-demand, read-only observer sample. The atomic gate prevents concurrent
-  * readers from racing on the same SPMI observer command registers. */
- static int
-diff --git a/iokit/Kernel/arm/SweetBattery.cpp b/iokit/Kernel/arm/SweetBattery.cpp
-index 86155643c..2364d8f50 100644
---- a/iokit/Kernel/arm/SweetBattery.cpp
-+++ b/iokit/Kernel/arm/SweetBattery.cpp
-@@ -38,6 +38,9 @@ private:
- 	    bool capable, bool charging, bool full, bool measured, bool currentValid);
- 	void poll(void);
- 	bool pollTopaz(void);
-+#if defined(RIVER)
-+	bool pollRiver(void);
-+#endif
- 	static void timerFired(OSObject *owner, IOTimerEventSource *sender);
- 	static IOReturn stopPolling(OSObject *owner, void *, void *, void *, void *);
- 	static bool readWord(unsigned address, uint16_t *value);
-@@ -106,11 +109,16 @@ void
- SweetBattery::publish(unsigned percent, unsigned mv, int ma, bool external,
-     bool capable, bool charging, bool full, bool measured, bool currentValid)
- {
--	/* Use consistent mAh units (DT nominal=5020). powerd computes C*100/M. */
--	const unsigned capacity = (5020u * percent + 50u) / 100u;
-+	/* Use consistent mAh units (DT nominal: river=3000, sweet/topaz=5020). powerd computes C*100/M. */
-+#if defined(RIVER)
-+	const unsigned nominalCapacity = 3000;
-+#else
-+	const unsigned nominalCapacity = 5020;
-+#endif
-+	const unsigned capacity = (nominalCapacity * percent + 50u) / 100u;
- 	setBatteryInstalled(true);
- 	setCurrentCapacity(capacity);
--	setMaxCapacity(5020);
-+	setMaxCapacity(nominalCapacity);
- 	setExternalConnected(external);
- 	setExternalChargeCapable(capable);
- 	setIsCharging(charging);
-@@ -124,8 +132,8 @@ SweetBattery::publish(unsigned percent, unsigned mv, int ma, bool external,
- 	putBool("FullyCharged", full);
- 	putBool("AppleRawExternalConnected", external);
- 	putNumber("AppleRawCurrentCapacity", capacity);
--	putNumber("AppleRawMaxCapacity", 5020);
--	putNumber("DesignCapacity", 5020);
-+	putNumber("AppleRawMaxCapacity", nominalCapacity);
-+	putNumber("DesignCapacity", nominalCapacity);
- 	putNumber("InstantAmperage", (UInt32)ma);
- 	/* iOS battery convention: centidegrees C; fixed 25 C, NOT measured. */
- 	putNumber("Temperature", 2500);
-@@ -142,7 +150,7 @@ SweetBattery::publish(unsigned percent, unsigned mv, int ma, bool external,
- 		const char *keys[] = {kIOBatteryCurrentChargeKey, kIOBatteryCapacityKey,
- 		    kIOBatteryVoltageKey, kIOBatteryAmperageKey, kIOBatteryCycleCountKey,
- 		    kIOBatteryFlagsKey};
--		UInt32 values[] = {capacity, 5020, mv, (UInt32)ma, 0,
-+		UInt32 values[] = {capacity, nominalCapacity, mv, (UInt32)ma, 0,
- 		    (UInt32)(kIOBatteryInstalled | (external ? kIOBatteryChargerConnect : 0) |
- 		    (charging ? kIOBatteryCharge : 0))};
- 		for (unsigned i = 0; i < sizeof(values) / sizeof(values[0]); ++i) {
-@@ -312,11 +320,47 @@ SweetBattery::timerFired(OSObject *owner, IOTimerEventSource *sender)
- {
- 	SweetBattery *self = OSDynamicCast(SweetBattery, owner);
- 	if (self && self->fRunning) {
-+#if defined(RIVER)
-+		self->pollRiver();
-+#else
- 		self->poll();
-+#endif
- 		sender->setTimeoutMS(10000);
- 	}
- }
- 
-+#if defined(RIVER)
-+extern "C" bool river_battery_sample(unsigned *out_mv, int *out_ma, bool *out_external, bool *out_charging, bool *out_full, unsigned *out_soc);
-+
-+bool
-+SweetBattery::pollRiver(void)
-+{
-+	unsigned mv = 0, soc = 0;
-+	int ma = 0;
-+	bool external = true, charging = false, full = false;
-+	bool ok = river_battery_sample(&mv, &ma, &external, &charging, &full, &soc);
-+	if (!ok) {
-+		publish(85, 4100, 0, true, true, false, true, false, false);
++	if (!IOService::start(provider)) {
 +		return false;
 +	}
-+	int override_pct = -1;
-+	unsigned percent = 0;
-+	if (PE_parse_boot_argn("riverbattery_override", &override_pct, sizeof(override_pct)) &&
-+	    override_pct >= 0 && override_pct <= 100) {
-+		percent = (unsigned)override_pct;
-+	} else {
-+		percent = soc;
-+	}
-+	publish(percent, mv, ma, external, external, charging, full, true, true);
-+	static unsigned river_logs;
-+	if (river_logs++ % 10 == 0) {
-+		IOLog("SWEET BATTERY: river %u%% %umV %dmA external=%d charging=%d full=%d\n",
-+		    percent, mv, ma, external, charging, full);
-+	}
++	setProperty(kIOUserClientClassKey, "IONetworkStackUserClient");
++	setName("IONetworkStack");
++	registerService();
 +	return true;
 +}
-+#endif
 +
- bool
- SweetBattery::start(IOService *provider)
- {
-@@ -324,13 +368,19 @@ SweetBattery::start(IOService *provider)
- 		return false;
- 	}
- #if defined(RIVER)
--	int pct = 85;
--	(void)PE_parse_boot_argn("riverbattery", &pct, sizeof(pct));
--	if (pct < 1) pct = 1;
--	if (pct > 100) pct = 100;
--	publish((unsigned)pct, 4100, 0, true, true, false, true, false, false);
-+	fReal = true;
-+	pollRiver();
-+	fLoop = IOWorkLoop::workLoop();
-+	fTimer = IOTimerEventSource::timerEventSource(this, &SweetBattery::timerFired);
-+	if (fLoop && fTimer && fLoop->addEventSource(fTimer) == kIOReturnSuccess) {
-+		fTimerAdded = true;
-+		fRunning = true;
-+		fTimer->setTimeoutMS(10000);
-+	} else {
-+		fReal = false;
-+		IOLog("SWEET BATTERY: river timer unavailable\n");
++class IONetworkStackUserClient : public IOUserClient
++{
++	OSDeclareDefaultStructors(IONetworkStackUserClient);
++
++public:
++	virtual bool start(IOService * provider) APPLE_KEXT_OVERRIDE;
++	virtual IOReturn clientClose(void) APPLE_KEXT_OVERRIDE;
++	virtual IOReturn setProperties(OSObject * properties) APPLE_KEXT_OVERRIDE;
++};
++
++OSDefineMetaClassAndStructors(IONetworkStackUserClient, IOUserClient);
++
++bool
++IONetworkStackUserClient::start(IOService * provider)
++{
++	char who[32] = "?";
++	if (!IOUserClient::start(provider)) {
++		return false;
 +	}
- 	registerService();
--	IOLog("SWEET BATTERY: started river power source (%u%%, AC)\n", (unsigned)pct);
- 	return true;
- #else
- 	(void)sweet_cpufreq_max();
++	proc_selfname(who, sizeof(who));
++	IOLog("MiniIONetworkStack: opened by %s (busy state %u)\n", who,
++	    (unsigned) IOService::getServiceRoot()->getBusyState());
++	return true;
++}
++
++IOReturn
++IONetworkStackUserClient::clientClose(void)
++{
++	if (!isInactive()) {
++		terminate();
++	}
++	return kIOReturnSuccess;
++}
++
++IOReturn
++IONetworkStackUserClient::setProperties(OSObject * properties)
++{
++	return kIOReturnUnsupported;
++}
++
++void
++MiniIONetworkStackStart(void)
++{
++	IOService * resources = IOService::getResourceService();
++	IONetworkStack * stack = OSTypeAlloc(IONetworkStack);
++
++	if (resources == NULL || stack == NULL || !stack->init() || !stack->attach(resources)) {
++		OSSafeReleaseNULL(stack);
++		IOLog("MiniIONetworkStack: cannot create service\n");
++		return;
++	}
++	if (!stack->start(resources)) {
++		stack->detach(resources);
++	}
++	stack->release();
++	IOLog("MiniIONetworkStack: published under IOResources\n");
++}
 diff --git a/iokit/conf/files.arm64 b/iokit/conf/files.arm64
 index b6e162e89..093210ff2 100644
 --- a/iokit/conf/files.arm64
