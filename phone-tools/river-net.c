@@ -179,6 +179,10 @@ static void default_route(const char*name){
 static SCDynamicStoreRef persistent_ds = NULL;
 
 static void get_service_id(const char *name, char *out, size_t out_len) {
+ if (!strcmp(name, "en0")) {
+  snprintf(out, out_len, "FFDA1629-8D33-441B-A817-388311CC2458");
+  return;
+ }
  if (!strcmp(name, "ue0")) {
   snprintf(out, out_len, "5EE7C0DE-0000-4000-8000-000000000001");
   return;
@@ -311,6 +315,13 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
 
  CFStringRef cf_svc_dns = CFStringCreateWithFormat(NULL, NULL, CFSTR("State:/Network/Service/%s/DNS"), svc_id);
  fn_SetValue(ds, cf_svc_dns, cf_dns_dict);
+
+ const void *rank_k[1] = { CFSTR("PrimaryRank") };
+ const void *rank_v[1] = { CFSTR("First") };
+ CFDictionaryRef cf_rank_dict = CFDictionaryCreate(NULL, rank_k, rank_v, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+ CFStringRef cf_svc_rank = CFStringCreateWithFormat(NULL, NULL, CFSTR("State:/Network/Service/%s"), svc_id);
+ fn_SetValue(ds, cf_svc_rank, cf_rank_dict);
+ CFRelease(cf_svc_rank); CFRelease(cf_rank_dict);
 
  const void *if_ipv4_k[2] = { CFSTR("Addresses"), CFSTR("SubnetMasks") };
  const void *if_ipv4_v[2] = { cf_addrs_arr, cf_masks_arr };
@@ -515,8 +526,8 @@ static void dhcp_daemon_loop(const char *name, int adddefault) {
  while(1) {
   int st = get_80211_state(name);
   if (st == 4) { /* PHASE_JOINED */
-   if (!get_interface_ip(name)) {
-    printf("Interface %s associated (STATE=4) without IPv4; acquiring DHCP lease...\n", name);
+   if (last_acquire == 0 || !get_interface_ip(name)) {
+    printf("Interface %s associated (STATE=4); acquiring/publishing DHCP lease...\n", name);
     fflush(stdout);
     if (dhcp(name, adddefault)) {
      last_acquire = time(NULL);
