@@ -1,5 +1,5 @@
 diff --git a/bsd/conf/files b/bsd/conf/files
-index 2da8bc6fd..d539ad25e 100644
+index 2da8bc6..d539ad2 100644
 --- a/bsd/conf/files
 +++ b/bsd/conf/files
 @@ -116,6 +116,7 @@ bsd/dev/sweet_cpufreq.c			standard
@@ -10,9 +10,9 @@ index 2da8bc6fd..d539ad25e 100644
  bsd/dev/mem.c				standard
  bsd/dev/munge.c 			optional config_requires_u32_munging
  bsd/dev/unix_startup.c			standard
-diff --git a/bsd/dev/river_apple80211.c b/bsd/dev/river_apple80211.c
+diff --git a/b/bsd/dev/river_apple80211.c b/bsd/dev/river_apple80211.c
 new file mode 100644
-index 000000000..691717bbe
+index 0000000..691717b
 --- /dev/null
 +++ b/bsd/dev/river_apple80211.c
 @@ -0,0 +1,707 @@
@@ -724,7 +724,7 @@ index 000000000..691717bbe
 +	return error;
 +}
 diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
-index 4c8efa13d..f93dce764 100644
+index 5460b82..f93dce7 100644
 --- a/bsd/dev/sweet_keys.c
 +++ b/bsd/dev/sweet_keys.c
 @@ -19,6 +19,9 @@
@@ -1119,134 +1119,8 @@ index 4c8efa13d..f93dce764 100644
      printf("RIVER JOIN: target AP re-discovered; re-associating...\n");
      river_target_associate(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc);
      river_wpa_run(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc);
-@@ -3318,6 +3465,125 @@ river_qg_compare_sysctl SYSCTL_HANDLER_ARGS
- SYSCTL_PROC(_debug, OID_AUTO, river_qg_compare, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
-             NULL, 0, river_qg_compare_sysctl, "A", "River QG read-only transaction comparison");
- 
-+/* Motorola JG30 (3000 mAh) battery profile OCV lookup table at 25 C.
-+ * Traced from sdm632-river-common-overlay.dtsi and qg-batterydata-jg30-atl-3000mah.dtsi.
-+ * Strictly monotonic decreasing voltage (4380 mV at 100.0% down to 2772 mV at 0.0%). */
-+static const struct {
-+ uint16_t mv;
-+ uint16_t soc_bp; /* basis points: 10000 = 100.0% */
-+} jg30_ocv_lut[] = {
-+ {4380, 10000}, {4350,  9800}, {4322,  9600}, {4296,  9400}, {4271,  9200},
-+ {4248,  9000}, {4224,  8800}, {4201,  8600}, {4178,  8400}, {4156,  8200},
-+ {4134,  8000}, {4112,  7800}, {4091,  7600}, {4070,  7400}, {4050,  7200},
-+ {4030,  7000}, {4010,  6800}, {3991,  6600}, {3974,  6400}, {3959,  6200},
-+ {3941,  6000}, {3918,  5800}, {3895,  5600}, {3878,  5400}, {3864,  5200},
-+ {3851,  5000}, {3841,  4800}, {3831,  4600}, {3822,  4400}, {3813,  4200},
-+ {3806,  4000}, {3799,  3800}, {3793,  3600}, {3787,  3400}, {3781,  3200},
-+ {3775,  3000}, {3769,  2800}, {3763,  2600}, {3756,  2400}, {3748,  2200},
-+ {3740,  2000}, {3731,  1800}, {3720,  1600}, {3708,  1400}, {3693,  1200},
-+ {3688,  1000}, {3687,   900}, {3685,   800}, {3682,   700}, {3672,   600},
-+ {3643,   500}, {3595,   400}, {3533,   300}, {3448,   200}, {3316,   100},
-+ {2772,     0},
-+};
-+#define JG30_OCV_LUT_COUNT (sizeof(jg30_ocv_lut) / sizeof(jg30_ocv_lut[0]))
-+
-+static unsigned
-+jg30_estimate_soc(unsigned mv, int ma)
-+{
-+ unsigned vocv = mv;
-+ if (ma < 0) {
-+  unsigned dis_ma = (unsigned)(-ma);
-+  unsigned vdrop = (dis_ma * 3u) / 20u; /* 150 mOhm cell IR compensation */
-+  if (vdrop > 300) vdrop = 300;
-+  vocv += vdrop;
-+ }
-+ if (vocv >= jg30_ocv_lut[0].mv) return 100;
-+ if (vocv <= jg30_ocv_lut[JG30_OCV_LUT_COUNT - 1].mv) return 0;
-+ for (unsigned i = 0; i < JG30_OCV_LUT_COUNT - 1; ++i) {
-+  if (vocv <= jg30_ocv_lut[i].mv && vocv >= jg30_ocv_lut[i + 1].mv) {
-+   unsigned span_mv = jg30_ocv_lut[i].mv - jg30_ocv_lut[i + 1].mv;
-+   unsigned span_soc = jg30_ocv_lut[i].soc_bp - jg30_ocv_lut[i + 1].soc_bp;
-+   unsigned frac_mv = vocv - jg30_ocv_lut[i + 1].mv;
-+   unsigned soc_bp = jg30_ocv_lut[i + 1].soc_bp;
-+   if (span_mv > 0) soc_bp += (frac_mv * span_soc) / span_mv;
-+   return (soc_bp + 50u) / 100u;
-+  }
-+ }
-+ return 0;
-+}
-+
-+/* River hardware battery reading function.
-+ * Thread-safe with atomic ri_power_busy exclusion. No PMIC writes.
-+ * Reads 4-byte last ADC (V and I in single atomic SPMI burst), DCDC path and CHGR status.
-+ * Voltage is converted using Motorola's 194637/1000 uV per count.
-+ * Current is converted using Motorola's 152588/1000 uA per count.
-+ * Apple IOPMPowerSource convention: negative mA = discharging, positive mA = charging. */
-+static vm_offset_t ri_spmi_chnl(vm_offset_t core, unsigned ppid);
-+static bool ri_spmi_write(vm_offset_t chnl, unsigned addr, uint8_t val);
-+static vm_offset_t ri_charge_cmd;
-+bool
-+river_battery_sample(unsigned *out_mv, int *out_ma, bool *out_external, bool *out_charging, bool *out_full, unsigned *out_soc)
-+{
-+ if (!ri_power_qg || !ri_charge_chgr || !ri_charge_dcdc) {
-+  vm_offset_t core = ri_map(0x0200f000);
-+  if (!core) return false;
-+  if (!ri_power_qg) ri_power_qg = ri_spmi_obs(core, 0x248);
-+  if (!ri_charge_chgr) ri_charge_chgr = ri_spmi_obs(core, 0x210);
-+  if (!ri_charge_dcdc) ri_charge_dcdc = ri_spmi_obs(core, 0x211);
-+  if (!ri_power_usb) ri_power_usb = ri_spmi_obs(core, 0x213);
-+  if (!ri_charge_cmd) ri_charge_cmd = ri_spmi_chnl(core, 0x210);
-+  if (!ri_power_qg || !ri_charge_chgr || !ri_charge_dcdc) return false;
-+ }
-+ int expected = 0;
-+ if (!__atomic_compare_exchange_n(&ri_power_busy, &expected, 1, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) return false;
-+ uint32_t vi_pair = 0, path = 0, chg_stat = 0;
-+ bool ok = ri_power_read(ri_power_qg, 0xc0, 4, &vi_pair) &&
-+           ri_power_read(ri_charge_dcdc, 0x0b, 1, &path) &&
-+           ri_power_read(ri_charge_chgr, 0x06, 1, &chg_stat);
-+ __atomic_store_n(&ri_power_busy, 0, __ATOMIC_RELEASE);
-+ uint16_t v_raw = (uint16_t)(vi_pair & 0xffffu);
-+ uint16_t i_raw = (uint16_t)((vi_pair >> 16) & 0xffffu);
-+ if (!ok || v_raw == 0x8000u || v_raw == 0) return false;
-+ uint32_t uv = (uint32_t)((194637ULL * (uint64_t)v_raw) / 1000);
-+ unsigned mv = uv / 1000;
-+ if (mv < 2800 || mv > 4600) return false;
-+ int ma = 0;
-+ if (i_raw != 0x8000u) {
-+  int32_t signed_ir = (i_raw & 0x8000u) ? (int32_t)i_raw - 65536 : (int32_t)i_raw;
-+  int32_t ua = (int32_t)((152588LL * signed_ir) / 1000);
-+  ma = -(int)(ua / 1000);
-+ }
-+ bool ext = (path & 0x10u) && (path & 0x01u);
-+ uint32_t st = chg_stat & 7u;
-+ if (ext && ri_charge_cmd && st == 7u) {
-+  printf("RIVER BATT: enabling hardware charging on ext power (chg_stat=%#x)\n", chg_stat);
-+  (void)ri_spmi_write(ri_charge_cmd, 0x42, 1);
-+ }
-+ bool chg = ext && (st >= 1u && st <= 4u);
-+ bool full = ext && (st == 5u);
-+ unsigned soc = full ? 100 : jg30_estimate_soc(mv, ma);
-+ if (out_mv) *out_mv = mv;
-+ if (out_ma) *out_ma = ma;
-+ if (out_external) *out_external = ext;
-+ if (out_charging) *out_charging = chg;
-+ if (out_full) *out_full = full;
-+ if (out_soc) *out_soc = soc;
-+ return true;
-+}
-+
-+static int
-+river_battery_sysctl SYSCTL_HANDLER_ARGS
-+{
-+ unsigned mv = 0, soc = 0; int ma = 0; bool ext = false, chg = false, full = false;
-+ if (!river_battery_sample(&mv, &ma, &ext, &chg, &full, &soc)) return EIO;
-+ char note[160];
-+ snprintf(note, sizeof(note), "voltage_mv=%u amperage_ma=%d external=%d charging=%d full=%d soc=%u",
-+     mv, ma, ext, chg, full, soc);
-+ return sysctl_handle_string(oidp, note, 0, req);
-+}
-+SYSCTL_PROC(_debug, OID_AUTO, river_battery, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
-+            NULL, 0, river_battery_sysctl, "A", "River battery live sample");
-+
- /* On-demand, read-only observer sample. The atomic gate prevents concurrent
-  * readers from racing on the same SPMI observer command registers. */
- static int
 diff --git a/bsd/dev/sweet_usb.c b/bsd/dev/sweet_usb.c
-index 1559184f9..0886b8814 100644
+index 1559184..0886b88 100644
 --- a/bsd/dev/sweet_usb.c
 +++ b/bsd/dev/sweet_usb.c
 @@ -519,6 +519,9 @@ ud_setup(void)
@@ -1277,9 +1151,9 @@ index 1559184f9..0886b8814 100644
  			printf("SWEET USB: disconnect\n");
  		}
  		return;
-diff --git a/bsd/sys/river_apple80211.h b/bsd/sys/river_apple80211.h
+diff --git a/b/bsd/sys/river_apple80211.h b/bsd/sys/river_apple80211.h
 new file mode 100644
-index 000000000..817a1e65c
+index 0000000..817a1e6
 --- /dev/null
 +++ b/bsd/sys/river_apple80211.h
 @@ -0,0 +1,162 @@
@@ -1445,9 +1319,9 @@ index 000000000..817a1e65c
 +#endif
 +
 +#endif /* _SYS_RIVER_APPLE80211_H_ */
-diff --git a/iokit/Kernel/arm/RiverWLAN.cpp b/iokit/Kernel/arm/RiverWLAN.cpp
+diff --git a/b/iokit/Kernel/arm/RiverWLAN.cpp b/iokit/Kernel/arm/RiverWLAN.cpp
 new file mode 100644
-index 000000000..1859fd8aa
+index 0000000..1859fd8
 --- /dev/null
 +++ b/iokit/Kernel/arm/RiverWLAN.cpp
 @@ -0,0 +1,198 @@
@@ -1650,7 +1524,7 @@ index 000000000..1859fd8aa
 +	IOLog("MiniIONetworkStack: published under IOResources\n");
 +}
 diff --git a/iokit/conf/files.arm64 b/iokit/conf/files.arm64
-index b6e162e89..093210ff2 100644
+index b6e162e..093210f 100644
 --- a/iokit/conf/files.arm64
 +++ b/iokit/conf/files.arm64
 @@ -16,6 +16,7 @@ iokit/Kernel/arm/SweetKeyStore.cpp                               optional iokitc
