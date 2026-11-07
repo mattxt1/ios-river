@@ -1,16 +1,8 @@
---- a/iokit/conf/files.arm64
-+++ b/iokit/conf/files.arm64
-@@ -16,6 +16,7 @@
- iokit/Kernel/arm/RiverGPU.cpp                                    optional iokitcpp
- iokit/Kernel/arm/SweetWatchdog.cpp                               optional iokitcpp
- iokit/Kernel/arm/SweetSurface.cpp                                optional iokitcpp
-+iokit/Kernel/arm/RiverWLAN.cpp                                   optional iokitcpp
- iokit/Kernel/arm/SweetFramebuffer.cpp                            optional iokitcpp
- iokit/Kernel/arm/SweetBattery.cpp                                optional iokitcpp
- iokit/Kernel/arm/SweetAMFI.cpp                                   optional iokitcpp
+diff --git a/bsd/conf/files b/bsd/conf/files
+index 2da8bc6fd..d539ad25e 100644
 --- a/bsd/conf/files
 +++ b/bsd/conf/files
-@@ -116,6 +116,7 @@
+@@ -116,6 +116,7 @@ bsd/dev/sweet_cpufreq.c			standard
  bsd/dev/sweet_rpmh.c			standard
  bsd/dev/sweet_spmi.c			standard
  bsd/dev/sweet_usb.c			standard
@@ -18,375 +10,12 @@
  bsd/dev/mem.c				standard
  bsd/dev/munge.c 			optional config_requires_u32_munging
  bsd/dev/unix_startup.c			standard
---- /dev/null
-+++ b/iokit/Kernel/arm/RiverWLAN.cpp
-@@ -0,0 +1,198 @@
-+/*
-+ * RiverWLAN: Apple80211 IOKit registry services and MiniIONetworkStack stand-in
-+ * for Moto G7 (river) WCN36xx Wi-Fi.
-+ */
-+
-+#include <IOKit/IOLib.h>
-+#include <IOKit/IOPlatformExpert.h>
-+#include <IOKit/IOService.h>
-+#include <IOKit/IOUserClient.h>
-+#include <IOKit/IOKitKeys.h>
-+#include <libkern/c++/OSData.h>
-+#include <libkern/c++/OSNumber.h>
-+#include <sys/systm.h>
-+#include <sys/proc.h>
-+
-+extern "C" void RiverWLANStart(const char * interface, const uint8_t * address);
-+extern "C" void MiniIONetworkStackStart(void);
-+
-+class IO80211Controller : public IOService
-+{
-+	OSDeclareDefaultStructors(IO80211Controller);
-+};
-+
-+OSDefineMetaClassAndStructors(IO80211Controller, IOService);
-+
-+class IONetworkInterface : public IOService
-+{
-+	OSDeclareDefaultStructors(IONetworkInterface);
-+};
-+
-+OSDefineMetaClassAndStructors(IONetworkInterface, IOService);
-+
-+class RiverWLAN : public IONetworkInterface
-+{
-+	OSDeclareDefaultStructors(RiverWLAN);
-+
-+public:
-+	virtual IOReturn newUserClient(task_t owningTask, void * securityID, UInt32 type, OSDictionary * properties,
-+	    IOUserClient ** handler) APPLE_KEXT_OVERRIDE;
-+};
-+
-+OSDefineMetaClassAndStructors(RiverWLAN, IONetworkInterface);
-+
-+IOReturn
-+RiverWLAN::newUserClient(task_t owningTask, void * securityID, UInt32 type, OSDictionary * properties, IOUserClient ** handler)
-+{
-+	static unsigned said;
-+	if (said++ < 8) {
-+		IOLog("RiverWLAN: newUserClient type %u requested -> returning kIOReturnUnsupported for fallback to IOCTL path\n", (unsigned)type);
-+	}
-+	return kIOReturnUnsupported;
-+}
-+
-+static IOService *
-+publish(IOService * service, IOService * provider, const char * name)
-+{
-+	if (service == NULL || !service->attach(provider)) {
-+		OSSafeReleaseNULL(service);
-+		return NULL;
-+	}
-+	service->setName(name);
-+	if (!service->start(provider)) {
-+		service->detach(provider);
-+		service->release();
-+		return NULL;
-+	}
-+	service->registerService();
-+	return service;
-+}
-+
-+void
-+RiverWLANStart(const char * interface, const uint8_t * address)
-+{
-+	IOService * platform = IOService::getPlatform();
-+	IO80211Controller * controller = OSTypeAlloc(IO80211Controller);
-+	RiverWLAN * wlan = OSTypeAlloc(RiverWLAN);
-+	OSData * mac;
-+	OSNumber * number;
-+
-+	if (platform == NULL || controller == NULL || wlan == NULL || !controller->init() || !wlan->init()) {
-+		OSSafeReleaseNULL(controller);
-+		OSSafeReleaseNULL(wlan);
-+		IOLog("RiverWLAN: cannot create the services\n");
-+		return;
-+	}
-+	if ((mac = OSData::withBytes(address, 6)) != NULL) {
-+		controller->setProperty("IOMACAddress", mac);
-+		mac->release();
-+	}
-+	controller->setProperty("IOBuiltin", true);
-+	if ((controller = (IO80211Controller *) publish(controller, platform, "RiverWLANController")) == NULL) {
-+		wlan->release();
-+		IOLog("RiverWLAN: controller did not start\n");
-+		return;
-+	}
-+
-+	wlan->setProperty("IOInterfaceName", interface);
-+	wlan->setProperty("BSD Name", interface);
-+	wlan->setProperty("IOInterfaceNamePrefix", "en");
-+	if ((number = OSNumber::withNumber(6ULL, 32)) != NULL) { /* IFT_ETHER */
-+		wlan->setProperty("IOInterfaceType", number);
-+		number->release();
-+	}
-+	if ((number = OSNumber::withNumber((unsigned long long)(interface[2] - '0'), 32)) != NULL) {
-+		wlan->setProperty("IOInterfaceUnit", number);
-+		number->release();
-+	}
-+	wlan->setProperty("IOBuiltin", true);
-+	wlan->setProperty("IOPrimaryInterface", true);
-+	wlan->setProperty("IO80211InterfaceRole", "Infrastructure");
-+	if (publish(wlan, controller, "RiverWLAN") == NULL) {
-+		IOLog("RiverWLAN: service did not start\n");
-+	} else {
-+		wlan->release();
-+	}
-+	controller->release();
-+	IOLog("RiverWLAN: published %s as Apple80211 Infrastructure interface\n", interface);
-+}
-+
-+class IONetworkStack : public IOService
-+{
-+	OSDeclareDefaultStructors(IONetworkStack);
-+
-+public:
-+	virtual bool start(IOService * provider) APPLE_KEXT_OVERRIDE;
-+};
-+
-+OSDefineMetaClassAndStructors(IONetworkStack, IOService);
-+
-+bool
-+IONetworkStack::start(IOService * provider)
-+{
-+	if (!IOService::start(provider)) {
-+		return false;
-+	}
-+	setProperty(kIOUserClientClassKey, "IONetworkStackUserClient");
-+	setName("IONetworkStack");
-+	registerService();
-+	return true;
-+}
-+
-+class IONetworkStackUserClient : public IOUserClient
-+{
-+	OSDeclareDefaultStructors(IONetworkStackUserClient);
-+
-+public:
-+	virtual bool start(IOService * provider) APPLE_KEXT_OVERRIDE;
-+	virtual IOReturn clientClose(void) APPLE_KEXT_OVERRIDE;
-+	virtual IOReturn setProperties(OSObject * properties) APPLE_KEXT_OVERRIDE;
-+};
-+
-+OSDefineMetaClassAndStructors(IONetworkStackUserClient, IOUserClient);
-+
-+bool
-+IONetworkStackUserClient::start(IOService * provider)
-+{
-+	char who[32] = "?";
-+	if (!IOUserClient::start(provider)) {
-+		return false;
-+	}
-+	proc_selfname(who, sizeof(who));
-+	IOLog("MiniIONetworkStack: opened by %s (busy state %u)\n", who,
-+	    (unsigned) IOService::getServiceRoot()->getBusyState());
-+	return true;
-+}
-+
-+IOReturn
-+IONetworkStackUserClient::clientClose(void)
-+{
-+	if (!isInactive()) {
-+		terminate();
-+	}
-+	return kIOReturnSuccess;
-+}
-+
-+IOReturn
-+IONetworkStackUserClient::setProperties(OSObject * properties)
-+{
-+	return kIOReturnUnsupported;
-+}
-+
-+void
-+MiniIONetworkStackStart(void)
-+{
-+	IOService * resources = IOService::getResourceService();
-+	IONetworkStack * stack = OSTypeAlloc(IONetworkStack);
-+
-+	if (resources == NULL || stack == NULL || !stack->init() || !stack->attach(resources)) {
-+		OSSafeReleaseNULL(stack);
-+		IOLog("MiniIONetworkStack: cannot create service\n");
-+		return;
-+	}
-+	if (!stack->start(resources)) {
-+		stack->detach(resources);
-+	}
-+	stack->release();
-+	IOLog("MiniIONetworkStack: published under IOResources\n");
-+}
---- /dev/null
-+++ b/bsd/sys/river_apple80211.h
-@@ -0,0 +1,162 @@
-+#ifndef _SYS_RIVER_APPLE80211_H_
-+#define _SYS_RIVER_APPLE80211_H_
-+
-+#include <sys/types.h>
-+#include <sys/socket.h>
-+
-+#define SIOCSA80211             0x802869c8u     /* _IOW('i', 200, struct apple80211req) */
-+#define SIOCGA80211             0xc02869c9u     /* _IOWR('i', 201, struct apple80211req) */
-+
-+struct apple80211req {
-+	char req_if_name[16];
-+	int32_t req_type;
-+	int32_t req_val;
-+	uint32_t req_len;
-+	user_addr_t req_data __attribute__((aligned(8)));
-+};
-+
-+#define CHANNEL_20MHZ           0x2u
-+#define CHANNEL_2GHZ            0x8u
-+#define CHANNEL_5GHZ            0x10u
-+#define CHANNEL_ACTIVE          0x80u
-+#define CHANNEL_DFS             0x100u
-+
-+#define CIPHER_PMK              6
-+#define CIPHER_PASSPHRASE       10
-+
-+enum {
-+	EVENT_POWER_CHANGED = 1,
-+	EVENT_SSID_CHANGED = 2,
-+	EVENT_BSSID_CHANGED = 3,
-+	EVENT_LINK_CHANGED = 4,
-+	EVENT_ASSOC_DONE = 9,
-+	EVENT_SCAN_DONE = 10,
-+};
-+
-+struct apple80211_channel {
-+	uint32_t version, channel, flags;
-+};
-+
-+struct apple80211_channels {
-+	uint32_t version, count;
-+	struct apple80211_channel channels[401];
-+	uint32_t unused;
-+};
-+
-+struct apple80211_channels_info {
-+	uint8_t unknown_0[12];
-+	uint16_t count;
-+	uint8_t unknown_1[800];
-+	uint8_t number[400], indoor[400], dfs[400], passive[400], wide_40[400], wide_80[400];
-+	uint8_t unknown_2[1602];
-+	uint32_t flags[400];
-+	uint8_t unknown_3[3600];
-+} __attribute__((packed));
-+
-+struct apple80211_scan_request {
-+	uint32_t version, bss_type;
-+	uint8_t bssid[6], unused_0[2];
-+	uint32_t ssid_length;
-+	uint8_t ssid[32];
-+	uint32_t scan_type;
-+	uint32_t phy_mode;
-+	uint16_t dwell_ms, unused_1;
-+	uint32_t rest_ms;
-+	uint32_t channel_count;
-+	struct apple80211_channel channels[400];
-+	uint64_t flags;
-+	uint32_t unused_2;
-+	uint32_t name_count;
-+	uint8_t names[10][56];
-+	uint32_t short_ssid, unused_3;
-+};
-+
-+struct apple80211_scan_result {
-+	uint32_t version;
-+	struct apple80211_channel channel;
-+	uint16_t noise_known;
-+	int16_t noise, snr, rssi;
-+	uint16_t beacon_interval, capability;
-+	uint8_t bssid[6];
-+	uint8_t rate_count, unused_0;
-+	uint32_t rates[15];
-+	uint8_t ssid_length, ssid[32], unused_1[3];
-+	uint32_t age_ms;
-+	uint8_t flags, unused_2;
-+	uint16_t elements_length;
-+	uint8_t elements[1024];
-+};
-+
-+struct apple80211_assoc {
-+	uint32_t version;
-+	uint16_t mode, auth_lower, auth_upper, unused_0;
-+	uint32_t ssid_length;
-+	uint8_t ssid[32];
-+	uint8_t bssid[6], unused_1[2];
-+	uint32_t key_version, key_length, key_cipher;
-+	uint16_t key_flags, key_index;
-+	uint8_t key[64];
-+	uint8_t rest[0x250 - 0x88];
-+};
-+
-+struct apple80211_link_changed {
-+	uint8_t down, unused_0[3];
-+	int32_t rssi;
-+	uint16_t snr, noise;
-+	uint8_t unused_1[4];
-+	uint8_t involuntary, unused_2[3];
-+	uint32_t reason, subreason;
-+	uint8_t unused_3[4];
-+};
-+
-+struct river_apple80211_join_req {
-+	uint8_t ssid[32];
-+	uint8_t ssid_len;
-+	uint8_t bssid[6];
-+	uint8_t passphrase[64];
-+	uint8_t passphrase_len;
-+	uint8_t pmk[32];
-+	bool has_pmk;
-+};
-+
-+struct river_apple80211_target_info {
-+	uint8_t bssid[6];
-+	uint8_t channel;
-+	uint16_t beacon;
-+	uint16_t caps;
-+	uint8_t dtim;
-+	int16_t rssi;
-+	uint8_t nrates;
-+	uint8_t rates[12];
-+	uint8_t rsn_len;
-+	uint8_t rsn[22];
-+	uint8_t ap_rsn_len;
-+	uint8_t ap_rsn[257];
-+};
-+
-+struct river_ifmediareq {
-+	char ifm_name[16];
-+	int ifm_current;
-+	int ifm_mask;
-+	int ifm_status;
-+	int ifm_active;
-+	int ifm_count;
-+};
-+
-+#ifdef KERNEL
-+void river_apple80211_init(void);
-+errno_t river_apple80211_ioctl(u_long command, void *data);
-+void river_apple80211_add_bss(const uint8_t *bssid, const uint8_t *ssid, uint8_t ssid_len,
-+    uint16_t freq, int16_t rssi, uint16_t beacon_int, uint16_t caps,
-+    const uint8_t *ies, uint16_t ies_len);
-+void river_apple80211_clear_scan(void);
-+void river_apple80211_scan_done(int status);
-+void river_apple80211_assoc_done(int status);
-+void river_apple80211_link_changed(bool up, int16_t rssi);
-+bool river_apple80211_scan_pending(void);
-+bool river_apple80211_join_pending(struct river_apple80211_join_req *req);
-+bool river_apple80211_find_target(const struct river_apple80211_join_req *req, struct river_apple80211_target_info *info);
-+void river_pbkdf2_pmk(const char *passphrase, const char *ssid, size_t ssid_len, uint8_t pmk[32]);
-+#endif
-+
-+#endif /* _SYS_RIVER_APPLE80211_H_ */
+diff --git a/bsd/dev/river_apple80211.c b/bsd/dev/river_apple80211.c
+new file mode 100644
+index 000000000..46ff419ae
 --- /dev/null
 +++ b/bsd/dev/river_apple80211.c
-@@ -0,0 +1,678 @@
+@@ -0,0 +1,697 @@
 +/*
 + * river_apple80211.c: Apple80211 ioctl and event engine for Moto G7 river.
 + */
@@ -801,7 +430,8 @@
 +			pending_join.has_pmk = true;
 +			memset_s(pass, sizeof(pass), 0, sizeof(pass));
 +		}
-+		printf("river_apple80211: join req key_len=%u key_cipher=%u has_pmk=%u\n",
++		printf("river_apple80211: join req key_len=%u key_cipher=%u has_pmk=%u
++",
 +		    asked->key_length, asked->key_cipher, pending_join.has_pmk);
 +		join_pending_flag = true;
 +		join_result = 0;
@@ -1083,6 +713,8 @@
 +	error = is_set ? set(request) : get(request);
 +	return error;
 +}
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+index 5460b8256..a313e3228 100644
 --- a/bsd/dev/sweet_keys.c
 +++ b/bsd/dev/sweet_keys.c
 @@ -19,6 +19,9 @@
@@ -1095,7 +727,7 @@
  #include <sys/systm.h>
  #include <kern/clock.h>
  #include <kern/thread.h>
-@@ -845,16 +848,25 @@
+@@ -845,16 +848,25 @@ river_encrypted_inspect(const volatile uint8_t *f, unsigned len, unsigned hlen,
  
  static void river_network_drop(void);
  static void river_network_rx(const volatile uint8_t *,unsigned,unsigned,unsigned,uint32_t);
@@ -1123,7 +755,7 @@
   }
   if ((fc & 0xfcu) == 0xb0 && len >= 30 && river_le16(f+24) == 0 && river_le16(f+26) == 2) {
    river_auth_seen = true; river_auth_status = river_le16(f+28);
-@@ -920,6 +932,17 @@
+@@ -920,6 +932,17 @@ river_rx_inspect(const volatile uint8_t *p)
          river_scan_channel, len, river_rx_probe_ours);
    }
   }
@@ -1141,7 +773,7 @@
   unsigned n;
   for (n = 0; n < river_bss_count; n++) {
    unsigned k;
-@@ -1202,6 +1225,8 @@
+@@ -1202,6 +1225,8 @@ river_scan_xact(vm_offset_t smem, uint32_t info, uint32_t fifo,
    }
    ri_wait(10);
   }
@@ -1150,7 +782,7 @@
   printf("RIVER SCAN: timeout type=%u\n", type);
   return false;
  }
-@@ -1271,8 +1296,14 @@
+@@ -1271,8 +1296,14 @@ river_target_associate(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset
    printf("RIVER JOIN: target unavailable or unsupported; authentication withheld\n");
    return;
   }
@@ -1166,7 +798,7 @@
   uint8_t join[31] = {0};
   memcpy(join+8, river_target.bssid, 6); join[14] = river_target.channel;
   memcpy(join+15, river_test_mac, 6); join[26] = 1; join[30] = 0xbf;
-@@ -1283,9 +1314,11 @@
+@@ -1283,9 +1314,11 @@ river_target_associate(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset
    memcpy(auth+4, river_target.bssid, 6); memcpy(auth+10, river_test_mac, 6);
    memcpy(auth+16, river_target.bssid, 6); auth[26] = 1; /* open-system sequence1 */
    river_auth_seen = false;
@@ -1181,7 +813,7 @@
    printf("RIVER JOIN: authentication accepted=%u response=%u status=%u\n", ok, river_auth_seen, river_auth_status);
   }
   if (ok) {
-@@ -1304,9 +1337,11 @@
+@@ -1304,9 +1337,11 @@ river_target_associate(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset
    }
    memcpy(assoc+n, river_target.rsn, river_target.rsn_len); n += river_target.rsn_len;
    river_assoc_seen = false;
@@ -1196,7 +828,7 @@
    printf("RIVER JOIN: AP association accepted=%u response=%u status=%u AID=%u\n",
        ok, river_assoc_seen, river_assoc_status, river_assoc_aid);
   }
-@@ -1315,6 +1350,7 @@
+@@ -1315,6 +1350,7 @@ river_target_associate(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset
   if (ok) {
    uint8_t sta[124] = {0}; river_fill_sta(sta+8, river_assoc_aid);
    ok = river_scan_xact(smem, info, fifo, ipc, 12, sta, 114);
@@ -1204,7 +836,7 @@
   }
   river_wpa.associated = ok;
   printf("RIVER JOIN: firmware association setup=%u; controlled data port CLOSED, WPA keys absent\n", ok);
-@@ -1322,6 +1358,7 @@
+@@ -1322,6 +1358,7 @@ river_target_associate(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset
    if (river_target_bss != 255) {
     uint8_t del[9] = {0}; del[8] = river_target_bss;
     (void)river_scan_xact(smem, info, fifo, ipc, 18, del, sizeof(del));
@@ -1212,20 +844,22 @@
    }
    (void)river_target_link(smem, info, fifo, ipc, 0);
   }
-@@ -1451,7 +1488,11 @@
+@@ -1447,11 +1484,11 @@ river_wpa_step(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t ipc)
+    * Retransmit M2 only for identical ANonce/replay; reject session changes. */
+   if (flags != 0x008a || n != 99 || river_wpa.keys_installed || river_wpa.stage > 1) goto done;
+   uint8_t zero[32] = {0}; if (river_constant_equal(msg+17, zero, 32)) goto done;
+-  if (!river_wpa.stage) {
++  if (!river_wpa.stage || !river_constant_equal(msg+17, river_wpa.anonce, 32)) {
     read_random(river_wpa.snonce, 32); memcpy(river_wpa.anonce, msg+17, 32);
     memcpy(river_wpa.replay, msg+9, 8); river_derive_ptk(); river_wpa.stage = 1;
 -  } else if (!river_constant_equal(msg+17, river_wpa.anonce, 32) ||
 -      !river_constant_equal(msg+9, river_wpa.replay, 8)) goto done;
-+  } else if (!river_constant_equal(msg+17, river_wpa.anonce, 32)) {
-+   read_random(river_wpa.snonce, 32); memcpy(river_wpa.anonce, msg+17, 32);
-+   memcpy(river_wpa.replay, msg+9, 8); river_derive_ptk(); river_wpa.stage = 1;
 +  } else if (memcmp(msg+9, river_wpa.replay, 8) < 0) goto done;
 +  memcpy(river_wpa.replay, msg+9, 8);
    bool ok = river_wpa_reply(0x010a, msg+9, true, true);
    printf("RIVER WPA: M1 accepted, M2 DMA=%u\n", ok);
    goto done;
-@@ -1521,11 +1559,23 @@
+@@ -1521,11 +1558,23 @@ river_net_output(ifnet_t ifp, mbuf_t m)
   return 0;
  }
  static errno_t
@@ -1250,7 +884,7 @@
   default: return EOPNOTSUPP;
   }
  }
-@@ -1537,7 +1587,7 @@
+@@ -1537,7 +1586,7 @@ river_net_detach(ifnet_t ifp __unused)
  static void
  river_network_create(void)
  {
@@ -1259,7 +893,7 @@
   lck_grp_t *group = lck_grp_alloc_init("river_wifi", LCK_GRP_ATTR_NULL);
   if (!group) return;
   river_net_lock = lck_mtx_alloc_init(group,LCK_ATTR_NULL);
-@@ -1545,7 +1595,7 @@
+@@ -1545,7 +1594,7 @@ river_network_create(void)
   struct ifnet_init_eparams init = {0};
   init.ver=IFNET_INIT_CURRENT_VERSION;init.len=sizeof(init);init.flags=IFNET_INIT_LEGACY;
   init.uniqueid="river-wcn36xx";init.uniqueid_len=sizeof("river-wcn36xx")-1;
@@ -1268,7 +902,7 @@
   init.output=river_net_output;init.demux=ether_demux;init.add_proto=ether_add_proto;
   init.del_proto=ether_del_proto;init.check_multi=ether_check_multi;
   init.framer_extended=ether_frameout_extended;init.ioctl=river_net_ioctl;init.detach=river_net_detach;
-@@ -1560,11 +1610,10 @@
+@@ -1560,11 +1609,10 @@ river_network_create(void)
   ifnet_set_lladdr(river_wifi_ifp,river_test_mac,6);
   bpfattach(river_wifi_ifp,DLT_EN10MB,14);
   errno_t err=proto_plumb(PF_INET,river_wifi_ifp);
@@ -1284,7 +918,7 @@
  }
  static void
  river_network_poll(void)
-@@ -1657,7 +1706,9 @@
+@@ -1657,7 +1705,9 @@ river_wpa_run(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t ipc)
  {
   if (!river_wpa.pmk_ready || !river_wpa.associated) return;
   for (unsigned w = 0; w < 1000 && river_dxe_ready; w++) {
@@ -1295,7 +929,7 @@
   }
   river_dhcp_probe();
   printf("RIVER WPA: initial window complete stage=%u keys-attempted=%u ifnet-published=%u\n",
-@@ -1667,6 +1718,7 @@
+@@ -1667,6 +1717,7 @@ river_wpa_run(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t ipc)
  static void
  river_passive_scan(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t ipc)
  {
@@ -1303,7 +937,7 @@
   river_target_config();
   river_wpa_load();
   uint8_t self[18] = {0}; /* packed add_sta_self_req */
-@@ -1689,7 +1741,7 @@
+@@ -1689,7 +1740,7 @@ river_passive_scan(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t i
   uint8_t finish[53] = {0}; /* packed finish_scan_req, cb_state at byte13 */
   finish[8] = 2; finish[12] = 1;
   bool finished = river_scan_xact(smem, info, fifo, ipc, 10, finish, sizeof(finish));
@@ -1312,7 +946,7 @@
   printf("RIVER SCAN: complete finish=%u RX=%llu bad=%llu beacons=%llu BSS=%u\n",
       finished, river_rx_packets, river_rx_bad, river_rx_beacons, river_bss_count);
   printf("RIVER TX: scan probes submitted=%u DMA-complete=%u probe-responses=%llu addressed-to-us=%llu\n",
-@@ -2787,9 +2839,13 @@
+@@ -2787,9 +2838,13 @@ river_wcnss_probe(void)
      if (!scan_attempted && wlan_start_acked && river_dxe_ready && wcnss_wlan_info && wcnss_wlan_fifo) {
       scan_attempted = true;
       river_passive_scan(smem, wcnss_wlan_info, wcnss_wlan_fifo, ipc_reg2);
@@ -1328,7 +962,7 @@
      }
      static const unsigned tbls[] = { 13, 266 };
      for (unsigned t = 0; t < sizeof(tbls) / sizeof(tbls[0]); t++) {
-@@ -2897,7 +2953,76 @@
+@@ -2897,7 +2952,76 @@ river_wcnss_thread(void *arg, wait_result_t result)
    for (unsigned ticks = 0; river_dxe_ready; ticks++) {
     river_dxe_poll();
     river_network_poll();
@@ -1406,3 +1040,387 @@
      printf("RIVER JOIN: target AP re-discovered; re-associating...\n");
      river_target_associate(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc);
      river_wpa_run(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc);
+diff --git a/bsd/sys/river_apple80211.h b/bsd/sys/river_apple80211.h
+new file mode 100644
+index 000000000..817a1e65c
+--- /dev/null
++++ b/bsd/sys/river_apple80211.h
+@@ -0,0 +1,162 @@
++#ifndef _SYS_RIVER_APPLE80211_H_
++#define _SYS_RIVER_APPLE80211_H_
++
++#include <sys/types.h>
++#include <sys/socket.h>
++
++#define SIOCSA80211             0x802869c8u     /* _IOW('i', 200, struct apple80211req) */
++#define SIOCGA80211             0xc02869c9u     /* _IOWR('i', 201, struct apple80211req) */
++
++struct apple80211req {
++	char req_if_name[16];
++	int32_t req_type;
++	int32_t req_val;
++	uint32_t req_len;
++	user_addr_t req_data __attribute__((aligned(8)));
++};
++
++#define CHANNEL_20MHZ           0x2u
++#define CHANNEL_2GHZ            0x8u
++#define CHANNEL_5GHZ            0x10u
++#define CHANNEL_ACTIVE          0x80u
++#define CHANNEL_DFS             0x100u
++
++#define CIPHER_PMK              6
++#define CIPHER_PASSPHRASE       10
++
++enum {
++	EVENT_POWER_CHANGED = 1,
++	EVENT_SSID_CHANGED = 2,
++	EVENT_BSSID_CHANGED = 3,
++	EVENT_LINK_CHANGED = 4,
++	EVENT_ASSOC_DONE = 9,
++	EVENT_SCAN_DONE = 10,
++};
++
++struct apple80211_channel {
++	uint32_t version, channel, flags;
++};
++
++struct apple80211_channels {
++	uint32_t version, count;
++	struct apple80211_channel channels[401];
++	uint32_t unused;
++};
++
++struct apple80211_channels_info {
++	uint8_t unknown_0[12];
++	uint16_t count;
++	uint8_t unknown_1[800];
++	uint8_t number[400], indoor[400], dfs[400], passive[400], wide_40[400], wide_80[400];
++	uint8_t unknown_2[1602];
++	uint32_t flags[400];
++	uint8_t unknown_3[3600];
++} __attribute__((packed));
++
++struct apple80211_scan_request {
++	uint32_t version, bss_type;
++	uint8_t bssid[6], unused_0[2];
++	uint32_t ssid_length;
++	uint8_t ssid[32];
++	uint32_t scan_type;
++	uint32_t phy_mode;
++	uint16_t dwell_ms, unused_1;
++	uint32_t rest_ms;
++	uint32_t channel_count;
++	struct apple80211_channel channels[400];
++	uint64_t flags;
++	uint32_t unused_2;
++	uint32_t name_count;
++	uint8_t names[10][56];
++	uint32_t short_ssid, unused_3;
++};
++
++struct apple80211_scan_result {
++	uint32_t version;
++	struct apple80211_channel channel;
++	uint16_t noise_known;
++	int16_t noise, snr, rssi;
++	uint16_t beacon_interval, capability;
++	uint8_t bssid[6];
++	uint8_t rate_count, unused_0;
++	uint32_t rates[15];
++	uint8_t ssid_length, ssid[32], unused_1[3];
++	uint32_t age_ms;
++	uint8_t flags, unused_2;
++	uint16_t elements_length;
++	uint8_t elements[1024];
++};
++
++struct apple80211_assoc {
++	uint32_t version;
++	uint16_t mode, auth_lower, auth_upper, unused_0;
++	uint32_t ssid_length;
++	uint8_t ssid[32];
++	uint8_t bssid[6], unused_1[2];
++	uint32_t key_version, key_length, key_cipher;
++	uint16_t key_flags, key_index;
++	uint8_t key[64];
++	uint8_t rest[0x250 - 0x88];
++};
++
++struct apple80211_link_changed {
++	uint8_t down, unused_0[3];
++	int32_t rssi;
++	uint16_t snr, noise;
++	uint8_t unused_1[4];
++	uint8_t involuntary, unused_2[3];
++	uint32_t reason, subreason;
++	uint8_t unused_3[4];
++};
++
++struct river_apple80211_join_req {
++	uint8_t ssid[32];
++	uint8_t ssid_len;
++	uint8_t bssid[6];
++	uint8_t passphrase[64];
++	uint8_t passphrase_len;
++	uint8_t pmk[32];
++	bool has_pmk;
++};
++
++struct river_apple80211_target_info {
++	uint8_t bssid[6];
++	uint8_t channel;
++	uint16_t beacon;
++	uint16_t caps;
++	uint8_t dtim;
++	int16_t rssi;
++	uint8_t nrates;
++	uint8_t rates[12];
++	uint8_t rsn_len;
++	uint8_t rsn[22];
++	uint8_t ap_rsn_len;
++	uint8_t ap_rsn[257];
++};
++
++struct river_ifmediareq {
++	char ifm_name[16];
++	int ifm_current;
++	int ifm_mask;
++	int ifm_status;
++	int ifm_active;
++	int ifm_count;
++};
++
++#ifdef KERNEL
++void river_apple80211_init(void);
++errno_t river_apple80211_ioctl(u_long command, void *data);
++void river_apple80211_add_bss(const uint8_t *bssid, const uint8_t *ssid, uint8_t ssid_len,
++    uint16_t freq, int16_t rssi, uint16_t beacon_int, uint16_t caps,
++    const uint8_t *ies, uint16_t ies_len);
++void river_apple80211_clear_scan(void);
++void river_apple80211_scan_done(int status);
++void river_apple80211_assoc_done(int status);
++void river_apple80211_link_changed(bool up, int16_t rssi);
++bool river_apple80211_scan_pending(void);
++bool river_apple80211_join_pending(struct river_apple80211_join_req *req);
++bool river_apple80211_find_target(const struct river_apple80211_join_req *req, struct river_apple80211_target_info *info);
++void river_pbkdf2_pmk(const char *passphrase, const char *ssid, size_t ssid_len, uint8_t pmk[32]);
++#endif
++
++#endif /* _SYS_RIVER_APPLE80211_H_ */
+diff --git a/iokit/Kernel/arm/RiverWLAN.cpp b/iokit/Kernel/arm/RiverWLAN.cpp
+new file mode 100644
+index 000000000..1859fd8aa
+--- /dev/null
++++ b/iokit/Kernel/arm/RiverWLAN.cpp
+@@ -0,0 +1,198 @@
++/*
++ * RiverWLAN: Apple80211 IOKit registry services and MiniIONetworkStack stand-in
++ * for Moto G7 (river) WCN36xx Wi-Fi.
++ */
++
++#include <IOKit/IOLib.h>
++#include <IOKit/IOPlatformExpert.h>
++#include <IOKit/IOService.h>
++#include <IOKit/IOUserClient.h>
++#include <IOKit/IOKitKeys.h>
++#include <libkern/c++/OSData.h>
++#include <libkern/c++/OSNumber.h>
++#include <sys/systm.h>
++#include <sys/proc.h>
++
++extern "C" void RiverWLANStart(const char * interface, const uint8_t * address);
++extern "C" void MiniIONetworkStackStart(void);
++
++class IO80211Controller : public IOService
++{
++	OSDeclareDefaultStructors(IO80211Controller);
++};
++
++OSDefineMetaClassAndStructors(IO80211Controller, IOService);
++
++class IONetworkInterface : public IOService
++{
++	OSDeclareDefaultStructors(IONetworkInterface);
++};
++
++OSDefineMetaClassAndStructors(IONetworkInterface, IOService);
++
++class RiverWLAN : public IONetworkInterface
++{
++	OSDeclareDefaultStructors(RiverWLAN);
++
++public:
++	virtual IOReturn newUserClient(task_t owningTask, void * securityID, UInt32 type, OSDictionary * properties,
++	    IOUserClient ** handler) APPLE_KEXT_OVERRIDE;
++};
++
++OSDefineMetaClassAndStructors(RiverWLAN, IONetworkInterface);
++
++IOReturn
++RiverWLAN::newUserClient(task_t owningTask, void * securityID, UInt32 type, OSDictionary * properties, IOUserClient ** handler)
++{
++	static unsigned said;
++	if (said++ < 8) {
++		IOLog("RiverWLAN: newUserClient type %u requested -> returning kIOReturnUnsupported for fallback to IOCTL path\n", (unsigned)type);
++	}
++	return kIOReturnUnsupported;
++}
++
++static IOService *
++publish(IOService * service, IOService * provider, const char * name)
++{
++	if (service == NULL || !service->attach(provider)) {
++		OSSafeReleaseNULL(service);
++		return NULL;
++	}
++	service->setName(name);
++	if (!service->start(provider)) {
++		service->detach(provider);
++		service->release();
++		return NULL;
++	}
++	service->registerService();
++	return service;
++}
++
++void
++RiverWLANStart(const char * interface, const uint8_t * address)
++{
++	IOService * platform = IOService::getPlatform();
++	IO80211Controller * controller = OSTypeAlloc(IO80211Controller);
++	RiverWLAN * wlan = OSTypeAlloc(RiverWLAN);
++	OSData * mac;
++	OSNumber * number;
++
++	if (platform == NULL || controller == NULL || wlan == NULL || !controller->init() || !wlan->init()) {
++		OSSafeReleaseNULL(controller);
++		OSSafeReleaseNULL(wlan);
++		IOLog("RiverWLAN: cannot create the services\n");
++		return;
++	}
++	if ((mac = OSData::withBytes(address, 6)) != NULL) {
++		controller->setProperty("IOMACAddress", mac);
++		mac->release();
++	}
++	controller->setProperty("IOBuiltin", true);
++	if ((controller = (IO80211Controller *) publish(controller, platform, "RiverWLANController")) == NULL) {
++		wlan->release();
++		IOLog("RiverWLAN: controller did not start\n");
++		return;
++	}
++
++	wlan->setProperty("IOInterfaceName", interface);
++	wlan->setProperty("BSD Name", interface);
++	wlan->setProperty("IOInterfaceNamePrefix", "en");
++	if ((number = OSNumber::withNumber(6ULL, 32)) != NULL) { /* IFT_ETHER */
++		wlan->setProperty("IOInterfaceType", number);
++		number->release();
++	}
++	if ((number = OSNumber::withNumber((unsigned long long)(interface[2] - '0'), 32)) != NULL) {
++		wlan->setProperty("IOInterfaceUnit", number);
++		number->release();
++	}
++	wlan->setProperty("IOBuiltin", true);
++	wlan->setProperty("IOPrimaryInterface", true);
++	wlan->setProperty("IO80211InterfaceRole", "Infrastructure");
++	if (publish(wlan, controller, "RiverWLAN") == NULL) {
++		IOLog("RiverWLAN: service did not start\n");
++	} else {
++		wlan->release();
++	}
++	controller->release();
++	IOLog("RiverWLAN: published %s as Apple80211 Infrastructure interface\n", interface);
++}
++
++class IONetworkStack : public IOService
++{
++	OSDeclareDefaultStructors(IONetworkStack);
++
++public:
++	virtual bool start(IOService * provider) APPLE_KEXT_OVERRIDE;
++};
++
++OSDefineMetaClassAndStructors(IONetworkStack, IOService);
++
++bool
++IONetworkStack::start(IOService * provider)
++{
++	if (!IOService::start(provider)) {
++		return false;
++	}
++	setProperty(kIOUserClientClassKey, "IONetworkStackUserClient");
++	setName("IONetworkStack");
++	registerService();
++	return true;
++}
++
++class IONetworkStackUserClient : public IOUserClient
++{
++	OSDeclareDefaultStructors(IONetworkStackUserClient);
++
++public:
++	virtual bool start(IOService * provider) APPLE_KEXT_OVERRIDE;
++	virtual IOReturn clientClose(void) APPLE_KEXT_OVERRIDE;
++	virtual IOReturn setProperties(OSObject * properties) APPLE_KEXT_OVERRIDE;
++};
++
++OSDefineMetaClassAndStructors(IONetworkStackUserClient, IOUserClient);
++
++bool
++IONetworkStackUserClient::start(IOService * provider)
++{
++	char who[32] = "?";
++	if (!IOUserClient::start(provider)) {
++		return false;
++	}
++	proc_selfname(who, sizeof(who));
++	IOLog("MiniIONetworkStack: opened by %s (busy state %u)\n", who,
++	    (unsigned) IOService::getServiceRoot()->getBusyState());
++	return true;
++}
++
++IOReturn
++IONetworkStackUserClient::clientClose(void)
++{
++	if (!isInactive()) {
++		terminate();
++	}
++	return kIOReturnSuccess;
++}
++
++IOReturn
++IONetworkStackUserClient::setProperties(OSObject * properties)
++{
++	return kIOReturnUnsupported;
++}
++
++void
++MiniIONetworkStackStart(void)
++{
++	IOService * resources = IOService::getResourceService();
++	IONetworkStack * stack = OSTypeAlloc(IONetworkStack);
++
++	if (resources == NULL || stack == NULL || !stack->init() || !stack->attach(resources)) {
++		OSSafeReleaseNULL(stack);
++		IOLog("MiniIONetworkStack: cannot create service\n");
++		return;
++	}
++	if (!stack->start(resources)) {
++		stack->detach(resources);
++	}
++	stack->release();
++	IOLog("MiniIONetworkStack: published under IOResources\n");
++}
+diff --git a/iokit/conf/files.arm64 b/iokit/conf/files.arm64
+index b6e162e89..093210ff2 100644
+--- a/iokit/conf/files.arm64
++++ b/iokit/conf/files.arm64
+@@ -16,6 +16,7 @@ iokit/Kernel/arm/SweetKeyStore.cpp                               optional iokitc
+ iokit/Kernel/arm/RiverGPU.cpp                                    optional iokitcpp
+ iokit/Kernel/arm/SweetWatchdog.cpp                               optional iokitcpp
+ iokit/Kernel/arm/SweetSurface.cpp                                optional iokitcpp
++iokit/Kernel/arm/RiverWLAN.cpp                                   optional iokitcpp
+ iokit/Kernel/arm/SweetFramebuffer.cpp                            optional iokitcpp
+ iokit/Kernel/arm/SweetBattery.cpp                                optional iokitcpp
+ iokit/Kernel/arm/SweetAMFI.cpp                                   optional iokitcpp

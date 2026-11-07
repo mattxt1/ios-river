@@ -1,6 +1,8 @@
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+index 4c8efa13d..5460b8256 100644
 --- a/bsd/dev/sweet_keys.c
 +++ b/bsd/dev/sweet_keys.c
-@@ -3318,6 +3318,117 @@
+@@ -3318,6 +3318,125 @@ river_qg_compare_sysctl SYSCTL_HANDLER_ARGS
  SYSCTL_PROC(_debug, OID_AUTO, river_qg_compare, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
              NULL, 0, river_qg_compare_sysctl, "A", "River QG read-only transaction comparison");
  
@@ -57,6 +59,8 @@
 + * Voltage is converted using Motorola's 194637/1000 uV per count.
 + * Current is converted using Motorola's 152588/1000 uA per count.
 + * Apple IOPMPowerSource convention: negative mA = discharging, positive mA = charging. */
++static vm_offset_t ri_spmi_chnl(vm_offset_t core, unsigned ppid);
++static bool ri_spmi_write(vm_offset_t chnl, unsigned addr, uint8_t val);
 +static vm_offset_t ri_charge_cmd;
 +bool
 +river_battery_sample(unsigned *out_mv, int *out_ma, bool *out_external, bool *out_charging, bool *out_full, unsigned *out_soc)
@@ -124,9 +128,11 @@
  /* On-demand, read-only observer sample. The atomic gate prevents concurrent
   * readers from racing on the same SPMI observer command registers. */
  static int
+diff --git a/iokit/Kernel/arm/SweetBattery.cpp b/iokit/Kernel/arm/SweetBattery.cpp
+index 86155643c..2364d8f50 100644
 --- a/iokit/Kernel/arm/SweetBattery.cpp
 +++ b/iokit/Kernel/arm/SweetBattery.cpp
-@@ -38,6 +38,9 @@
+@@ -38,6 +38,9 @@ private:
  	    bool capable, bool charging, bool full, bool measured, bool currentValid);
  	void poll(void);
  	bool pollTopaz(void);
@@ -136,7 +142,7 @@
  	static void timerFired(OSObject *owner, IOTimerEventSource *sender);
  	static IOReturn stopPolling(OSObject *owner, void *, void *, void *, void *);
  	static bool readWord(unsigned address, uint16_t *value);
-@@ -106,11 +109,16 @@
+@@ -106,11 +109,16 @@ void
  SweetBattery::publish(unsigned percent, unsigned mv, int ma, bool external,
      bool capable, bool charging, bool full, bool measured, bool currentValid)
  {
@@ -156,7 +162,7 @@
  	setExternalConnected(external);
  	setExternalChargeCapable(capable);
  	setIsCharging(charging);
-@@ -124,8 +132,8 @@
+@@ -124,8 +132,8 @@ SweetBattery::publish(unsigned percent, unsigned mv, int ma, bool external,
  	putBool("FullyCharged", full);
  	putBool("AppleRawExternalConnected", external);
  	putNumber("AppleRawCurrentCapacity", capacity);
@@ -167,7 +173,7 @@
  	putNumber("InstantAmperage", (UInt32)ma);
  	/* iOS battery convention: centidegrees C; fixed 25 C, NOT measured. */
  	putNumber("Temperature", 2500);
-@@ -142,7 +150,7 @@
+@@ -142,7 +150,7 @@ SweetBattery::publish(unsigned percent, unsigned mv, int ma, bool external,
  		const char *keys[] = {kIOBatteryCurrentChargeKey, kIOBatteryCapacityKey,
  		    kIOBatteryVoltageKey, kIOBatteryAmperageKey, kIOBatteryCycleCountKey,
  		    kIOBatteryFlagsKey};
@@ -176,7 +182,7 @@
  		    (UInt32)(kIOBatteryInstalled | (external ? kIOBatteryChargerConnect : 0) |
  		    (charging ? kIOBatteryCharge : 0))};
  		for (unsigned i = 0; i < sizeof(values) / sizeof(values[0]); ++i) {
-@@ -312,10 +320,46 @@
+@@ -312,11 +320,47 @@ SweetBattery::timerFired(OSObject *owner, IOTimerEventSource *sender)
  {
  	SweetBattery *self = OSDynamicCast(SweetBattery, owner);
  	if (self && self->fRunning) {
@@ -188,7 +194,7 @@
  		sender->setTimeoutMS(10000);
  	}
  }
-+
+ 
 +#if defined(RIVER)
 +extern "C" bool river_battery_sample(unsigned *out_mv, int *out_ma, bool *out_external, bool *out_charging, bool *out_full, unsigned *out_soc);
 +
@@ -220,10 +226,11 @@
 +	return true;
 +}
 +#endif
- 
++
  bool
  SweetBattery::start(IOService *provider)
-@@ -324,13 +368,19 @@
+ {
+@@ -324,13 +368,19 @@ SweetBattery::start(IOService *provider)
  		return false;
  	}
  #if defined(RIVER)
