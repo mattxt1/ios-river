@@ -5,6 +5,48 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Audio milestone continuation: diagnostics and reliable capture tests (2026-11-12)
+
+- Started from upstream `river` commit `b7a01b2` in a fresh checkout. Work is on
+  local branch `codex/ios-audio-bringup`; no remote branch has been changed.
+- Kernel patch 0273 committed as `286f85197a3f67c9878a2bfcaf1cf1923cc34c4a`.
+  Local committed-source build passed with Xcode 27.0 (`27A5194q`) and the
+  existing macOS 13.5/22G74 KDK. Kernel SHA-256:
+  `753f2f04940aa919d67a57ad741cbaa96f075c7b6ae3f793edfa4c3759ed0ec6`.
+  The patch adds a read-only codec prerequisite sysctl, explicit placeholder
+  backend status ioctl, and PCM frame alignment checks. It does not implement
+  physical PCM transport or a CS47L35 SPI driver.
+- Userland changes committed as `d589d80`: robust raw I/O, no-overwrite WAV
+  captures, refusal to call synthetic/discard paths physical tests unless
+  `--plumbing` is explicit, and AVAudioRecorder completion/decoded duration
+  verification. Four changed helpers compiled for iOS arm64 with
+  `-Wall -Wextra -Werror` and were ad-hoc signed. Host fault-injection tests
+  passed; see `AUDIO-BRINGUP.md` for scope and commands.
+- User reported the phone in fastboot. Verified product `river`, then temporary
+  booted the existing `river-audio-a5b9d19.img` (26,435,584 bytes, cmdline 562
+  bytes, SHA-256 `3053a8ad0f57a64cb80fe27c12d4d9061a84e67286897cad1538ab09435c79c6`).
+  User confirmed the iOS home screen is responsive. No partition was flashed.
+- Live baseline readback on that existing kernel: `ok=1 devid=0x00035a40
+  rev=0x000000b0 pwr=0x21 vol=0 mute=0 fmt=0x20200233 pll=0x833 gain=0x220
+  irq=0x40406000,0xa000000,0x20000010,0x2000002 g68=0x3 g94=0x3
+  frames=155648`. PLL unlock remains present; this is not audible playback.
+- Installed the new raw/recorder helpers over USB SSH. Raw capture refused the
+  old status-less backend by default. With explicit `--plumbing`, a 0.1-second
+  test produced 4,800 synthetic samples, peak 64/32768, and zero-amplitude
+  playback transferred 4,800 frames. These prove diagnostic behavior only.
+  Subsequent SSH connection timeouts prevented the iOS recorder duration test;
+  it has not been run successfully on hardware in this continuation.
+- Packaged diagnostic image `river-audio-prereq-286f851.img`: 26,505,216
+  bytes; command line 562 bytes; SHA-256
+  `9ceda33f7a757ccb82324ffd6b9ff87d83aa4cb81eb7a5e097821bffc4db1644`.
+  Verified every packaged kernel segment against the rebased built Mach-O.
+  Includes the new survey/raw/AVFoundation helpers. Build artifacts live under
+  the current chat's `outputs/`; private inputs remain outside Git.
+- Next: temporary boot the new diagnostic image and collect
+  `river-audio-survey` and `river-audio-test status`. Then establish verified
+  codec power/clock/SPI ownership and actual ADSP/SLIMbus transport. Physical
+  iOS audio input/output remains the next milestone, not an achieved result.
+
 ## Audio continuation: phone boot and source audit (2026-11-12)
 
 - Booted temporary image `river-audio-a5b9d19.img` via `fastboot boot`: image
