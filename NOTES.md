@@ -71,8 +71,9 @@
   Packaged `river-codec-probe-060f23f.img` (26,556,416 bytes, cmdline 562
   bytes), SHA-256 `1fae029aa05603e9b2056681a8067f689ed3f17f40075f9fd78b4f7befa6ed3d`.
   Every kernel payload segment was verified against the rebased built Mach-O.
-  Includes recorder permission-check source through `7c2e07e`. Awaiting
-  temporary boot and real codec identity result.
+  Includes recorder permission-check source through `7c2e07e`. User returned
+  River to fastboot; the image was temporarily booted successfully. No partition
+  was flashed.
 - Subsequent AVFoundation diagnostics on 0273 reached the kernel input
   (`input_frames=194560`), but the timed completion stalled. An explicit
   monotonic one-second stop reported recorder time 1.027 s and a decoded CAF
@@ -85,9 +86,24 @@
   because those logs could contain sensitive system/privacy data not explicitly
   authorized for transfer. No such logs were collected. Continued with the
   permission enum and scoped audio diagnostics; no privacy state was changed.
-- Next: boot the probe build and explicitly run `river-codec-probe --probe`.
-  Then establish verified codec power/clock/control and actual ADSP/SLIMbus
-  transport. Physical iOS audio input/output remains the next milestone.
+- **Live CS47L35 identity verified on 0274:** baseline passive query returned
+  `not requested`, proving the probe did not run at boot. Explicit
+  `river-codec-probe --probe` returned exit 0 and:
+  `attempted=1 id1=0x6360 id2=0x6360 revision=0x1 cs47l35=1
+  pins_restored=1 pcm_transport=0`.
+- Post-probe survey confirmed GPIO135–138 all restored to cfg `0x1`/inout `0`,
+  reset GPIO68 still cfg `0x203`/inout `0x3`, L6/S4 readiness unchanged, and
+  QUP3 SPI CBCR/source command still `0x80000000`. Subsequent amplifier and
+  backend status reads succeeded: PLL IRQ3 still `0x20000010`,
+  `version=1 flags=0x3 output_frames=155648 input_frames=0`. This verifies
+  identity/control reads and restoration, not audible output or real capture.
+- Next: use the verified SPI control connection to design codec clock/control
+  bring-up from the pinned Madera driver; establish the actual PCM route and
+  ADSP firmware/secure-loading/IPC/SLIMbus ownership before transport writes.
+  The one-shot probe cannot be used as a generic register writer. For iOS
+  microphone tests, use a bundled app with microphone permission granted by
+  the user; the CLI helper currently reports denial. Physical iOS audio
+  input/output remains the next milestone, not an achieved result.
 
 
 ## Audio continuation: phone boot and source audit (2026-11-12)

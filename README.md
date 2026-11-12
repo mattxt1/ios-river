@@ -164,7 +164,7 @@ configuration. Preparing or writing one is destructive to the target partition.
 ## Next work
 
 **Next milestone: real iOS audio input and output.** Patch 0273 adds a read-only
-codec prerequisite survey and explicit synthetic/discard backend status. Patch 0274 adds an explicit, guarded codec identity-only probe. The
+codec prerequisite survey and explicit synthetic/discard backend status. Patch 0274 adds an explicit, guarded codec identity-only probe. Live SPI reads verified CS47L35 ID `0x6360`, revision `0x1`, with pin restoration. The
 updated tests save captures and report incomplete I/O; they do not implement
 physical audio. See [AUDIO-BRINGUP.md](AUDIO-BRINGUP.md) for the current test
 commands, source evidence and remaining codec/ADSP/SLIMbus work.

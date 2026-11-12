@@ -4,6 +4,12 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+**Verified on the phone, 2026-11-12:** CS47L35 identity `0x6360` on two SPI
+reads, revision `0x1`, and restoration of all four SPI pin states. The explicit
+probe returned success on the temporarily booted 0274 kernel. No codec register
+was written. The amplifier still reports PLL unlock and no real PCM transport
+exists. See NOTES.md for image/build hashes and exact readbacks.
+
 ## Current continuation
 
 Patch 0273 adds `debug.river_audio_prereq`, a read-only, on-demand survey:
@@ -91,14 +97,14 @@ Confirm identity/subtype and regulator configuration before changing supplies.
 
 The remaining sequence is:
 
-1. Boot the diagnostic image and save the prerequisite/transport readbacks.
-   Establish rail, clock and bus ownership before any SPI transfer. Audit the
+1. Preserve the recorded prerequisite/transport readbacks and verify them on
+   each new boot. Establish rail, clock and bus ownership before SPI control. Audit the
    existing IRQ GPIO46/63 configuration: patch 0271 writes `0x203`, which has
    TLMM output enable set; Android specifies IRQ inputs. Do not assume current
    pin labels or pinmux writes establish the board-level PCM route.
-2. Run the guarded identity probe and verify the actual CS47L35 ID and pin
-   restoration. Then implement controller-based SPI and codec control, with
-   verified power/reset/clock prerequisites.
+2. Identity and pin restoration have been verified. Implement bounded
+   controller-based SPI and codec clock/control, with verified power/reset/clock
+   prerequisites; preserve the default-off probe for future diagnosis.
 3. Establish ADSP firmware availability, secure loading/ownership, IPC and
    SLIMbus/Q6AFE capture/playback. Do not repeat direct LPASS MMIO accesses;
    they aborted in r153. A replacement AP transport needs its own verified
