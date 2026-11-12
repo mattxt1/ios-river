@@ -45,6 +45,21 @@ audio hardware architecture.
   - Posted `com.apple.system.SystemConfiguration.dns_configuration` and network change Darwin notifications.
   - Verified MobileSafari full internet browsing and TLS connection to `https://apple.com`.
 
+### 4. Hardware Loudspeaker Amplifier & MI2S Pinmux Driver (Patch 0271)
+- **Architecture & Discovery**:
+  - Motorola Moto G7 (`river`) loudspeaker output is driven by an NXP TFA9874 smart audio amplifier connected to BLSP1 QUP2 (`ri_qup2`, MMIO `0x078b6000`, I2C address `0x34`).
+  - Hardware reset pin is TLMM GPIO 94 (`0x0105e000`). Digital audio input connects via Quinary MI2S lines on TLMM GPIOs 88 (CLK), 91 (WS), 92 (DOUT), and 93 (DIN).
+- **Implementation**:
+  - `river_tfa9874_init()` implemented in `bsd/dev/sweet_keys.c`, invoked during `ri_probe()`.
+  - Maps TLMM GPIO 94, drives output high (`0x0105e004` OUT=1, `0x0105e000` OE=1, DRV=6mA, FUNC=0) with 10 ms settle time to release the amplifier from reset.
+  - Maps TLMM MI2S GPIOs and configures Function 1 (`pri_mi2s`).
+  - Probes TFA9874 revision register `0x03` at I2C address `0x34` (fallback `0x35`) using `ri_qup_xfer`.
+  - Reads status register `0x00`, powers up the analog core (`0x04` = 0x0000), configures 8.5V boost (`0x09` = 0x025d), and unmutes digital volume (`0x10` = 0x0000).
+  - Exposes `debug.river_audio_hw` sysctl reporting `ok=%d rev=%#06x status=%#06x`.
+- **Patch Application & CI**:
+  - Resolved hunk line count and trailing/leading whitespace in `0271-river-tfa9874-speaker-amp.patch` (commit `18636be`).
+  - Bundled `river-play-sound`, `river-record-sound`, `river-audio-test`, and `river-net` into `RiverFiles`.
+
 
 ## River Backlight Control and CoreBrightness Integration (2026-11-07)
 
