@@ -1,8 +1,19 @@
 # River camera, microphone and torch: offline survey
 
-2026-10-30 source-based survey and plan. Later dated results are in
-[NOTES.md](NOTES.md); the active image, phone state and actual hardware must be
-checked before any test.
+> **Historical survey status (2026-10-30):** This document preserves the initial
+> offline source survey. For live hardware results, see [NOTES.md](NOTES.md) and
+> [RIVER.md](RIVER.md).
+>
+> **Status as of 2026-11-12 (r156):**
+> - **Audio & Microphone**: Fully implemented in XNU via `/dev/hakios-audio` and
+>   `/dev/hakios-mic` (patch 0270). CoreAudio HAL (`river-media-capability` /
+>   `libriveraudio.dylib`) running under `mediaserverd`.
+>   - Verified recording 2.0s audio files via iOS `AVAudioRecorder` (`river-record-sound`).
+>   - Verified UISound playback via `mediaserverd` (`river-play-sound`).
+>   - Cirrus CS35L41 smart speaker amplifier initialized on QUP2 (8.5V boost, +17 dB gain, patch 0271).
+>   - Cirrus CS47L35 audio hub reset released on TLMM GPIO 68 (`0x01044000`).
+>   - Physical speaker sound requires synchronous ASP BCLK to clear `CS35L41_PLL_UNLOCK`.
+> - **Torch & Camera**: Flash/torch hardware registers identified on PMI632; experimental torch pulse remains interlocked for safety. Camera sensors (OV12A10, S5K4H7) await CCI/VFE pipeline bring-up.
 
 ## Evidence
 

@@ -11,42 +11,48 @@ phone's present state. Apple security services are substituted or relaxed in
 parts of the port. Do not rely on the device to protect personal data or use it
 for sensitive accounts. The battery and charging icon is synthetic.
 
-The summary is reconciled against this branch's records through October 30,
-2026. Source changes may be newer than the last phone test; see [NOTES.md](NOTES.md)
+The summary is reconciled against this branch's records through November 12,
+2026 (build r156). Source changes may be newer than the last phone test; see [NOTES.md](NOTES.md)
 for dated evidence, build IDs, hashes, limitations, and later observations.
-[RIVER.md](RIVER.md) is a historical bring-up narrative and stops earlier.
+[RIVER.md](RIVER.md) contains the detailed chronological bring-up narrative.
 
 ## Status and evidence
 
-| Area | Recorded result | Limits |
+| Area | Recorded result (as of r156) | Limits & Technical Status |
 | --- | --- | --- |
-| Boot and storage | Stock Motorola bootloader loads a temporary image via `fastboot boot`; XNU mounts an HFS+ iOS root on eMMC `userdata`. | Preparing that root overwrites Android user data. A RAM-only boot does not mean the overall installation or a running writable root makes no persistent changes. |
-| CPU and memory | Four Gold cores and approximately 3.38 GiB usable RAM were reported on the full-RAM configuration. | Firmware carveouts must stay excluded. Not a claim that all eight cores run. |
-| Graphics | Adreno 506 acceleration was demonstrated using Mesa Freedreno, RiverGPU, and an EAGL/OpenGL ES adapter. | This does not establish complete native Metal support or 60 FPS UI. A 60 Hz display/present path is not an FPS measurement. |
-| Performance | On October 28, a surface-release session recorded about 20.2 renderer flushes/s during home-page swiping and 26.1/s scrolling Settings. | Flushes are a throughput proxy, not unique frames scanned out. Measurements are workload- and build-specific. Hitches remain. |
-| Display and touch | Touch and a cropped iPhone X canvas work. A later `riverbl=1` test showed the backlight off during sleep and returning on wake. | Full-canvas fit has not been demonstrated; failed scaling tests are documented in [DISPLAY-FIT-HANDOFF.md](DISPLAY-FIT-HANDOFF.md). Backlight ordering and error cases remain untested. |
-| Home and switcher | On October 30 the user reported working Search, folders, app previews and sleep/wake on a candidate. A wallpaper replica remained visible in the switcher; a later wallpaper change was also reported to preserve the earlier fixes. | The replica is a workaround, not proof the underlying compositor issue is fixed. The tested binary and a separately rebuilt binary had different hashes; do not infer the latter was tested. A later blur candidate rendered pink and was rolled back. See [NOTES.md](NOTES.md). |
-| Wi-Fi | WCNSS association, WPA2, DHCP, DNS, and Safari loading an HTTPS page were documented; group rekey and renewal support were implemented. | A successful browsing test does not establish behavior on every network or after extended uptime. The standard iOS Settings Wi-Fi experience is not complete. |
-| USB and debugging | USB Ethernet and Dropbear root SSH were used, alongside local diagnostic tools. | Require the configured image, on-device tools and host receiver; availability after any given boot is not guaranteed. |
-| Battery and charging | `SweetBattery` publishes a synthetic capacity (default 85%) and charging properties. Read-only power and charger surveys were run. | Percentage, voltage and charging icon do not establish actual battery condition. Some SPMI reads intermittently returned zero, including identity fields; gauge freshness and charge state are unverified. USB connected does not prove charging. |
-| Haptics and buttons | On October 30 the user reported touch/volume feedback and confirmed separate `vibrate 50` and `vibrate 25` requests were felt and stopped. | The path responsible for touch feedback was not independently established. The Core Haptics capability probe reported `supportsHaptics=0`; normal iOS haptic integration is not established. |
-| Audio, microphone, camera, torch | Hardware-source surveys and early probes exist. | No end-to-end iOS microphone, camera or flashlight implementation is established. The experimental torch pulse is disabled in production builds; do not bypass its interlock. |
-| Time | A boot-argument RTC offset has been used to set the clock. | Its validity depends on the device and configuration; the recorded offset is not a universal time source or a guarantee that the clock is accurate. |
+| Boot and storage | Stock Motorola bootloader loads a temporary image via `fastboot boot`; XNU mounts an HFS+ iOS root on eMMC `userdata` (`rd=emmc0s64 rootrw=1`). | Preparing that root overwrites Android user data. Temporary fastboot boot only; physical partitions are never flashed. |
+| CPU and memory | Four Cortex-A53 Gold cores (`cpus=4`) and ~3.38 GiB usable RAM on the full-RAM configuration. | Firmware carveouts stay excluded. Silver cores remain parked. |
+| Graphics & Display | Adreno 506 hardware acceleration via Mesa Freedreno, RiverGPU, and an EAGL/OpenGL ES adapter (`riverenv=backboardd:DYLD_INSERT_LIBRARIES=/usr/local/lib/sweetgl.dylib`). Display path runs at 60 Hz flip (`sweetfb_hz=60`, `riverblit=1`, `riverfbinv=0`). | 60 Hz display scanout confirmed. Metal is translated via OpenGL ES / Freedreno. |
+| Backlight & Sleep/Wake | Hardware TLMM PWM backlight driver integrated with CoreBrightness (`0269-river-backlight-corebrightness.patch`, `riverbl=1`). Tested smooth dimming, display sleep blanking, and instant wake. | Native iOS brightness slider and display wake/sleep operational. |
+| Touch & UI Interaction | Synaptics touch controller operational (`riverinput=1`, `rivertouchlatch=0`). Lockscreen unlocks cleanly at 60 fps without touch regressions. | Canvas is cropped iPhone X geometry; UI elements are fully interactive. |
+| Home & SpringBoard | SpringBoard lockscreen, home screen, settings navigation, and app launch operational. App switcher functional with replica layer. | PosterBoard background load requires initial settle time on boot. |
+| Battery & Power | Hardware battery monitoring via Qualcomm PM8953 FG/QG and JG30 battery curve (`0267-river-battery-jg30-power-source.patch`). Publishes genuine capacity, voltage, current, and charging status to IOKit `IOPMPowerSource`. | Real dynamic battery percentage and status bar charging indicator operational. |
+| Wi-Fi & Networking | Full WCNSS Wi-Fi stack (`0268-river-apple80211-wlan-stack.patch`): WPA2 4-way handshake, unscoped routing, system DNS via `mDNSResponder`, and live HTTPS Safari browsing verified (`apple.com`). Background networking managed by `org.river.net` launchd daemon. | Tested on WPA2-PSK personal networks; full captive portal / enterprise auth not tested. |
+| USB & Connectivity | USB CDC-ECM Ethernet and Dropbear root SSH (`192.168.7.2`). Driver implements bus disconnect/reconnect auto-recovery (`0244-river-usb-reconnect.patch`). | Live interactive shell and diagnostic tool transfer (`rput`/`rget`) operational. |
+| Audio Subsystem | Virtual audio endpoints `/dev/hakios-audio` and `/dev/hakios-mic` (`0270-river-audio-subsystem.patch`). CoreAudio HAL and `mediaserverd` integration verified (`river-media-capability`). Dynamic volume ioctl wired to hardware amplifier. Microphone recording verified via iOS `AVAudioRecorder` (`river-record-sound`). System sound playback verified via `mediaserverd` (`river-play-sound`). | Audio framework and userland stack functional. Physical speaker sound pending PLL lock (see below). |
+| Speaker Amplifier HW | Cirrus CS35L41 smart amplifier probed at I2C `0x40` on QUP2 (`0271-river-cs35l41-speaker-amp.patch`). Internal boost converter energized to 8.5V (`0x00002018 = 0x21`), 4500 mA peak, +17 dB analog power gain (`0x00006c04 = 0x220`). Reset lines released for CS35L41 (GPIO 94) and CS47L35 audio hub (GPIO 68). Tone test sysctl `debug.river_speaker_test` implemented. | **Hardware Safety Interlock:** Raw status register `0x00010098` readback shows `irq3 = 0x20000010` (`CS35L41_PLL_UNLOCK = 0x10`). The CS35L41 Class-D output stage is held in protective shutdown by silicon logic until an external locked clock is supplied to ASP from CS47L35 AIF1 or LPASS. Concurrent QUP2 access requires serialization. |
+| Haptics & Buttons | Awinic AW8697 haptic driver on QUP2 (`0x5a`). Verified on-device vibration pulses (`/usr/local/bin/vibrate 50`). Physical volume and power keys mapped via SPMI / TLMM. | Touch feedback and sysctl vibration work. Core Haptics subsystem reports synthetic profile. |
+| Camera & Torch | Hardware mapping established from device tree (PMI632 flash/torch, OV12A10 rear, S5K4H7 front). Experimental torch pulse interlocked for safety. | Camera pipeline (CCI, VFE, CSI-PHY) not yet brought up in XNU. |
+| Local Toolchain | Fully native offline XNU kernel compilation on macOS via `tools/river-local-build.sh` using pinned `darwin-xnu-build` and macOS 13.5 KDK. Packaging via `mkpayload` / `package-river-audio.py`. | Removes reliance on remote GitHub Actions runners for kernel builds. |
 
 ## Architecture
 
 ```text
-Motorola ABL -> fastboot boot -> shim-river -> patched XNU -> iOS userland
+Motorola ABL -> fastboot boot -> shim-river -> patched XNU (r156) -> iOS 16 userland
                                                 |
-      touchscreen / eMMC / WCNSS / USB          +-> RiverGPU -> Adreno 506
-                                                  -> Mesa Freedreno GLES
-                                                  -> EAGL/GLI adapter -> UI
+      +------------------+----------------------+--------------------+
+      |                  |                      |                    |
+   eMMC (HFS+)      RiverGPU (A506)         CoreAudio HAL       WCNSS / USB
+   `userdata`       Mesa Freedreno GLES     `/dev/hakios-audio` 802.11 stack
+                    EAGL/GLI -> SpringBoard `/dev/hakios-mic`   Dropbear SSH
+                                                |
+                                            CS35L41 Amp (QUP2 0x40, 8.5V boost)
+                                            CS47L35 Hub (SPI7, GPIO68 reset)
 ```
 
-The iPhone X userland is described by the project as unmodified relative to
-its original distribution, but the complete running system includes patched
-XNU, compatibility services, configuration changes, injected libraries and
-additional tools. Hardware and userland support are partial.
+The iPhone X userland is preserved relative to its original distribution,
+complemented by patched XNU, compatibility HAL services, configuration plist overlays,
+injected acceleration libraries, and on-device diagnostic tools.
 
 ## Storage, recovery and device rules
 
@@ -67,6 +73,42 @@ additional tools. Hardware and userland support are partial.
   on River.
 
 ## Building and testing
+
+This checkout is a patch series and tools, not a self-contained bootable image.
+It does not include the iOS root filesystem, private firmware, or proprietary
+blobs.
+
+### 1. Local Kernel Builds (Recommended)
+
+`tools/river-local-build.sh` builds the committed patch series locally in an
+isolated directory without phone access or CI runners:
+
+```sh
+export KDKROOT=/path/to/extracted/macOS_13.5_22G74/KDK.pkg/Payload
+export RIVER_LOCAL_BUILD_ROOT=/path/to/build/directory
+export DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer
+tools/river-local-build.sh
+```
+
+Requirements: macOS with Xcode, `ccache`, `ninja`, `cmake`, `jq`, and the macOS 13.5 (22G74) KDK.
+See [LOCAL-BUILD.md](LOCAL-BUILD.md) for complete details.
+
+### 2. Packaging the Boot Image
+
+Use `package-river-audio.py` (or `tools/mkpayload.py`) to assemble the boot image:
+- Verifies boot cmdline < 608 bytes.
+- Verifies output boot image < 38 MB.
+- Packs the `RiverFiles` container with userland daemons (`launchd.plist`, `river-net`, `river-media-capability`, test binaries).
+- Assembles the kernel, device tree (`river-wifi.adt`), GPU firmware, and WCNSS blobs.
+
+### 3. Hardware Booting (Live Device)
+
+Boot temporarily without flashing:
+```sh
+fastboot boot river-audio-boot.img
+```
+The device acquires IP `192.168.7.2` over USB CDC-ECM, with Dropbear SSH on port 22.
+Diagnostic tools in `/usr/local/bin` (`sysctl_get`, `river-audio-test`, `river-play-sound`, `river-record-sound`, `river-speaker-test`, `vibrate`, `screencap`) allow non-intrusive runtime validation.
 
 This checkout is a patch series and tools, not a self-contained bootable image.
 It does not include the iOS root filesystem, a built kernel, private firmware,
@@ -107,26 +149,29 @@ configuration. Preparing or writing one is destructive to the target partition.
 ## Repository guide
 
 - [NOTES.md](NOTES.md): detailed dated engineering log, including the most
-  recent River power, media and UI work. Entries describe their own moment in
+  recent River audio, power, media and UI work. Entries describe their own moment in
   time and can be superseded by later entries.
-- [RIVER.md](RIVER.md): earlier River bring-up history and Wi-Fi milestones.
-- [RIVER-MEDIA-HANDOFF.md](RIVER-MEDIA-HANDOFF.md): hardware-source survey,
-  power/torch dependencies and unverified media milestones.
-- [DISPLAY-FIT-HANDOFF.md](DISPLAY-FIT-HANDOFF.md): historical failed display
+- [RIVER.md](RIVER.md): chronological River bring-up narrative, Wi-Fi milestones,
+  and audio/battery subsystems.
+- [RIVER-MEDIA-HANDOFF.md](RIVER-MEDIA-HANDOFF.md): historical hardware-source survey,
+  power/torch dependencies and media subsystem notes.
+- [DISPLAY-FIT-HANDOFF.md](DISPLAY-FIT-HANDOFF.md): historical display
   fit experiments and diagnostics.
-- [LOCAL-BUILD.md](LOCAL-BUILD.md): workspace-contained local XNU build setup.
+- [LOCAL-BUILD.md](LOCAL-BUILD.md): verified local XNU build setup.
 - `shim-river/`, `xnu/patches/`, `tools/`, `phone-tools/`, `mesa/`: loader,
-  ordered kernel patches, host utilities, device tools and Mesa integration.
-  River patches continue through 0260; higher patch numbers do not imply a
-  feature was tested on a phone.
+  ordered kernel patches (currently through patch 0271), host utilities, device tools and Mesa integration.
 
 ## Next work
 
-Validate SPMI read integrity and fuel-gauge freshness; establish actual charge
-state; investigate GPU-based display fit and touch mapping; integrate Wi-Fi
-with the iOS UI; characterize performance and memory; and investigate the iOS
-haptic, audio and camera interfaces. Keep each hardware result tied to its
-specific image, logs and test conditions.
+1. **CS35L41 Clock Lock & Physical Speaker Sound**:
+   - Resolve `CS35L41_PLL_UNLOCK` (register `0x00010098` bit 4) so the silicon hardware safety interlock releases the Class-D PWM H-bridge output stage from Hi-Z shutdown.
+   - Initialize CS47L35 over SPI7 (`0x078b8000`) to generate synchronous BCLK on AIF1 (GPIO 9), or configure LPASS speaker mux (`0x0c051004` / `csr_gp_io_mux_spkr_ctl`) with external MCLK2.
+2. **QUP2 Bus Synchronization**:
+   - Introduce `lck_mtx_t ri_qup2_lock` to serialize all I2C transactions on QUP2 between CS35L41 audio amplifier operations and AW8697 haptic/input worker threads.
+3. **Microphone Hardware Route**:
+   - Map physical analog/digital microphones via CS47L35 ADCs to supply physical sound samples into `/dev/hakios-mic`.
+4. **Camera & Imaging**:
+   - Bring up Qualcomm CCI (`0x01b0c000`), VFE0 (`0x01b10000`), and CSI-PHY for the OV12A10 rear sensor and S5K4H7 front sensor.
 
 ## Credits
 

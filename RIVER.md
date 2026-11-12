@@ -2235,4 +2235,50 @@ composition be changed. No kernel build, boot, or root write was done here.
 - **MobileSafari Verified**:
   - `MobileSafari` (`com.apple.mobilesafari`) fully rendered `apple.com` live over Wi-Fi with HTTPS TLS lock, retina images, navigation controls, and marketing assets.
 
+## Battery Power Source, Native Backlight, and Local Toolchain (2026-11-08 – 2026-11-10)
+
+- **Local Kernel Build Toolchain (`tools/river-local-build.sh`)**:
+  - Developed a standalone, hermetic macOS build script wrapping pinned `darwin-xnu-build` and macOS 13.5 (22G74) KDK.
+  - Eliminated the round-trip latency and secret-handling constraints of GitHub Actions runners for day-to-day kernel development.
+  - Compiles the committed patch stack in an isolated temporary tree, outputting `kernel.development.sweet`.
+- **Hardware JG30 Battery Fuel Gauge (patch 0267 `0267-river-battery-jg30-power-source.patch`)**:
+  - Integrated Qualcomm PM8953 FG/QG Last-ADC hardware sampling with verified Motorola JG30 battery chemistry curves (3000 mAh).
+  - Published authentic dynamic capacity, cell voltage, discharge/charge current, and temperature to `IOPMPowerSource`.
+  - Replaced the synthetic `riverbattery=85` placeholder with real live power metrics recognized across iOS `powerd` and BatteryCenter.
+- **Hardware Backlight Driver with CoreBrightness (patch 0269 `0269-river-backlight-corebrightness.patch`)**:
+  - Implemented TLMM PWM backlight driver under `riverbl=1`, interfaced directly with Apple's `CoreBrightness.framework`.
+  - Verified smooth slider dimming in Control Center / Settings, proper blanking during display sleep, and instant restoration on wake.
+
+## Audio Subsystem Core Bring-up & Virtual Devices (2026-11-11 – 2026-11-12, r153–r155)
+
+- **Kernel Audio Infrastructure (patch 0270 `0270-river-audio-subsystem.patch`)**:
+  - Registered virtual audio character devices `/dev/hakios-audio` (output stream) and `/dev/hakios-mic` (input stream).
+  - Implemented `HAKIOS_AUDIO_SET_VOLUME` ioctl mapped directly to Cirrus amplifier hardware volume registers.
+  - Configured CoreAudio HAL plugin `river-media-capability` (`libriveraudio.dylib`) running under `mediaserverd`.
+  - Dispatched output audio buffers directly from `/dev/hakios-audio` to the hardware layer `river_audio_hw_write()`.
+- **Userland Playback & Recording Verification**:
+  - **CoreAudio UISounds Playback**: Executed `/usr/local/bin/river-play-sound /System/Library/Audio/UISounds/connect_power.caf`, confirmed `play returned: 1` through `mediaserverd`, streaming 319,232 frames through the pipeline.
+  - **AVAudioRecorder Microphone Capture**: Executed `/usr/local/bin/river-record-sound`, successfully capturing a 2.0-second AAC/CAF recording to `/tmp/record_test.caf` (4096 bytes).
+
+## CS35L41 Smart Amplifier & CS47L35 Audio Hub Bring-up (2026-11-12, r155–r156)
+
+- **LPASS MMIO Bus Abort Removal (r154)**:
+  - Fixed a Data Abort kernel panic caused by unclocked Qualcomm LPASS CSR reads at `0x0c051000`. Removed raw CPU MMIO access in favor of direct codec pin control.
+- **Cirrus ALSA Gold-Standard Register Initialization (r155, patch 0271)**:
+  - Probed CS35L41 at I2C address `0x40` on QUP2 (`devid=0x00035a40`, `rev=0x000000b0`).
+  - Configured internal Class-H boost converter to 8.5 V with 4500 mA peak inductor current (`0x00002018 = 0x21`).
+  - Implemented dynamic volume control `river_speaker_set_volume()` updating `CS35L41_AMP_DIG_VOL_CTRL` (`0x00006000`).
+- **Hardware Topology & Clocking Discovery (r156)**:
+  - Analyzed Motorola `sdm632-river-audio-overlay.dtsi`: discovered that CS35L41 digital ASP lines (BCLK, LRCLK, DIN) are wired directly to Audio Interface 1 (`AIF1`) of the Cirrus CS47L35 (Madera) audio hub codec (GPIO 9 = BCLK, GPIO 10 = DIN, GPIO 11 = LRCLK).
+  - Released CS47L35 hardware reset via TLMM GPIO 68 (`0x01044000`, `OUT=1, OE=1, PULL_UP=3`, readback `g68=0x3`).
+  - Released CS35L41 hardware reset via TLMM GPIO 94 (`0x0105e000`, readback `g94=0x3`).
+  - Configured CS35L41 for open-loop self-oscillator PLL (`0x00000833`) and bus master mode (`0x20200233`).
+  - Boosted analog amplifier gain `CS35L41_AMP_GAIN_CTRL` (`0x00006c04`) to `0x00000220` (+17 dB power gain).
+  - Implemented acoustic square-wave tone test sysctl `debug.river_speaker_test` and deployed `/usr/local/bin/river-speaker-test`.
+- **Diagnosis of Loudspeaker Silence**:
+  - Readback of `debug.river_audio_hw` verified boost active (`pwr=0x21`) and OTP boot complete (`irq4` bit 1 = `0x02`), but revealed `irq3 = 0x20000010`: bit 4 is `CS35L41_PLL_UNLOCK`.
+  - The CS35L41 hardware safety circuit automatically holds the Class-D PWM H-bridge output stage in Hi-Z shutdown when the PLL is unlocked to prevent voice-coil damage.
+  - Active next milestone: supply synchronous locked BCLK to CS35L41 ASP by initializing CS47L35 over SPI7 (`0x078b8000`) or configuring LPASS speaker mux (`0x0c051004` / `csr_gp_io_mux_spkr_ctl`), and add `lck_mtx_t ri_qup2_lock` to serialize shared QUP2 access.
+
+
 

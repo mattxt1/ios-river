@@ -14,7 +14,19 @@ symbols. Runner selection and availability depend on GitHub Actions; consult
 the workflow rather than assuming an ARM host.
 
 The usual development artifact for the SWEET machine configuration is
-`kernel.development.sweet`. The workflow packages `xnu-kernel` and a separate
+`kernel.development.sweet`.
+
+### Local Builds (Recommended)
+
+`tools/river-local-build.sh` builds the committed patch series locally on macOS
+using the macOS 13.5 (22G74) KDK and pinned `darwin-xnu-build`. It enforces
+that changes to `xnu/patches` are committed first, builds in an isolated temporary
+tree, and outputs `kernel.development.sweet`. See [LOCAL-BUILD.md](../LOCAL-BUILD.md)
+for complete usage and requirements.
+
+### Remote Builds (GitHub Actions)
+
+The workflow packages `xnu-kernel` and a separate
 build-tree artifact, with limited retention. Review the run and artifact
 provenance before downloading or packaging; a build result is not a hardware
 boot result. See [README.md](../README.md) and [NOTES.md](../NOTES.md) for

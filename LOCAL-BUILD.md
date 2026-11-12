@@ -37,10 +37,11 @@ Commit the intended patch changes first; the helper refuses uncommitted or
 untracked files under `xnu/patches` because it builds from `HEAD`.
 
 ```sh
-export KDKROOT=/absolute/path/to/extracted/KDK
-export RIVER_LOCAL_BUILD_ROOT=/absolute/path/to/writable/river-builds
-# Optional: choose an installed Xcode without changing xcode-select.
-# export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+# Example environment configuration for this workspace:
+export KDKROOT=/Users/matttyson/Documents/Codex/2026-11-05/d-2/work/local-build/kdk-full/KDK.pkg/Payload
+export RIVER_LOCAL_BUILD_ROOT=/Users/matttyson/Documents/Codex/2026-11-05/d-2/work/local-build
+export DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer
+
 tools/river-local-build.sh
 ```
 
