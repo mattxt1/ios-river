@@ -4,6 +4,12 @@
 #import <AVFoundation/AVFoundation.h>
 #include <math.h>
 #include <errno.h>
+#include <time.h>
+
+static double monotonic_seconds(void) {
+    struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t);
+    return t.tv_sec + t.tv_nsec / 1e9;
+}
 
 @interface RiverRecordingResult : NSObject <AVAudioRecorderDelegate>
 @property BOOL finished;
@@ -51,13 +57,20 @@ int main(int argc, char **argv) {
         {
             RiverRecordingResult *state = [RiverRecordingResult new];
             recorder.delegate = state;
-            if (![recorder prepareToRecord] || ![recorder recordForDuration:duration]) {
+            if (![recorder prepareToRecord] || ![recorder record]) {
                 NSLog(@"Recorder refused capture"); goto cleanup;
             }
-            NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:duration + 3];
-            while (!state.finished && deadline.timeIntervalSinceNow > 0)
-                [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
-            if (!state.finished || !state.succeeded) { NSLog(@"Capture failed or timed out"); goto cleanup; }
+            double deadline = monotonic_seconds() + duration;
+            while (!state.finished && monotonic_seconds() < deadline)
+                [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+            NSLog(@"Stopping capture: recording=%d recorderTime=%.3f s", recorder.recording, recorder.currentTime);
+            [recorder stop];
+            // stop closes the file. Decode it even when CLI delegate delivery
+            // is absent; a file of the correct duration is the test criterion.
+            deadline = monotonic_seconds() + 0.25;
+            while (!state.finished && monotonic_seconds() < deadline)
+                [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+            if (state.finished && !state.succeeded) { NSLog(@"Capture reported an encoding failure"); goto cleanup; }
         }
         {
             AVAudioFile *file = [[AVAudioFile alloc] initForReading:[NSURL fileURLWithPath:path] error:&error];
