@@ -4113,3 +4113,11 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
     - Configured LPASS CSR registers: `LPASS_CSR_GP_IO_MUX_SPKR_CTL` (`0x0c051004` |= `0x00010000`) and `LPASS_CSR_GP_IO_LPAIF_PRI_PCM_PRI_MODE_MUXSEL` (`0x0c055000` = `0x00000001`).
     - Added `river_audio_hw_write()` tracking hardware frame counters.
     - Expanded `debug.river_audio_hw` sysctl to report `ok`, `devid`, `rev`, `pwr`, `vol`, `mute`, `fmt`, `csr`, and `frames`.
+
+- **Local Kernel Build & Packaging (r153)**:
+  - Build directory: `/Users/matttyson/Documents/Codex/2026-11-05/d-2/work/local-build/river-530d2859ba36-oOzFos`.
+  - Kernel binary: `kernel.development.sweet` (SHA256: `0a2af5fbdefe45cdf8eb39412ca6670f153f7d3ca1be6f0d22b51899eaeb9ecd`).
+  - Output boot image: `/Users/matttyson/Documents/Codex/2026-11-05/river-battery-implementation/work/river-audio-boot.img`.
+  - Image size: 26,433,536 bytes (< 38 MB limit).
+  - Boot cmdline: 562 bytes (< 608 byte limit).
+  - Verified audio symbols via nm: `_river_audio_hw_write`, `_ri_cs35l41_dig_vol`, `_ri_cs35l41_out_mute`, `_ri_cs35l41_sp_fmt`, `_ri_csr_spkr_mux`.
