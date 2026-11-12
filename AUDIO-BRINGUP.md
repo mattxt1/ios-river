@@ -10,6 +10,11 @@ probe returned success on the temporarily booted 0274 kernel. No codec register
 was written. The amplifier still reports PLL unlock and no real PCM transport
 exists. See NOTES.md for image/build hashes and exact readbacks.
 
+**0276 live result:** FLL lock still times out, but FLL shutdown, complete clock
+register restoration and SPI pin restoration all verified. PM8953 GPIO6 reads
+as input mode 0; the Android overlay specifies DTEST3 clock output. Trace that
+reference source before changing PMIC routing. Physical audio remains absent.
+
 ## Current continuation
 
 Patch 0273 adds `debug.river_audio_prereq`, a read-only, on-demand survey:

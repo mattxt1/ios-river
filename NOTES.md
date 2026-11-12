@@ -5,6 +5,31 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Corrected codec clock test on hardware (2026-11-12)
+
+- User returned River to fastboot. Verified product and corrected image hash
+  `9a23f274a15dde0cad69e151d362543b0721dcaa6a5f5675acaf00f5e4c84a6a`,
+  then temporary booted `river-codec-clock-a889f51.img` successfully. No flash.
+- Baseline read-only snapshot matched the previous disabled codec clocks.
+  Added PMIC GPIO6 readback: `mclk_ok=1 type=0x10 subtype=0x1 mode=0
+  vin=0 pull=0x4 source=0 enable=0x80`. The source-derived clock pin is in
+  input mode, not the DTEST3 output specified in the River Android overlay.
+  This is a concrete routing prerequisite to investigate, not a frequency
+  measurement or proof that changing the mux alone will supply a clock.
+- Explicit isolated 0276 FLL test: `phase=lock locked=0 raw=0 fll_off=1
+  clock_restored=1 pins_restored=1 error=60 write_reg=0 write_want=0
+  write_got=0 restore_reg=0 restore_want=0 restore_got=0 pcm_transport=0`.
+  Exit 1/ETIMEDOUT is expected for lack of lock; cleanup fully verified.
+- Full post-test snapshot exactly matched baseline: `clk32=0x2 sys=0x404
+  async=0x305 dsp=0x305 ctl1=0x2 n=0x8 theta=0x18 lambda=0x7d
+  ratio=0 ref=0 gain=0 phase=0x2906 sync1=0 sync7=1 mask1=0x100
+  mask2=0x100 raw=0`; PMIC GPIO6 unchanged; pins restored. PCM status
+  `version=1 flags=0x3 output_frames=0 input_frames=0`.
+- Next: trace PM8953 DTEST3 source/clock ownership and the exact GPIO6 mux
+  configuration before a bounded route-enable test. Preserve verified codec
+  clock and GPIO restoration. No SYSCLK/AIF/analog output was enabled in
+  this test; real speaker/microphone transport remains unimplemented.
+
 ## Codec clock continuation (2026-11-12)
 
 - User instructed continuation from `7083cbb`; working on local branch
