@@ -15,7 +15,7 @@ new file mode 100644
 index 0000000..5c724af
 --- /dev/null
 +++ b/bsd/dev/river_audio.c
-@@ -0,0 +1,278 @@
+@@ -0,0 +1,281 @@
 +/*
 + * river_audio.c: /dev/hakios-audio and /dev/hakios-mic devices for Moto G7 river.
 + */
@@ -181,6 +181,9 @@ index 0000000..5c724af
 +	river_vol_muted = vol->muted != 0;
 +	river_vol_gen++;
 +	lck_mtx_unlock(&river_audio_lock);
++
++	extern void river_speaker_set_volume(uint32_t below_eighths, bool muted);
++	river_speaker_set_volume(below, river_vol_muted);
 +
 +	printf("RIVER AUDIO: volume set: %s%.1f dB under maximum\n",
 +	    vol->muted ? "(muted) " : "", below / 8.0);
