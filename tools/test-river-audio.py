@@ -22,10 +22,26 @@ with tempfile.TemporaryDirectory(prefix="river-audio-tests-") as tmp:
     section = patch.split("diff --git a/bsd/dev/river_codec_probe.h", 1)[1]
     added = "\n".join(line[1:] for line in section.splitlines()
                        if line.startswith("+") and not line.startswith("+++")) + "\n"
+    dev = Path(tmp) / "bsd/dev"
+    dev.mkdir(parents=True)
+    (dev / "river_codec_probe.h").write_text(added)
+    subprocess.run(["git", "apply", "--include=bsd/dev/river_codec_probe.h",
+                    str(root / "xnu/patches/0275-river-codec-clock-test.patch")], cwd=tmp, check=True)
+    added = (dev / "river_codec_probe.h").read_text()
     # Exercise the probe itself; the sysctl wrappers use XNU-only types.
     added = added.split("static int\nriver_codec_probe_sysctl", 1)[0]
     (Path(tmp) / "codec-probe-added.h").write_text(added)
     binary = Path(tmp) / "codec-probe"
     subprocess.run(["cc", "-O2", "-Wall", "-Wextra", "-Werror", "-I", tmp,
                     str(root / "tools/tests/river-codec-probe-host.c"), "-o", str(binary)], check=True)
+    subprocess.run([str(binary)], check=True)
+    patch = (root / "xnu/patches/0275-river-codec-clock-test.patch").read_text()
+    section = patch.split("diff --git a/bsd/dev/river_codec_clock.h", 1)[1]
+    added = "\n".join(line[1:] for line in section.splitlines()
+                       if line.startswith("+") and not line.startswith("+++")) + "\n"
+    added = added.split("static int\nriver_codec_clock_sysctl", 1)[0]
+    (Path(tmp) / "codec-clock-added.h").write_text(added)
+    binary = Path(tmp) / "codec-clock"
+    subprocess.run(["cc", "-O2", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function", "-I", tmp,
+                    str(root / "tools/tests/river-codec-clock-host.c"), "-o", str(binary)], check=True)
     subprocess.run([str(binary)], check=True)

@@ -1,0 +1,313 @@
+diff --git a/bsd/dev/river_codec_probe.h b/bsd/dev/river_codec_probe.h
+--- a/bsd/dev/river_codec_probe.h
++++ b/bsd/dev/river_codec_probe.h
+@@ -1,7 +1,8 @@
+-/* One-shot, identity-only CS47L35 SPI probe using idle TLMM pins.
++/* Guarded CS47L35 GPIO SPI control and one-shot identity probe.
+  * Motorola 2dba45b8: mode 0, BE 32-bit address + 16 pad + BE 16-bit data.
+  * regmap-spi read flag is 0x80 in the first address byte; silicon ID 0x6360.
+- * No codec register writes, reset changes, clocks, regulator votes or LPASS.
++ * Identity reads never write the codec. The separately requested clock test
++ * is in river_codec_clock.h. No AP clocks, reset, regulator votes or LPASS.
+  */
+ static LCK_GRP_DECLARE(ri_codec_grp, "river-codec-probe");
+ static LCK_MTX_DECLARE(ri_codec_lock, &ri_codec_grp);
+@@ -46,20 +47,21 @@
+  return value;
+ }
+ 
++struct ri_codec_saved_pins { uint32_t cfg[4], latch[4]; };
++
++/* All codec operations share this ownership check and pin restoration path. */
+ static int
+-ri_codec_probe_once(void)
++ri_codec_bus_take(struct ri_codec_saved_pins *saved, char *note, size_t note_size)
+ {
+  const unsigned ppid[2] = { 0x145, 0x11d };
+  const uint32_t types[2] = { 0x21, 0x3 }, subs[2] = { 0x2a, 0xa };
+- uint32_t cfg[4], latch[4];
+- if (ri_codec_attempted) return EALREADY;
+  if (!ri_speaker_ok) {
+-  snprintf(ri_codec_note, sizeof(ri_codec_note), "blocked: speaker/reset initialization incomplete");
++  snprintf(note, note_size, "blocked: speaker/reset initialization incomplete");
+   return EBUSY;
+  }
+  if (!ri_codec_core) ri_codec_core = ri_map(0x0200f000);
+  if (!ri_codec_core || ri_rd(ri_codec_core, 0) != 0x20010000) {
+-  snprintf(ri_codec_note, sizeof(ri_codec_note), "blocked: unsupported SPMI controller");
++  snprintf(note, note_size, "blocked: unsupported SPMI controller");
+   return ENXIO;
+  }
+  /* These exact type/subtype and ready/enabled bits were observed in the
+@@ -74,7 +76,7 @@
+        !ri_spmi_read(ri_codec_rail[i], 8, 1, &status) ||
+        !ri_spmi_read(ri_codec_rail[i], 0x46, 1, &enable) ||
+        type != types[i] || sub != subs[i] || !(status & 0x80) || !(enable & 0x80)) {
+-    snprintf(ri_codec_note, sizeof(ri_codec_note), "blocked: rail PPID %#x not identified/ready/enabled", ppid[i]);
++    snprintf(note, note_size, "blocked: rail PPID %#x not identified/ready/enabled", ppid[i]);
+     return EIO;
+    }
+   }
+@@ -85,23 +87,22 @@
+      ri_rd(ri_codec_reset, 0) != 0x203 || (ri_rd(ri_codec_reset, 4) & 3) != 3 ||
+      ri_rd(ri_codec_clock, 0) != 0x80000000 ||
+      ri_rd(ri_codec_clock, 8) != 0x80000000) {
+-  snprintf(ri_codec_note, sizeof(ri_codec_note), "blocked: reset or SPI controller clock state changed");
++  snprintf(note, note_size, "blocked: reset or SPI controller clock state changed");
+   return EBUSY;
+  }
+  for (unsigned i = 0; i < 4; i++) {
+   if (!ri_codec_pin[i]) ri_codec_pin[i] = ri_map(0x01087000 + i * 0x1000);
+   if (!ri_codec_pin[i]) {
+-   snprintf(ri_codec_note, sizeof(ri_codec_note), "blocked: SPI pin mapping failed");
++   snprintf(note, note_size, "blocked: SPI pin mapping failed");
+    return ENXIO;
+   }
+-  cfg[i] = ri_rd(ri_codec_pin[i], 0);
+-  latch[i] = ri_rd(ri_codec_pin[i], 4) & 2;
+-  if (cfg[i] != 1) {
+-   snprintf(ri_codec_note, sizeof(ri_codec_note), "blocked: GPIO%u is not in observed idle input state", 135 + i);
++  saved->cfg[i] = ri_rd(ri_codec_pin[i], 0);
++  saved->latch[i] = ri_rd(ri_codec_pin[i], 4) & 2;
++  if (saved->cfg[i] != 1) {
++   snprintf(note, note_size, "blocked: GPIO%u is not in observed idle input state", 135 + i);
+    return EBUSY;
+   }
+  }
+- ri_codec_attempted = 1;
+  /* Set output latches before enabling drivers; keep CS high while setting
+   * CLK/MOSI direction. MISO stays an input throughout. */
+  ri_wr(ri_codec_pin[1], 4, 2);
+@@ -112,20 +113,38 @@
+  ri_wr(ri_codec_pin[2], 0, 0x200);
+  ri_wr(ri_codec_pin[3], 0, 0);
+  delay(10);
+- uint16_t id1 = ri_codec_id_read(0), id2 = ri_codec_id_read(0);
+- uint16_t revision = ri_codec_id_read(1);
++ return 0;
++}
++
++static bool
++ri_codec_bus_release(const struct ri_codec_saved_pins *saved)
++{
+  /* Release every driver before restoring latches/configuration. No early
+   * return is permitted between first pin write and this cleanup. */
+  ri_wr(ri_codec_pin[1], 4, 2);
+  for (unsigned i = 0; i < 4; i++) ri_wr(ri_codec_pin[i], 0, 0);
+  for (unsigned i = 0; i < 4; i++) {
+-  ri_wr(ri_codec_pin[i], 4, latch[i]);
+-  ri_wr(ri_codec_pin[i], 0, cfg[i]);
++  ri_wr(ri_codec_pin[i], 4, saved->latch[i]);
++  ri_wr(ri_codec_pin[i], 0, saved->cfg[i]);
+  }
+  bool restored = true;
+  for (unsigned i = 0; i < 4; i++)
+-  if (ri_rd(ri_codec_pin[i], 0) != cfg[i] ||
+-      (ri_rd(ri_codec_pin[i], 4) & 2) != latch[i]) restored = false;
++  if (ri_rd(ri_codec_pin[i], 0) != saved->cfg[i] ||
++      (ri_rd(ri_codec_pin[i], 4) & 2) != saved->latch[i]) restored = false;
++ return restored;
++}
++
++static int
++ri_codec_probe_once(void)
++{
++ if (ri_codec_attempted) return EALREADY;
++ struct ri_codec_saved_pins saved;
++ int error = ri_codec_bus_take(&saved, ri_codec_note, sizeof(ri_codec_note));
++ if (error) return error;
++ ri_codec_attempted = 1;
++ uint16_t id1 = ri_codec_id_read(0), id2 = ri_codec_id_read(0);
++ uint16_t revision = ri_codec_id_read(1);
++ bool restored = ri_codec_bus_release(&saved);
+  bool matched = id1 == 0x6360 && id2 == id1;
+  snprintf(ri_codec_note, sizeof(ri_codec_note),
+      "attempted=1 id1=%#x id2=%#x revision=%#x cs47l35=%u pins_restored=%u pcm_transport=0",
+@@ -158,3 +177,5 @@
+ }
+ SYSCTL_PROC(_debug, OID_AUTO, river_codec_probe_result, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
+             NULL, 0, river_codec_probe_result_sysctl, "A", "River codec identity probe result");
++
++#include "river_codec_clock.h"
+diff --git a/bsd/dev/river_codec_clock.h b/bsd/dev/river_codec_clock.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/river_codec_clock.h
+@@ -0,0 +1,177 @@
++/* Isolated CS47L35 FLL1 test: 32768 Hz MCLK2 -> requested 98.304 MHz.
++ * Recipe: Motorola 2dba45b8 msm8952-slimbus.c (board clocks), madera.c;
++ * Cirrus MCU 82ba920b cs47l35.c/spec.h (integer gain and phase control).
++ * No SYSCLK/DSPCLK selection, AIF enable, analog output or amplifier writes.
++ */
++static const uint16_t ri_clock_regs[] = {
++ 0x100, 0x101, 0x112, 0x120, 0x171, 0x172, 0x173, 0x174,
++ 0x175, 0x176, 0x179, 0x17a, 0x17f, 0x185, 0x1841, 0x1941
++};
++enum { RC_32K, RC_SYS, RC_ASYNC, RC_DSP, RC_CTL1, RC_N, RC_THETA, RC_LAMBDA,
++       RC_RATIO, RC_REF, RC_GAIN, RC_PHASE, RC_SYNC1, RC_SYNC7, RC_MASK1, RC_MASK2,
++       RC_COUNT };
++static int ri_clock_surveyed, ri_clock_attempted;
++static char ri_clock_note[1024] = "not requested";
++
++static bool
++ri_clock_read_allowed(uint16_t reg)
++{
++ if (reg == 0 || reg == 1 || reg == 0x1881) return true;
++ for (unsigned i = 0; i < RC_COUNT; i++) if (reg == ri_clock_regs[i]) return true;
++ return false;
++}
++static bool
++ri_clock_write_allowed(uint16_t reg)
++{
++ /* Restrict writes to the FLL controls actually used by this experiment. */
++ return reg == 0x171 || reg == 0x172 || reg == 0x173 || reg == 0x174 ||
++        reg == 0x175 || reg == 0x176 || reg == 0x179 || reg == 0x17a || reg == 0x185;
++}
++static uint16_t
++ri_clock_read(uint16_t reg)
++{
++ if (!ri_clock_read_allowed(reg)) return 0xffff;
++ ri_wr(ri_codec_pin[1], 4, 0); delay(5);
++ (void)ri_codec_byte(0x80); (void)ri_codec_byte(0);
++ (void)ri_codec_byte((uint8_t)(reg >> 8)); (void)ri_codec_byte((uint8_t)reg);
++ (void)ri_codec_byte(0); (void)ri_codec_byte(0);
++ uint16_t value = (uint16_t)ri_codec_byte(0) << 8;
++ value |= ri_codec_byte(0);
++ ri_wr(ri_codec_pin[1], 4, 2); delay(5);
++ return value;
++}
++static bool
++ri_clock_write(uint16_t reg, uint16_t value)
++{
++ if (!ri_clock_write_allowed(reg)) return false;
++ ri_wr(ri_codec_pin[1], 4, 0); delay(5);
++ (void)ri_codec_byte(0); (void)ri_codec_byte(0);
++ (void)ri_codec_byte((uint8_t)(reg >> 8)); (void)ri_codec_byte((uint8_t)reg);
++ (void)ri_codec_byte(0); (void)ri_codec_byte(0);
++ (void)ri_codec_byte((uint8_t)(value >> 8)); (void)ri_codec_byte((uint8_t)value);
++ ri_wr(ri_codec_pin[1], 4, 2); delay(5);
++ /* CTRL_UPD is a self-clearing request, not part of the stable N value. */
++ uint16_t mask = reg == 0x172 ? 0x7fff : 0xffff;
++ return (ri_clock_read(reg) & mask) == (value & mask);
++}
++static bool
++ri_clock_wait_lock(bool wanted, uint16_t *last)
++{
++ for (unsigned i = 0; i < 25; i++) {
++  *last = ri_clock_read(0x1881);
++  if (*last != 0xffff && ((*last & 0x100) != 0) == wanted) return true;
++  ri_wait(10);
++ }
++ return false;
++}
++
++static int
++ri_clock_run(bool test)
++{
++ if ((test && ri_clock_attempted) || (!test && ri_clock_surveyed)) return EALREADY;
++ struct ri_codec_saved_pins pins;
++ int error = ri_codec_bus_take(&pins, ri_clock_note, sizeof(ri_clock_note));
++ if (error) return error;
++ uint16_t saved[RC_COUNT], raw = 0;
++ bool stable = true, pins_restored, clock_restored = true, locked = false, off = true;
++ bool modified = false;
++ const char *phase = "snapshot";
++ if (ri_clock_read(0) != 0x6360 || ri_clock_read(0) != 0x6360 || ri_clock_read(1) != 1) {
++  error = ENXIO; phase = "identity"; goto release;
++ }
++ for (unsigned i = 0; i < RC_COUNT; i++) saved[i] = ri_clock_read(ri_clock_regs[i]);
++ for (unsigned i = 0; i < RC_COUNT; i++)
++  if (ri_clock_read(ri_clock_regs[i]) != saved[i]) stable = false;
++ raw = ri_clock_read(0x1881);
++ if (!stable || raw == 0xffff) { error = EIO; phase = "unstable_snapshot"; goto release; }
++ if (!test) {
++  ri_clock_surveyed = 1;
++  snprintf(ri_clock_note, sizeof(ri_clock_note),
++      "snapshot=1 clk32=%#x sys=%#x async=%#x dsp=%#x ctl1=%#x n=%#x theta=%#x lambda=%#x ratio=%#x ref=%#x gain=%#x phase=%#x sync1=%#x sync7=%#x mask1=%#x mask2=%#x raw=%#x",
++      saved[0],saved[1],saved[2],saved[3],saved[4],saved[5],saved[6],saved[7],
++      saved[8],saved[9],saved[10],saved[11],saved[12],saved[13],saved[14],saved[15],raw);
++  goto release;
++ }
++ /* Never retune a clock already used by another codec client. Require FLL
++  * lock events masked on both interrupt outputs; pending latches are left alone. */
++ if ((saved[RC_SYS] & 0x40) || (saved[RC_ASYNC] & 0x40) || (saved[RC_DSP] & 0x40) ||
++     (saved[RC_CTL1] & 1) || (saved[RC_SYNC1] & 1) || (raw & 0x100) ||
++     !(saved[RC_MASK1] & 0x100) || !(saved[RC_MASK2] & 0x100) || (saved[RC_N] & 0x8000)) {
++  error = EBUSY; phase = "active_clock_or_unmasked_irq"; goto release;
++ }
++ ri_clock_attempted = 1; modified = true; phase = "configure";
++ /* 98,304,000 / (32,768 * 3) = N=1000; FRATIO=3-1; no fraction,
++  * REFCLK_DIV=1, MCLK2 source=1. Cirrus integer-mode gain=2, phase gain=2. */
++ if (!ri_clock_write(0x171, saved[RC_CTL1] & ~3u) ||
++     !ri_clock_write(0x17a, (saved[RC_PHASE] & ~0xf800u) | 0x2800) ||
++     !ri_clock_write(0x173, 0) || !ri_clock_write(0x174, 0) ||
++     !ri_clock_write(0x175, (saved[RC_RATIO] & ~0x0f00u) | 0x0200) ||
++     !ri_clock_write(0x176, (saved[RC_REF] & ~0x00cfu) | 1) ||
++     !ri_clock_write(0x179, (saved[RC_GAIN] & ~0x003cu) | 8) ||
++     !ri_clock_write(0x172, (saved[RC_N] & ~0x83ffu) | 0x83e8) ||
++     !ri_clock_write(0x185, saved[RC_SYNC7] | 1) ||
++     !ri_clock_write(0x171, (saved[RC_CTL1] & ~3u) | 1)) {
++  error = EIO; goto restore;
++ }
++ phase = "lock";
++ locked = ri_clock_wait_lock(true, &raw);
++ error = locked ? 0 : ETIMEDOUT;
++restore:
++ /* Cleanup is unconditional after the first attempted codec write, even
++  * after a readback mismatch or interrupted user process. Bounded retries. */
++ off = false;
++ for (unsigned i = 0; i < 3 && !off; i++)
++  off = ri_clock_write(0x171, (saved[RC_CTL1] & ~1u) | 2);
++ uint16_t stop_raw = 0;
++ off = ri_clock_wait_lock(false, &stop_raw) && off;
++ if (off) {
++  const unsigned order[] = { RC_THETA, RC_LAMBDA, RC_RATIO, RC_REF, RC_GAIN,
++                             RC_PHASE, RC_SYNC7, RC_N, RC_CTL1 };
++  for (unsigned i = 0; i < sizeof(order) / sizeof(order[0]); i++) {
++   unsigned n = order[i];
++   uint16_t value = saved[n] | (n == RC_N ? 0x8000 : 0);
++   if (!ri_clock_write(ri_clock_regs[n], value)) clock_restored = false;
++  }
++  for (unsigned i = 0; i < RC_COUNT; i++)
++   if (ri_clock_read(ri_clock_regs[i]) != saved[i]) clock_restored = false;
++ } else clock_restored = false;
++ if (!clock_restored) error = EIO;
++release:
++ pins_restored = ri_codec_bus_release(&pins);
++ if (!pins_restored) error = EIO;
++ if (test || error) {
++  snprintf(ri_clock_note, sizeof(ri_clock_note),
++      "test=%u attempted=%u phase=%s locked=%u raw=%#x fll_off=%u clock_restored=%u pins_restored=%u error=%d pcm_transport=0",
++      test, modified, phase, locked, raw, off, clock_restored, pins_restored, error);
++ } else {
++  size_t n = strlen(ri_clock_note);
++  snprintf(ri_clock_note + n, sizeof(ri_clock_note) - n, " pins_restored=%u", pins_restored);
++ }
++ return error;
++}
++
++static int
++river_codec_clock_sysctl SYSCTL_HANDLER_ARGS
++{
++ int request = 0;
++ int error = sysctl_handle_int(oidp, &request, 0, req);
++ if (error || !req->newptr) return error;
++ if (request != 1 && request != 2) return EINVAL;
++ lck_mtx_lock(&ri_codec_lock);
++ error = ri_clock_run(request == 2);
++ lck_mtx_unlock(&ri_codec_lock);
++ return error;
++}
++SYSCTL_PROC(_debug, OID_AUTO, river_codec_clock, CTLTYPE_INT | CTLFLAG_RW | CTLFLAG_LOCKED,
++            NULL, 0, river_codec_clock_sysctl, "I", "River codec clock snapshot or isolated FLL test");
++static int
++river_codec_clock_result_sysctl SYSCTL_HANDLER_ARGS
++{
++ char note[sizeof(ri_clock_note)];
++ lck_mtx_lock(&ri_codec_lock);
++ strlcpy(note, ri_clock_note, sizeof(note));
++ lck_mtx_unlock(&ri_codec_lock);
++ return SYSCTL_OUT(req, note, strlen(note) + 1);
++}
++SYSCTL_PROC(_debug, OID_AUTO, river_codec_clock_result, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
++            NULL, 0, river_codec_clock_result_sysctl, "A", "River codec clock experiment result");
