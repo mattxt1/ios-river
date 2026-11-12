@@ -15,6 +15,15 @@ register restoration and SPI pin restoration all verified. PM8953 GPIO6 reads
 as input mode 0; the Android overlay specifies DTEST3 clock output. Trace that
 reference source before changing PMIC routing. Physical audio remains absent.
 
+Patch 0277 adds `river-codec-clock --route-test`: a separately requested,
+one-shot GPIO6 DTEST3 route test around the isolated FLL experiment. It applies
+only the pinned board mux/pull configuration and restores the PMIC mode/pull,
+all observed GPIO6 fields, codec clocks and SPI pins afterward. It refuses
+missing APIDs or changed/non-idle state. The internal DTEST3 producer is left
+unchanged and its availability is unknown; this is not a generic PMIC writer.
+The source-derived values are mode `0x1c` and pull-disable `0x5`. Waits/retries
+are bounded and cleanup failures are reported. No audio output is enabled.
+
 ## Current continuation
 
 Patch 0273 adds `debug.river_audio_prereq`, a read-only, on-demand survey:

@@ -5,6 +5,38 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## PM8953 MCLK route experiment (2026-11-12)
+
+- User authorized tracing/enabling the reference-clock route after verified
+  restoration on 0276. Pinned River overlay configures PM8953 GPIO6 as
+  `dtest3`, output-low, bias-disable. Pinned `pinctrl-spmi-gpio.c` maps the
+  observed legacy subtype (`type=0x10 subtype=1`) to MODE_CTL `0x1c`:
+  output mode 1 at bit 4, DTEST3 function index 8 minus 2, shifted by 1.
+  Pull-disable is `0x5` at DIG_PULL_CTL `0x42`.
+- The internal DTEST3 producer is not identified in the kernel source tree.
+  The route test therefore changes only the board-specified GPIO mux/pull,
+  never the DTEST producer, voltage source, drive strength, global PMIC clocks,
+  regulators, codec SYSCLK/AIF/analog outputs or amplifier settings. A lock
+  result would support a usable reference, not directly measure its frequency.
+- Patch 0277 committed as `2dfc68b`: explicit `river-codec-clock --route-test`,
+  sharing the one-attempt-per-boot limit with the existing FLL test. It requires
+  exact twice-checked observed GPIO6 identity, enabled idle input state, VIN0,
+  pulldown, source0, unchanged bus ownership and idle codec clocks/IRQs.
+  Missing write-channel mapping fails closed. Only PPID `0xc5` mode `0x40`
+  and pull `0x42` writes are permitted, with readback. Existing SPMI controller
+  serialization and timeout poisoning remain in force.
+- On every exit after the first attempted route write, codec clock shutdown
+  and restoration run, then GPIO6 mode/pull restore with at most 3 retries.
+  All seven observed GPIO6 fields are compared with the saved snapshot, and
+  SPI pins restore. Cleanup failure is an explicit error. A poisoned SPMI
+  controller may prevent verification/restoration; the diagnostic must report
+  that rather than claim success. No unbounded wait or automatic boot action.
+- Expanded host tests passed: missing APID, unreadable/changing PMIC snapshots,
+  wrong ownership, each PMIC write failure, FLL timeout, exact PMIC/codec/SPI
+  restoration, codec failures and one-shot limits. Updated helper compiled
+  for iOS arm64 with `-Wall -Wextra -Werror`, ad-hoc signed. Local committed
+  kernel build started; no 0277 hardware result yet.
+
 ## Corrected codec clock test on hardware (2026-11-12)
 
 - User returned River to fastboot. Verified product and corrected image hash
