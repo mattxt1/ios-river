@@ -44,10 +44,29 @@ with tempfile.TemporaryDirectory(prefix="river-audio-tests-") as tmp:
                     str(root / "xnu/patches/0276-river-codec-clock-restore.patch")], cwd=tmp, check=True)
     subprocess.run(["git", "apply", "--include=bsd/dev/river_codec_clock.h",
                     str(root / "xnu/patches/0277-river-mclk-route-test.patch")], cwd=tmp, check=True)
+    patch = (root / "xnu/patches/0278-river-muted-i2s-clock-test.patch").read_text()
+    section = patch.split("diff --git a/bsd/dev/river_codec_i2s.h", 1)[1]
+    i2s = "\n".join(line[1:] for line in section.splitlines()
+                      if line.startswith("+") and not line.startswith("+++")) + "\n"
+    (Path(tmp) / "river_codec_i2s.h").write_text(i2s)
+    subprocess.run(["git", "apply", "--include=bsd/dev/river_codec_clock.h",
+                    str(root / "xnu/patches/0278-river-muted-i2s-clock-test.patch")], cwd=tmp, check=True)
     added = (dev / "river_codec_clock.h").read_text()
     added = added.split("static int\nriver_codec_clock_sysctl", 1)[0]
     (Path(tmp) / "codec-clock-added.h").write_text(added)
     binary = Path(tmp) / "codec-clock"
     subprocess.run(["cc", "-O2", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function", "-I", tmp,
                     str(root / "tools/tests/river-codec-clock-host.c"), "-o", str(binary)], check=True)
+    subprocess.run([str(binary)], check=True)
+    section = patch.split("diff --git a/bsd/dev/river_codec_clock.h", 1)[0]
+    added = "\n".join(line[1:] for line in section.splitlines()
+                       if line.startswith(("+", " ")) and not line.startswith("+++"))
+    # Include unchanged context to retain the public wrapper signature.
+    # The complete added volume implementation and its locking wrapper.
+    volume = added.split("static void\nriver_speaker_set_volume_locked", 1)[1]
+    volume = "static void\nriver_speaker_set_volume_locked" + volume.split("static int\nriver_speaker_tone_locked", 1)[0]
+    (Path(tmp) / "speaker-volume-added.h").write_text(volume)
+    binary = Path(tmp) / "speaker-volume"
+    subprocess.run(["cc", "-O2", "-Wall", "-Wextra", "-Werror", "-I", tmp,
+                    str(root / "tools/tests/river-speaker-volume-host.c"), "-o", str(binary)], check=True)
     subprocess.run([str(binary)], check=True)

@@ -14,6 +14,35 @@ static uint32_t cfg[4], out[4];
 static unsigned active_n, pmic_writes, pmic_ignore, pmic_mode, pmic_pull, cmd_missing, pmic_reads;
 static unsigned mode, writes, ignore_write, bits, reply, elapsed, enabled_once;
 static uint8_t tx[8];
+static uint32_t amp[0x11000],amp_initial[0x11000];
+static unsigned amp_writes,amp_ignore,amp_no_lock;
+static bool codec_outputs_off(void) {
+ return (regs[0x1711]&0x8000) && (regs[0x1715]&0x8000) && !(regs[0x101]&0x40);
+}
+static bool amp_quiet(void) { return (amp[0x2024]&0x10) && !(amp[0x2018]&1) && !(amp[0x4808]&0x33); }
+static bool ri_cs35l41_rd(uint32_t reg,uint32_t *value) {
+ assert(reg<0x11000);
+ if(reg==0x10098) {
+  bool driving=(regs[0x101]&0x40) && (regs[0x500]&0x60)==0x60 &&
+      !(regs[0x1711]&0x8000) && !(regs[0x1715]&0x8000);
+  if(driving) {
+   assert(amp_quiet());assert((amp[0x2c04]&0xff7)==0x370);
+   assert((regs[0x500]&0x1f)==11 && (regs[0x506]&0x1fff)==32);
+   assert(regs[0x507]==0x1010 && regs[0x508]==0x1010 && (regs[0x504]&7)==2);
+   assert((regs[0x501]&0x20) && !regs[0x519] && !regs[0x51a]);
+  }
+  *value=driving && !amp_no_lock?0x20000000:0x20000010;return true;
+ }
+ *value=amp[reg];return true;
+}
+static bool ri_cs35l41_wr(uint32_t reg,uint32_t value) {
+ assert(reg==0x2018||reg==0x2024||reg==0x6000||reg==0x4800||reg==0x4808||
+        reg==0x2c04||reg==0x2c0c||reg==0x4840||reg==0x4838);
+ amp_writes++;if(amp_writes==amp_ignore)return false;
+ if((reg==0x4808&&(value&0x33))||(reg==0x2024&&!(value&0x10))||(reg==0x2018&&(value&1)))
+  assert(codec_outputs_off());
+ amp[reg]=value;return true;
+}
 static vm_offset_t ri_map(vm_offset_t pa) {
  assert(pa == 0x0200f000 || pa == 0x01044000 || pa == 0x0180f01c ||
         (pa >= 0x01087000 && pa <= 0x0108a000)); return pa;
@@ -29,7 +58,9 @@ static uint32_t ri_rd(vm_offset_t p, unsigned off) {
  assert(off == 0 || off == 4); return off ? out[i] | (i == 3 ? reply : 0) : cfg[i];
 }
 static bool allowed_write(unsigned reg) {
- return reg == 0x100 || reg == 0x171 || reg == 0x172 || reg == 0x173 || reg == 0x174 || reg == 0x175 ||
+ return reg==0x101||reg==0x102||reg==0x500||reg==0x501||reg==0x502||reg==0x503||
+        reg==0x504||reg==0x506||reg==0x507||reg==0x508||reg==0x519||reg==0x51a||
+        reg==0x1710||reg==0x1711||reg==0x1714||reg==0x1715||reg == 0x100 || reg == 0x171 || reg == 0x172 || reg == 0x173 || reg == 0x174 || reg == 0x175 ||
         reg == 0x176 || reg == 0x179 || reg == 0x17a || reg == 0x185;
 }
 static uint16_t reg_read(unsigned reg) {
@@ -62,6 +93,8 @@ static void ri_wr(vm_offset_t p, unsigned off, uint32_t v) {
       assert((regs[0x172] & 0x3ff) == 1000);
       assert((regs[0x100] & 0x43) == 0x41);
      }
+     if(((reg==0x1711||reg==0x1715)&&!(value&0x8000)) || (reg==0x500&&(value&0x40)) || (reg==0x101&&(value&0x40)))
+      assert(amp_quiet());
      if (reg == 0x172 && (value & 0x8000)) active_n = value & 0x3ff;
      regs[reg] = reg == 0x172 && mode != 26 ? value & 0x7fff : value;
     }
@@ -116,8 +149,11 @@ static void reset(unsigned scenario) {
  ri_clock_attempted = ri_clock_surveyed = 0; active_n = 8;
  pmic_mode = 0; pmic_pull = 4; pmic_writes = pmic_ignore = cmd_missing = pmic_reads = 0; ri_clock_mclk_cmd = 0;
  for (unsigned i = 0; i < 4; i++) { cfg[i] = 1; out[i] = 0; }
+ memset(amp,0,sizeof(amp));amp[0]=0x35a40; amp[0x2018]=0x21; amp[0x2024]=0x100;
+ amp[0x4808]=0x20200233;amp[0x2c04]=0x833;amp[0x4800]=0x10001;amp[0x4840]=24;amp[0x4838]=24;
+ memcpy(amp_initial,amp,sizeof(amp));amp_writes=amp_ignore=amp_no_lock=0;
  memset(regs, 0, sizeof(regs)); regs[0] = 0x6360; regs[1] = 1;
- regs[0x100] = 2; regs[0x101] = 0x404; regs[0x171] = 2; regs[0x172] = 8;
+ regs[0x1711]=regs[0x1715]=0xf000; regs[0x100] = 2; regs[0x101] = 0x404; regs[0x171] = 2; regs[0x172] = 8;
  regs[0x173] = 24; regs[0x174] = 125; regs[0x185] = 1;
  regs[0x1841] = regs[0x1941] = 0xffff;
  if (scenario == 21) regs[0x101] |= 0x40;
@@ -154,31 +190,51 @@ int main(void) {
  }
  reset(25); assert(ri_clock_run(true) == EIO); check_pins();
  assert(strstr(ri_clock_note, "clock_restored=0"));
- assert(!ri_clock_write_allowed(0x101) && !ri_clock_write_allowed(0x500));
- reset(0); assert(!ri_clock_run_impl(true,true)); check_restore();
+ assert(!ri_clock_write_allowed(0x200) && !ri_clock_write_allowed(0x400));
+ reset(0); assert(!ri_clock_run_impl(true,true,false)); check_restore();
  assert(pmic_mode == 0 && pmic_pull == 4 && pmic_writes == 4);
  assert(strstr(ri_clock_note,"route_restored=1"));
- reset(20); assert(ri_clock_run_impl(true,true) == ETIMEDOUT); check_restore();
+ reset(20); assert(ri_clock_run_impl(true,true,false) == ETIMEDOUT); check_restore();
  assert(pmic_mode == 0 && pmic_pull == 4);
  for (unsigned fail = 1; fail <= 4; fail++) {
   reset(0); pmic_ignore = fail;
-  int rc = ri_clock_run_impl(true,true); assert(rc == 0 || rc == EIO);
+  int rc = ri_clock_run_impl(true,true,false); assert(rc == 0 || rc == EIO);
   check_restore(); assert(pmic_mode == 0 && pmic_pull == 4);
  }
- reset(0); cmd_missing = 1; assert(ri_clock_run_impl(true,true) == ENXIO);
+ reset(0); cmd_missing = 1; assert(ri_clock_run_impl(true,true,false) == ENXIO);
  assert(!pmic_writes && !writes); check_pins();
- reset(0); pmic_mode = 0x1c; assert(ri_clock_run_impl(true,true) == EBUSY);
+ reset(0); pmic_mode = 0x1c; assert(ri_clock_run_impl(true,true,false) == EBUSY);
  assert(!pmic_writes && !writes); check_pins();
- reset(0); pmic_pull = 5; assert(ri_clock_run_impl(true,true) == EBUSY);
+ reset(0); pmic_pull = 5; assert(ri_clock_run_impl(true,true,false) == EBUSY);
  assert(!pmic_writes && !writes); check_pins();
  for (unsigned scenario = 30; scenario <= 31; scenario++) {
-  reset(scenario); assert(ri_clock_run_impl(true,true) == EBUSY);
+  reset(scenario); assert(ri_clock_run_impl(true,true,false) == EBUSY);
   assert(!pmic_writes && !writes); check_pins();
  }
  for (unsigned scenario = 32; scenario <= 33; scenario++) {
-  reset(scenario); assert(ri_clock_run_impl(true,true) == EIO); check_pins();
+  reset(scenario); assert(ri_clock_run_impl(true,true,false) == EIO); check_pins();
   assert(strstr(ri_clock_note,"route_restored=0")); assert(pmic_writes <= 8);
  }
+ reset(0); assert(!ri_clock_run_impl(false,false,true));assert(!amp_writes&&!writes);check_pins();
+ reset(0); assert(!ri_clock_run_impl(true,true,true));check_restore();
+ assert(ri_i2s_amp_locked&&ri_i2s_amp_restored&&ri_i2s_codec_restored);
+ assert(!memcmp(amp,amp_initial,sizeof(amp)));
+ unsigned success_amp_writes=amp_writes;
+ reset(0);amp_no_lock=1;assert(ri_clock_run_impl(true,true,true)==ETIMEDOUT);check_restore();
+ assert(!memcmp(amp,amp_initial,sizeof(amp)));
+ for(unsigned fail=1;fail<=success_amp_writes;fail++) {
+  reset(0);amp_ignore=fail;int rc=ri_clock_run_impl(true,true,true);assert(rc!=0);check_pins();
+  assert(ri_i2s_codec_restored);
+  if(!ri_i2s_amp_restored) assert(amp_quiet());
+  else assert(!memcmp(amp,amp_initial,sizeof(amp)));
+ }
+ reset(0);assert(!ri_clock_run_impl(true,true,true));unsigned success_codec_writes=writes;
+ for(unsigned fail=1;fail<=success_codec_writes;fail++) {
+  reset(0);ignore_write=fail;int rc=ri_clock_run_impl(true,true,true);check_pins();
+  if(!ri_i2s_codec_restored||!ri_i2s_amp_restored) {assert(rc==EIO);assert(amp_quiet());}
+ }
+ reset(0);regs[0x519]=1;assert(ri_clock_run_impl(true,true,true)!=0);assert(!amp_writes);check_pins();
+ puts("PASS: muted I2S ordering, Class-D disable, slave/master exclusion, no PCM data, amp lock/timeout and failed-write cleanup");
  puts("PASS: PMIC route ownership, fail-closed channel lookup, write/read failures, timeout and full route restoration");
  puts("PASS: FLL framing, full 32k recipe, latched/self-clearing update strobes, repeated snapshots, rollback and stuck-enable detection");
 }

@@ -1,0 +1,377 @@
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -57,6 +57,8 @@
+ static int ri_vib_request = -1; /* sysctl mailbox; only input worker touches QUP2 */
+ void river_haptics_init(void);
+ void river_vibrate(unsigned ms);
++static LCK_GRP_DECLARE(ri_speaker_grp, "river-speaker-control");
++static LCK_MTX_DECLARE(ri_speaker_lock, &ri_speaker_grp);
+ static bool ri_speaker_ok;
+ static uint32_t ri_cs35l41_devid, ri_cs35l41_revid, ri_cs35l41_status;
+ static uint32_t ri_cs35l41_dig_vol, ri_cs35l41_out_mute, ri_cs35l41_sp_fmt, ri_cs35l41_pll_clk, ri_cs35l41_gain;
+@@ -4229,24 +4231,30 @@
+ 	return ri_qup_xfer(ri_qup2, 0x40, tx, 8, NULL, 0);
+ }
+ 
++static void
++river_speaker_set_volume_locked(uint32_t below_eighths, bool muted)
++{
++ if (!ri_speaker_ok) return;
++ uint32_t control=0;
++ if(!ri_cs35l41_rd(0x2024,&control)) return;
++ uint32_t volume=muted?0x4cf:(below_eighths>0x400?0x400:below_eighths);
++ // CS35L41 AMP_MUTE is bit4. Preserve unrelated output-control bits.
++ if(muted) (void)ri_cs35l41_wr(0x2024,control|0x10);
++ (void)ri_cs35l41_wr(0x6000,volume);
++ if(!muted) (void)ri_cs35l41_wr(0x2024,control&~0x10u);
++ (void)ri_cs35l41_rd(0x6000,&ri_cs35l41_dig_vol);
++ (void)ri_cs35l41_rd(0x2024,&ri_cs35l41_out_mute);
++}
+ void
+ river_speaker_set_volume(uint32_t below_eighths, bool muted)
+ {
+-	if (!ri_speaker_ok) return;
+-	if (muted) {
+-		ri_cs35l41_wr(0x00002024, 0x00000001);
+-		ri_cs35l41_wr(0x00006000, 0x000004cf);
+-	} else {
+-		ri_cs35l41_wr(0x00002024, 0x00000000);
+-		uint32_t v = below_eighths > 0x400 ? 0x400 : below_eighths;
+-		ri_cs35l41_wr(0x00006000, v);
+-	}
+-	(void)ri_cs35l41_rd(0x00006000, &ri_cs35l41_dig_vol);
+-	(void)ri_cs35l41_rd(0x00002024, &ri_cs35l41_out_mute);
+-}
+-
+-int
+-river_speaker_tone(unsigned ms, unsigned freq_hz)
++ lck_mtx_lock(&ri_speaker_lock);
++ river_speaker_set_volume_locked(below_eighths,muted);
++ lck_mtx_unlock(&ri_speaker_lock);
++}
++
++static int
++river_speaker_tone_locked(unsigned ms, unsigned freq_hz)
+ {
+ 	if (!ri_speaker_ok) return -1;
+ 	if (ms == 0) return 0;
+@@ -4267,13 +4275,22 @@
+ 	while (elapsed < total_us) {
+ 		ri_cs35l41_wr(0x00002024, 0x00000000);
+ 		delay(half_us);
+-		ri_cs35l41_wr(0x00002024, 0x00000001);
++		ri_cs35l41_wr(0x00002024, 0x00000010);
+ 		delay(half_us);
+ 		elapsed += (half_us * 2);
+ 	}
+ 
+ 	ri_cs35l41_wr(0x00002024, 0x00000000);
+ 	return 0;
++}
++
++int
++river_speaker_tone(unsigned ms, unsigned freq_hz)
++{
++ lck_mtx_lock(&ri_speaker_lock);
++ int result=river_speaker_tone_locked(ms,freq_hz);
++ lck_mtx_unlock(&ri_speaker_lock);
++ return result;
+ }
+ 
+ static int
+diff --git a/bsd/dev/river_codec_clock.h b/bsd/dev/river_codec_clock.h
+--- a/bsd/dev/river_codec_clock.h
++++ b/bsd/dev/river_codec_clock.h
+@@ -16,9 +16,19 @@
+ static char ri_clock_note[1024] = "not requested";
+ 
+ static bool
++ri_i2s_reg_allowed(uint16_t reg)
++{
++ switch(reg) {
++ case 0x101:case 0x102:case 0x500:case 0x501:case 0x502:case 0x503:
++ case 0x504:case 0x506:case 0x507:case 0x508:case 0x519:case 0x51a:
++ case 0x1710:case 0x1711:case 0x1714:case 0x1715:return true;
++ default:return false;
++ }
++}
++static bool
+ ri_clock_read_allowed(uint16_t reg)
+ {
+- if (reg == 0 || reg == 1 || reg == 0x1881) return true;
++ if (reg == 0 || reg == 1 || reg == 0x1881 || ri_i2s_reg_allowed(reg)) return true;
+  for (unsigned i = 0; i < RC_COUNT; i++) if (reg == ri_clock_regs[i]) return true;
+  return false;
+ }
+@@ -26,7 +36,7 @@
+ ri_clock_write_allowed(uint16_t reg)
+ {
+  /* Restrict codec writes to the 32k/FLL controls used by this experiment. */
+- return reg == 0x100 || reg == 0x171 || reg == 0x172 || reg == 0x173 || reg == 0x174 ||
++ return ri_i2s_reg_allowed(reg) || reg == 0x100 || reg == 0x171 || reg == 0x172 || reg == 0x173 || reg == 0x174 ||
+         reg == 0x175 || reg == 0x176 || reg == 0x179 || reg == 0x17a || reg == 0x185;
+ }
+ static uint16_t
+@@ -73,6 +83,8 @@
+  return false;
+ }
+ 
++#include "river_codec_i2s.h"
++
+ static vm_offset_t ri_clock_mclk_cmd;
+ static bool
+ ri_clock_pin_write(unsigned reg, uint8_t value)
+@@ -84,7 +96,7 @@
+ }
+ 
+ static int
+-ri_clock_run_impl(bool test, bool route)
++ri_clock_run_impl(bool test, bool route, bool i2s)
+ {
+  if (test && ri_clock_attempted) return EALREADY;
+  struct ri_codec_saved_pins pins;
+@@ -99,6 +111,7 @@
+  bool modified = false, route_touched = false, route_restored = true;
+  uint32_t route_before[2] = {0};
+  const char *phase = "snapshot";
++ if(i2s) { ri_i2s_touched=false;ri_i2s_codec_restored=true;ri_i2s_amp_restored=true;ri_i2s_amp_locked=false; }
+  if (ri_clock_read(0) != 0x6360 || ri_clock_read(0) != 0x6360 || ri_clock_read(1) != 1) {
+   error = ENXIO; phase = "identity"; goto release;
+  }
+@@ -112,6 +125,11 @@
+  for (unsigned i = 0; i < 7; i++)
+   if (!ri_clock_mclk_obs || !ri_spmi_read(ri_clock_mclk_obs, mclk_offsets[i], 1, &mclk[i])) mclk_ok = false;
+  if (!stable || raw == 0xffff) { error = EIO; phase = "unstable_snapshot"; goto release; }
++ if (i2s && !ri_i2s_snapshot()) { error=EIO;phase="i2s_snapshot";goto release; }
++ if (!test && i2s) {
++  strlcpy(ri_clock_note,ri_i2s_note,sizeof(ri_clock_note));
++  goto release;
++ }
+  if (!test) {
+   ri_clock_surveyed++;
+   snprintf(ri_clock_note, sizeof(ri_clock_note),
+@@ -148,6 +166,7 @@
+   route_before[0] = mclk[2]; route_before[1] = mclk[4];
+  }
+  ri_clock_attempted = 1; modified = true; phase = "configure";
++ if(i2s && !ri_i2s_prepare()) { error=EIO;phase="amp_prepare";goto restore; }
+  if (route) {
+   route_touched = true; phase = "route_enable";
+   // pinctrl-spmi-gpio.c: output(1)<<4 | (DTEST3 index 8 - 2)<<1.
+@@ -177,7 +196,9 @@
+  phase = "lock";
+  locked = ri_clock_wait_lock(true, &raw);
+  error = locked ? 0 : ETIMEDOUT;
++ if(locked && i2s) { phase="i2s_clock";error=ri_i2s_drive(); }
+ restore:
++ if(i2s) ri_i2s_stop_codec();
+  /* Cleanup is unconditional after the first attempted codec write, even
+   * after a readback mismatch or interrupted user process. Bounded retries. */
+  off = false;
+@@ -223,6 +244,10 @@
+   }
+   if (!route_restored) error = EIO;
+  }
++ if(i2s) {
++  ri_i2s_restore_amp();
++  if(!ri_i2s_codec_restored || !ri_i2s_amp_restored) error=EIO;
++ }
+  pins_restored = ri_codec_bus_release(&pins);
+  if (!pins_restored) error = EIO;
+  if (test || error) {
+@@ -233,13 +258,19 @@
+   size_t n = strlen(ri_clock_note);
+   snprintf(ri_clock_note + n, sizeof(ri_clock_note) - n, " pins_restored=%u", pins_restored);
+  }
++ if(i2s && test) {
++  size_t n=strlen(ri_clock_note);
++  snprintf(ri_clock_note+n,sizeof(ri_clock_note)-n,
++      " amp_locked=%u amp_irq_before=%#x amp_irq_live=%#x aif_restored=%u amp_restored=%u",
++      ri_i2s_amp_locked,ri_i2s_irq_before,ri_i2s_irq_live,ri_i2s_codec_restored,ri_i2s_amp_restored);
++ }
+  return error;
+ }
+ 
+ static int
+ ri_clock_run(bool test)
+ {
+- return ri_clock_run_impl(test, false);
++ return ri_clock_run_impl(test, false, false);
+ }
+ 
+ static int
+@@ -248,9 +279,12 @@
+  int request = 0;
+  int error = sysctl_handle_int(oidp, &request, 0, req);
+  if (error || !req->newptr) return error;
+- if (request != 1 && request != 2 && request != 3) return EINVAL;
++ if (request < 1 || request > 5) return EINVAL;
+  lck_mtx_lock(&ri_codec_lock);
+- error = request == 3 ? ri_clock_run_impl(true, true) : ri_clock_run(request == 2);
++ if(request >= 4) lck_mtx_lock(&ri_speaker_lock);
++ error = request >= 4 ? ri_clock_run_impl(request==5,request==5,true) :
++     request == 3 ? ri_clock_run_impl(true,true,false) : ri_clock_run(request==2);
++ if(request >= 4) lck_mtx_unlock(&ri_speaker_lock);
+  lck_mtx_unlock(&ri_codec_lock);
+  return error;
+ }
+diff --git a/bsd/dev/river_codec_i2s.h b/bsd/dev/river_codec_i2s.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/river_codec_i2s.h
+@@ -0,0 +1,154 @@
++/* Clock-only CS47L35 AIF1 -> CS35L41 test; caller holds speaker mutex.
++ * No PCM TX/RX channels or analog codec outputs are enabled. Amp mute bit
++ * 0x10 and PWR_CTRL2 AMP_EN bit0=0 are verified before clock pins drive.
++ */
++static const uint16_t ri_i2s_codec_regs[] = {
++ 0x101,0x102,0x500,0x501,0x502,0x503,0x504,0x506,0x507,0x508,
++ 0x519,0x51a,0x1710,0x1711,0x1714,0x1715
++};
++static const uint32_t ri_i2s_amp_regs[] = {
++ 0x2018,0x2024,0x6000,0x4800,0x4808,0x2c04,0x2c0c,0x4840,0x4838
++};
++static uint16_t ri_i2s_codec_saved[16];
++static uint32_t ri_i2s_amp_saved[9], ri_i2s_irq_before, ri_i2s_irq_live;
++static bool ri_i2s_touched, ri_i2s_codec_restored, ri_i2s_amp_restored, ri_i2s_amp_locked;
++static char ri_i2s_note[512];
++
++static bool
++ri_i2s_amp_write(uint32_t reg, uint32_t val)
++{
++ bool allowed = false;
++ for (unsigned i=0;i<9;i++) if (ri_i2s_amp_regs[i]==reg) allowed=true;
++ uint32_t got=0;
++ return allowed && ri_cs35l41_wr(reg,val) && ri_cs35l41_rd(reg,&got) && got==val;
++}
++static bool
++ri_i2s_quiet(void)
++{
++ uint32_t mute=0,power=0,format=0;
++ return ri_cs35l41_rd(0x2024,&mute) && (mute&0x10) &&
++     ri_cs35l41_rd(0x2018,&power) && !(power&1) &&
++     ri_cs35l41_rd(0x4808,&format) && !(format&0x33);
++}
++static bool
++ri_i2s_snapshot(void)
++{
++ ri_i2s_touched=false;ri_i2s_codec_restored=true;ri_i2s_amp_restored=true;ri_i2s_amp_locked=false;
++ ri_i2s_irq_before=ri_i2s_irq_live=0;
++ uint32_t id=0;
++ if (!ri_cs35l41_rd(0,&id) || id!=0x35a40) return false;
++ for(unsigned i=0;i<16;i++) ri_i2s_codec_saved[i]=ri_clock_read(ri_i2s_codec_regs[i]);
++ for(unsigned i=0;i<16;i++) if(ri_clock_read(ri_i2s_codec_regs[i])!=ri_i2s_codec_saved[i]) return false;
++ for(unsigned i=0;i<9;i++) if(!ri_cs35l41_rd(ri_i2s_amp_regs[i],&ri_i2s_amp_saved[i])) return false;
++ for(unsigned i=0;i<9;i++) {
++  uint32_t got=0;
++  if(!ri_cs35l41_rd(ri_i2s_amp_regs[i],&got) || got!=ri_i2s_amp_saved[i]) return false;
++ }
++ if(!ri_cs35l41_rd(0x10098,&ri_i2s_irq_before)) return false;
++ snprintf(ri_i2s_note,sizeof(ri_i2s_note),
++     "i2s_snapshot=1 sys=%#x sr=%#x bclk=%#x txpin=%#x rxpin=%#x rate=%#x fmt=%#x bcpf=%#x txwl=%#x rxwl=%#x txen=%#x rxen=%#x gp9=%#x,%#x gp11=%#x,%#x amp_power=%#x amp_mute=%#x amp_fmt=%#x amp_pll=%#x irq=%#x",
++     ri_i2s_codec_saved[0],ri_i2s_codec_saved[1],ri_i2s_codec_saved[2],ri_i2s_codec_saved[3],
++     ri_i2s_codec_saved[4],ri_i2s_codec_saved[5],ri_i2s_codec_saved[6],ri_i2s_codec_saved[7],
++     ri_i2s_codec_saved[8],ri_i2s_codec_saved[9],ri_i2s_codec_saved[10],ri_i2s_codec_saved[11],
++     ri_i2s_codec_saved[12],ri_i2s_codec_saved[13],ri_i2s_codec_saved[14],ri_i2s_codec_saved[15],
++     ri_i2s_amp_saved[0],ri_i2s_amp_saved[1],ri_i2s_amp_saved[4],ri_i2s_amp_saved[5],ri_i2s_irq_before);
++ return true;
++}
++static bool
++ri_i2s_prepare(void)
++{
++ // Refuse an already active/owned codec interface or GPIO alternate function.
++ if ((ri_i2s_codec_saved[2]&0xe0) || (ri_i2s_codec_saved[3]&7) ||
++     (ri_i2s_codec_saved[4]&7) || ri_i2s_codec_saved[10] || ri_i2s_codec_saved[11] ||
++     (ri_i2s_codec_saved[12]&0x1ff) || !(ri_i2s_codec_saved[13]&0x8000) ||
++     (ri_i2s_codec_saved[14]&0x1ff) || !(ri_i2s_codec_saved[15]&0x8000)) return false;
++ ri_i2s_touched=true;ri_i2s_amp_restored=false;ri_i2s_codec_restored=false;
++ // Mute first, then disable the Class-D output stage. Both read back.
++ if(!ri_i2s_amp_write(0x2024,ri_i2s_amp_saved[1]|0x10) ||
++    !ri_i2s_amp_write(0x2018,ri_i2s_amp_saved[0]&~1u) ||
++    !ri_i2s_amp_write(0x6000,0x4cf) || !ri_i2s_amp_write(0x4800,0)) return false;
++ // Stereo S16 I2S; both master and forced-clock bits cleared before the codec.
++ uint32_t format=(ri_i2s_amp_saved[4]&~0xffff0777u)|0x10100200;
++ if(!ri_i2s_amp_write(0x4808,format) || !ri_i2s_quiet()) return false;
++ if(!ri_i2s_amp_write(0x4840,(ri_i2s_amp_saved[7]&~0x3fu)|16) ||
++    !ri_i2s_amp_write(0x4838,(ri_i2s_amp_saved[8]&~0x3fu)|16) ||
++    !ri_i2s_amp_write(0x2c0c,(ri_i2s_amp_saved[6]&~0x1fu)|3)) return false;
++ // Pinned codec_set_sysclk sequence: open loop, frequency 0x1b (1.536MHz),
++ // disable PLL, select SCLK(0), close loop, enable PLL.
++ uint32_t pll=ri_i2s_amp_saved[5];
++ if(!ri_i2s_amp_write(0x2c04,pll|0x800)) return false;
++ pll=(pll&~0x7e0u)|0x360|0x800;
++ if(!ri_i2s_amp_write(0x2c04,pll) || !ri_i2s_amp_write(0x2c04,pll&~0x10u)) return false;
++ pll&=~0x17u;
++ if(!ri_i2s_amp_write(0x2c04,pll) || !ri_i2s_amp_write(0x2c04,pll&~0x800u) ||
++    !ri_i2s_amp_write(0x2c04,(pll&~0x800u)|0x10)) return false;
++ return ri_i2s_quiet();
++}
++static int
++ri_i2s_drive(void)
++{
++ if(!ri_i2s_quiet()) return EIO;
++ // 48k stereo S16: BCLK table index11, BCPF32, frame16/16, I2S format2.
++ if(!ri_clock_write(0x102,(ri_i2s_codec_saved[1]&~0x1fu)|3) ||
++    !ri_clock_write(0x504,(ri_i2s_codec_saved[6]&~7u)|2) ||
++    !ri_clock_write(0x506,(ri_i2s_codec_saved[7]&~0x1fffu)|32) ||
++    !ri_clock_write(0x507,0x1010) || !ri_clock_write(0x508,0x1010) ||
++    !ri_clock_write(0x503,ri_i2s_codec_saved[5]&~0x7840u) ||
++    !ri_clock_write(0x501,(ri_i2s_codec_saved[3]&~7u)|0x23) ||
++    !ri_clock_write(0x502,(ri_i2s_codec_saved[4]&~7u)|3) ||
++    !ri_clock_write(0x500,(ri_i2s_codec_saved[2]&~0xffu)|0x2b)) return EIO;
++ if(!ri_i2s_quiet()) return EIO;
++ // Native GPIO functions, no pull; TXDATA remains tri-stated and channels off.
++ if(!ri_clock_write(0x1711,ri_i2s_codec_saved[13]&~0xe000u) ||
++    !ri_clock_write(0x1715,ri_i2s_codec_saved[15]&~0xe000u) ||
++    !ri_clock_write(0x101,(ri_i2s_codec_saved[0]&~0x874fu)|0x444) ||
++    !ri_clock_write(0x500,(ri_i2s_codec_saved[2]&~0xffu)|0x6b)) return EIO;
++ unsigned clean=0;
++ for(unsigned i=0;i<25;i++) {
++  uint16_t fll=ri_clock_read(0x1881);
++  if(!ri_i2s_quiet() || !ri_cs35l41_rd(0x10098,&ri_i2s_irq_live) ||
++     ri_i2s_irq_live==0xffffffff || fll==0xffff || !(fll&0x100)) return EIO;
++  clean=(ri_i2s_irq_live&0x10)?0:clean+1;
++  if(clean>=2) { ri_i2s_amp_locked=true;return 0; }
++  ri_wait(10);
++ }
++ return ETIMEDOUT;
++}
++static void
++ri_i2s_stop_codec(void)
++{
++ if(!ri_i2s_touched) return;
++ bool ok=true;
++ // Release codec clock outputs before restoring the amplifier's original mode.
++ if(!ri_clock_write(0x1711,ri_i2s_codec_saved[13]|0x8000)) ok=false;
++ if(!ri_clock_write(0x1715,ri_i2s_codec_saved[15]|0x8000)) ok=false;
++ if(!ri_clock_write(0x500,ri_i2s_codec_saved[2]&~0xe0u)) ok=false;
++ if(!ri_clock_write(0x501,(ri_i2s_codec_saved[3]&~7u)|0x20)) ok=false;
++ if(!ri_clock_write(0x502,ri_i2s_codec_saved[4]&~7u)) ok=false;
++ if(!ri_clock_write(0x101,ri_i2s_codec_saved[0]&~0x40u)) ok=false;
++ for(unsigned i=0;i<16;i++) if(!ri_clock_write(ri_i2s_codec_regs[i],ri_i2s_codec_saved[i])) ok=false;
++ for(unsigned i=0;i<16;i++) if(ri_clock_read(ri_i2s_codec_regs[i])!=ri_i2s_codec_saved[i]) ok=false;
++ ri_i2s_codec_restored=ok;
++}
++static void
++ri_i2s_restore_amp(void)
++{
++ if(!ri_i2s_touched) return;
++ bool ok=ri_i2s_codec_restored;
++ if(ok) {
++  // Clock consumers first; stage enable and original mute state last.
++  const unsigned order[]={3,4,5,6,7,8,2,0,1};
++  for(unsigned i=0;i<9;i++) if(!ri_i2s_amp_write(ri_i2s_amp_regs[order[i]],ri_i2s_amp_saved[order[i]])) { ok=false;break; }
++  for(unsigned i=0;i<9;i++) {
++   uint32_t got=0;
++   if(!ri_cs35l41_rd(ri_i2s_amp_regs[i],&got)||got!=ri_i2s_amp_saved[i]) ok=false;
++  }
++ }
++ if(!ok) {
++  // Retain protective mute/output-disable and slave clocks on cleanup failure.
++  (void)ri_i2s_amp_write(0x2024,ri_i2s_amp_saved[1]|0x10);
++  (void)ri_i2s_amp_write(0x2018,ri_i2s_amp_saved[0]&~1u);
++  (void)ri_i2s_amp_write(0x4808,(ri_i2s_amp_saved[4]&~0x33u));
++ }
++ ri_i2s_amp_restored=ok;
++}
