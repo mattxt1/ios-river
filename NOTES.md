@@ -97,6 +97,7 @@
   backend status reads succeeded: PLL IRQ3 still `0x20000010`,
   `version=1 flags=0x3 output_frames=155648 input_frames=0`. This verifies
   identity/control reads and restoration, not audible output or real capture.
+- User confirmed iOS remained responsive after the successful 0274 codec probe.
 - Next: use the verified SPI control connection to design codec clock/control
   bring-up from the pinned Madera driver; establish the actual PCM route and
   ADSP firmware/secure-loading/IPC/SLIMbus ownership before transport writes.
