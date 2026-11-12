@@ -159,9 +159,15 @@ configuration. Preparing or writing one is destructive to the target partition.
   fit experiments and diagnostics.
 - [LOCAL-BUILD.md](LOCAL-BUILD.md): verified local XNU build setup.
 - `shim-river/`, `xnu/patches/`, `tools/`, `phone-tools/`, `mesa/`: loader,
-  ordered kernel patches (currently through patch 0271), host utilities, device tools and Mesa integration.
+  ordered kernel patches (currently through patch 0274), host utilities, device tools and Mesa integration.
 
 ## Next work
+
+**Next milestone: real iOS audio input and output.** Patch 0273 adds a read-only
+codec prerequisite survey and explicit synthetic/discard backend status. Patch 0274 adds an explicit, guarded codec identity-only probe. The
+updated tests save captures and report incomplete I/O; they do not implement
+physical audio. See [AUDIO-BRINGUP.md](AUDIO-BRINGUP.md) for the current test
+commands, source evidence and remaining codec/ADSP/SLIMbus work.
 
 1. **CS35L41 Clock Lock & Physical Speaker Sound**:
    - Resolve `CS35L41_PLL_UNLOCK` (register `0x00010098` bit 4) so the silicon hardware safety interlock releases the Class-D PWM H-bridge output stage from Hi-Z shutdown.

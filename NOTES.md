@@ -42,10 +42,53 @@
   Verified every packaged kernel segment against the rebased built Mach-O.
   Includes the new survey/raw/AVFoundation helpers. Build artifacts live under
   the current chat's `outputs/`; private inputs remain outside Git.
-- Next: temporary boot the new diagnostic image and collect
-  `river-audio-survey` and `river-audio-test status`. Then establish verified
-  codec power/clock/SPI ownership and actual ADSP/SLIMbus transport. Physical
-  iOS audio input/output remains the next milestone, not an achieved result.
+- User returned the phone to fastboot; temporary boot of the new 0273 image
+  succeeded. Live `river-audio-test status`: `version=1 flags=0x3
+  output_frames=0 input_frames=0`. No physical transport is advertised.
+- Live prerequisite survey on 0273: SPMI `0x20010000`; L6 candidate PPID
+  `0x145`: type `0x21`, subtype `0x2a`, status `0x82`, enable `0x80`;
+  S4 candidate `0x11d`: type `0x3`, subtype `0xa`, status `0x86`, enable
+  `0x80`; PMGPIO6 `0xc5`: type `0x10`, subtype `0x1`, status `0x80`,
+  enable `0x80`. These are raw readiness bits, not measured rail voltages.
+- TLMM GPIO46 cfg `0x203`/inout `0`; GPIO68 cfg `0x203`/inout `0x3`;
+  GPIO135–138 all cfg `0x1`/inout `0`. GCC BLSP2 AHB `0x8000cff0`,
+  QUP3 SPI CBCR `0x80000000`, source command `0x80000000`. Amplifier
+  PLL raw IRQ3 remains `0x20000010`. No QUP7 or LPASS access was attempted.
+- Based on those observations, patch 0274 (`060f23f`) adds an explicit,
+  one-shot identity-only GPIO SPI probe. It rechecks exact observed PMIC
+  identities/readiness twice, speaker/reset initialization, reset high, idle
+  pins and stopped SPI controller clock before driving anything. It reads
+  only codec ID twice and revision once, and restores/verifies pin states.
+  Default boot does not run it. No codec writes, rail votes, reset changes,
+  QUP controller or LPASS accesses. CS47L35 expected ID is `0x6360` from the
+  pinned Madera core; `0x6338` is CS47L85 and must not be accepted as CS47L35.
+- Host SPI-model tests passed exact mode-0 framing (32-bit big-endian address,
+  read flag `0x80`, 16 pad bits, 16-bit big-endian value), prerequisite refusal,
+  mismatched/zero/all-ones identities, restoration and one-shot behavior.
+  Local build of committed 0274 (`060f23f70c9c79ab73a0e07eecdbbbdeb572f6f8`)
+  passed; kernel SHA-256
+  `ad701ed2a0008748ea05f20133e6f5e6b6a8f62f3601ef610bf342e40ef93d76`.
+  Packaged `river-codec-probe-060f23f.img` (26,556,416 bytes, cmdline 562
+  bytes), SHA-256 `1fae029aa05603e9b2056681a8067f689ed3f17f40075f9fd78b4f7befa6ed3d`.
+  Every kernel payload segment was verified against the rebased built Mach-O.
+  Includes recorder permission-check source through `7c2e07e`. Awaiting
+  temporary boot and real codec identity result.
+- Subsequent AVFoundation diagnostics on 0273 reached the kernel input
+  (`input_frames=194560`), but the timed completion stalled. An explicit
+  monotonic one-second stop reported recorder time 1.027 s and a decoded CAF
+  with zero frames, and correctly returned failure. A narrowly scoped query
+  then returned `AVAudioSessionRecordPermissionDenied` (`0x64656e79`) for
+  the CLI process. This is an application authorization blocker, not proof of
+  a HAL transport failure in an authorized iOS app. The recorder helper now
+  checks permission first and fails without starting capture when not granted.
+- Automatic approval review rejected exporting general mediaserverd/tccd logs
+  because those logs could contain sensitive system/privacy data not explicitly
+  authorized for transfer. No such logs were collected. Continued with the
+  permission enum and scoped audio diagnostics; no privacy state was changed.
+- Next: boot the probe build and explicitly run `river-codec-probe --probe`.
+  Then establish verified codec power/clock/control and actual ADSP/SLIMbus
+  transport. Physical iOS audio input/output remains the next milestone.
+
 
 ## Audio continuation: phone boot and source audit (2026-11-12)
 

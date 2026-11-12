@@ -16,6 +16,18 @@ Patch 0273 adds `debug.river_audio_prereq`, a read-only, on-demand survey:
   or LPASS accesses. It uses the existing serialized SPMI observer helper,
   bounded/cached mappings and a mutex around concurrent survey calls.
 
+Patch 0274 adds an explicitly requested, one-shot codec identity probe via
+`river-codec-probe --probe`. The default invocation only reads the last result.
+It requires exact observed L6/S4 type/subtype and ready/enable bits on two
+successive checks, completed speaker/reset initialization, reset high, the
+observed inactive QUP3 clock state, and all four SPI pins still idle inputs.
+It temporarily drives CLK/CS/MOSI at low speed in SPI mode 0, reads only ID
+register 0 twice and revision register 1 once, and restores/verifies pin
+configuration and output latches. It does not turn on the QUP controller,
+change codec registers, program supplies or touch LPASS. A failed prerequisite
+leaves the pins alone. A transaction consumes the one attempt even on bad ID.
+CS47L35 ID must equal `0x6360` on both reads; `0x6338` is CS47L85.
+
 `HAKIOS_AUDIO_GET_STATUS` is a versioned ioctl on both PCM endpoints. It reports
 software frame counters and the current `PLAYBACK_DISCARD` and
 `CAPTURE_SYNTHETIC` flags. It does not advertise a real transport. Misaligned
@@ -38,6 +50,12 @@ session/recording failures, decodes the resulting file and checks its duration.
 /usr/local/bin/river-audio-test record 1 /tmp/plumbing-mic.wav --plumbing
 /usr/local/bin/river-record-sound 2 /tmp/ios-capture-new.caf
 ```
+
+The CLI recorder checks its own microphone permission before starting. On the
+live diagnostic boot it was denied (`0x64656e79`), so a valid app capture still
+needs a bundled iOS app with microphone permission granted through iOS. No
+privacy setting is changed by these tools. A denied CLI capture does not prove
+that an authorized app has a HAL failure.
 
 Run host fault-injection tests with `python3 tools/test-river-audio.py`.
 They exercise backend gating, unknown ABI versions, EINTR, partial transfers,
@@ -78,8 +96,9 @@ The remaining sequence is:
    existing IRQ GPIO46/63 configuration: patch 0271 writes `0x203`, which has
    TLMM output enable set; Android specifies IRQ inputs. Do not assume current
    pin labels or pinmux writes establish the board-level PCM route.
-2. Implement bounded codec identity/control transfers with correct SPI framing
-   and verified power/reset/clock prerequisites. Verify the actual CS47L35 ID.
+2. Run the guarded identity probe and verify the actual CS47L35 ID and pin
+   restoration. Then implement controller-based SPI and codec control, with
+   verified power/reset/clock prerequisites.
 3. Establish ADSP firmware availability, secure loading/ownership, IPC and
    SLIMbus/Q6AFE capture/playback. Do not repeat direct LPASS MMIO accesses;
    they aborted in r153. A replacement AP transport needs its own verified
