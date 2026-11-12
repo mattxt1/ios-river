@@ -169,6 +169,11 @@ static void check_restore(void) {
  assert(strstr(ri_clock_note, "clock_restored=1")); assert(active_n == 8);
 }
 int main(void) {
+ reset(0);amp[0]=0;
+ assert(ri_clock_run_impl(false,false,true)==EIO);
+ assert(strstr(ri_clock_note,"i2s_snapshot_error=amp_id"));
+ assert(strstr(ri_clock_note,"snapshot_want=0x35a40"));
+ assert(!writes&&!amp_writes&&!pmic_writes);check_pins();
  reset(0); assert(!ri_clock_run(false)); assert(!writes); check_pins();
  assert(strstr(ri_clock_note, "snapshot=1")); assert(!ri_clock_run(false)); assert(!writes);
  reset(0); assert(!ri_clock_run(true)); check_restore(); assert(strstr(ri_clock_note, "locked=1"));

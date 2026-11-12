@@ -1,0 +1,57 @@
+diff --git a/bsd/dev/river_codec_i2s.h b/bsd/dev/river_codec_i2s.h
+--- a/bsd/dev/river_codec_i2s.h
++++ b/bsd/dev/river_codec_i2s.h
+@@ -31,20 +31,34 @@
+      ri_cs35l41_rd(0x4808,&format) && !(format&0x33);
+ }
+ static bool
++ri_i2s_snapshot_fail(const char *stage, uint32_t reg, uint32_t want, uint32_t got)
++{
++ snprintf(ri_i2s_note,sizeof(ri_i2s_note),
++     "i2s_snapshot_error=%s snapshot_reg=%#x snapshot_want=%#x snapshot_got=%#x",
++     stage,reg,want,got);
++ return false;
++}
++static bool
+ ri_i2s_snapshot(void)
+ {
+  ri_i2s_touched=false;ri_i2s_codec_restored=true;ri_i2s_amp_restored=true;ri_i2s_amp_locked=false;
+  ri_i2s_irq_before=ri_i2s_irq_live=0;
+  uint32_t id=0;
+- if (!ri_cs35l41_rd(0,&id) || id!=0x35a40) return false;
++ if (!ri_cs35l41_rd(0,&id)) return ri_i2s_snapshot_fail("amp_id_read",0,0x35a40,id);
++ if (id!=0x35a40) return ri_i2s_snapshot_fail("amp_id",0,0x35a40,id);
+  for(unsigned i=0;i<16;i++) ri_i2s_codec_saved[i]=ri_clock_read(ri_i2s_codec_regs[i]);
+- for(unsigned i=0;i<16;i++) if(ri_clock_read(ri_i2s_codec_regs[i])!=ri_i2s_codec_saved[i]) return false;
+- for(unsigned i=0;i<9;i++) if(!ri_cs35l41_rd(ri_i2s_amp_regs[i],&ri_i2s_amp_saved[i])) return false;
++ for(unsigned i=0;i<16;i++) {
++  uint16_t got=ri_clock_read(ri_i2s_codec_regs[i]);
++  if(got!=ri_i2s_codec_saved[i]) return ri_i2s_snapshot_fail("codec_changed",ri_i2s_codec_regs[i],ri_i2s_codec_saved[i],got);
++ }
++ for(unsigned i=0;i<9;i++) if(!ri_cs35l41_rd(ri_i2s_amp_regs[i],&ri_i2s_amp_saved[i]))
++  return ri_i2s_snapshot_fail("amp_read",ri_i2s_amp_regs[i],0,0);
+  for(unsigned i=0;i<9;i++) {
+   uint32_t got=0;
+-  if(!ri_cs35l41_rd(ri_i2s_amp_regs[i],&got) || got!=ri_i2s_amp_saved[i]) return false;
++  if(!ri_cs35l41_rd(ri_i2s_amp_regs[i],&got)) return ri_i2s_snapshot_fail("amp_reread",ri_i2s_amp_regs[i],ri_i2s_amp_saved[i],0);
++  if(got!=ri_i2s_amp_saved[i]) return ri_i2s_snapshot_fail("amp_changed",ri_i2s_amp_regs[i],ri_i2s_amp_saved[i],got);
+  }
+- if(!ri_cs35l41_rd(0x10098,&ri_i2s_irq_before)) return false;
++ if(!ri_cs35l41_rd(0x10098,&ri_i2s_irq_before)) return ri_i2s_snapshot_fail("amp_irq_read",0x10098,0,0);
+  snprintf(ri_i2s_note,sizeof(ri_i2s_note),
+      "i2s_snapshot=1 sys=%#x sr=%#x bclk=%#x txpin=%#x rxpin=%#x rate=%#x fmt=%#x bcpf=%#x txwl=%#x rxwl=%#x txen=%#x rxen=%#x gp9=%#x,%#x gp11=%#x,%#x amp_power=%#x amp_mute=%#x amp_fmt=%#x amp_pll=%#x irq=%#x",
+      ri_i2s_codec_saved[0],ri_i2s_codec_saved[1],ri_i2s_codec_saved[2],ri_i2s_codec_saved[3],
+diff --git a/bsd/dev/river_codec_clock.h b/bsd/dev/river_codec_clock.h
+--- a/bsd/dev/river_codec_clock.h
++++ b/bsd/dev/river_codec_clock.h
+@@ -258,6 +258,10 @@
+   size_t n = strlen(ri_clock_note);
+   snprintf(ri_clock_note + n, sizeof(ri_clock_note) - n, " pins_restored=%u", pins_restored);
+  }
++ if(i2s && error && !strcmp(phase,"i2s_snapshot")) {
++  size_t n=strlen(ri_clock_note);
++  snprintf(ri_clock_note+n,sizeof(ri_clock_note)-n," %s",ri_i2s_note);
++ }
+  if(i2s && test) {
+   size_t n=strlen(ri_clock_note);
+   snprintf(ri_clock_note+n,sizeof(ri_clock_note)-n,

@@ -5,6 +5,21 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Muted I2S baseline blocked before clock writes (2026-11-12)
+
+- User returned River to fastboot; `getvar product` reported `river`.
+  Temporary boot of `river-muted-i2s-6b7a6b2.img` succeeded. No flash.
+- Codec/FLL and PMGPIO6 baseline matched the prior idle state. Combined
+  `--i2s-snapshot` failed repeatedly with `phase=i2s_snapshot error=5`,
+  `attempted=0 route_touched=0 pins_restored=1`. No `--i2s-test` was run.
+- Amplifier survey still reported ID0x35a40/revB0, power0x21, mute0,
+  format0x20200233, PLL0x833 and IRQ3 0x20000010. Endpoint flags3.
+- Failure cause is unknown: 0278 snapshot did not report which exact read,
+  identity or repeated-value check failed. Added patch0279 with read-only
+  failure stage/register/expected/observed diagnostics. All guards and
+  hardware write sequences remain unchanged. A new boot is required to
+  identify the blocker before attempting the clock test.
+
 ## Muted I2S clock-test preparation (2026-11-12)
 
 - User requested the muted codec-to-amplifier I2S clock test after the 0277
