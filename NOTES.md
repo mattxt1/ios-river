@@ -3970,3 +3970,29 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
 - **Userspace Tooling (`phone-tools/vibrate.c`)**:
   - Added CLI utility `vibrate [ms]` to trigger haptics directly via `sysctlbyname("debug.river_vibrate", ...)`.
 
+## Status 2026-11-11: r148 Wi-Fi Internet Connectivity & System Resolver Fix
+- **Wi-Fi Handshake & DNS Resolution**:
+  - Successfully connected to Wi-Fi access point with WPA2-PSK handshake passing cleanly.
+  - Resolved Safari domain resolution issue: `river-net` configured system resolver under `State:/Network/Global/DNS` and `State:/Network/Service/wl0/DNS` with fallback public resolvers (1.1.1.1, 8.8.8.8).
+  - Confirmed `mDNSResponder` loaded resolvers, `getaddrinfo()` successfully resolved `apple.com` and public addresses, and MobileSafari loaded and rendered web pages cleanly.
+
+## Status 2026-11-11: r149 River Audio Architecture & Responsiveness Fix
+- **CoreAudio Userland Subsystem**:
+  - Confirmed `HakiosAudio.driver` (`AudioServerPlugIn`) in `/System/Library/Audio/Plug-Ins/HAL/HakiosAudio.driver`.
+  - Verified `mediaserverd` (PID 28) operates cleanly with `/dev/hakios-audio` (48 kHz stereo 16-bit PCM output) and `/dev/hakios-mic` (48 kHz mono 16-bit PCM input).
+  - Tested playback through userland via `river-play-sound` (/System/Library/Audio/UISounds/connect_power.caf) and `river-audio-test play`.
+- **UI Unresponsiveness Regression Root Cause Isolated & Fixed**:
+  - In `xnu/patches/0269-river-backlight-corebrightness.patch`, hunk count header mismatch (`+1536,30` vs `+1536,31`) caused `git apply` to skip patch 0269.
+  - Skipping patch 0269 caused `AppleARMBacklight` to be published unconditionally under `AppleCLCD`, activating CoreBrightness digital dimming color matrix pass on every frame, reducing frame presentation to ~0.2 fps.
+  - Fixed hunk line count header in patch 0269 to `+1536,31` (commit `3e21645`).
+  - Added `riverarmbl=1` boot guard: `AppleARMBacklight` now only publishes if explicitly requested via `riverarmbl=1`. Without `riverarmbl=1`, sweetgl frame presentation runs at full 60 fps without frame stalls or CoreBrightness interference.
+- **Hardware Audio Architecture**:
+  - **Speaker Amplifier**: NXP TFA9874 smart audio amplifier at I2C address `0x34` on Qualcomm BLSP1 QUP2 (`ri_qup2`, MMIO `0x078b6000`), shared with AW8691 haptics (`0x5b`).
+  - **Hardware Reset**: TLMM GPIO 94 (`0x0105e000`). Must be driven output-high (`0x0105e004` bit 1 = 1, `GPIO_CFG` = `0x2c0`) to release TFA9874 from reset.
+  - **Digital Audio Interface**: Quinary MI2S (`pri_mi2s` TLMM GPIOs 88, 91, 92, 93) routed to Qualcomm LPASS / Hexagon DSP.
+  - **Internal Headphone/Earpiece Codec**: PM8953 integrated WCD codec / CS47L35.
+- **Packaging & Image Verification**:
+  - Kernel compiled locally (`479c35dc5a76377d40996bf1588bb807bce35e17cdb8aed88e09c5a1239e202b`) and verified with `strings`: includes both `RIVER FB: AppleARMBacklight published (riverarmbl=1)` and `RIVER AUDIO: /dev/hakios-audio`.
+  - Staged `river-audio-boot.img` (26,279,936 bytes < 38 MB) with boot cmdline (562 bytes < 608 bytes).
+
+
