@@ -25,6 +25,7 @@
   ratio=0 ref=0 gain=0 phase=0x2906 sync1=0 sync7=1 mask1=0x100
   mask2=0x100 raw=0`; PMIC GPIO6 unchanged; pins restored. PCM status
   `version=1 flags=0x3 output_frames=0 input_frames=0`.
+- User confirmed iOS remained responsive after the corrected 0276 FLL test.
 - Next: trace PM8953 DTEST3 source/clock ownership and the exact GPIO6 mux
   configuration before a bounded route-enable test. Preserve verified codec
   clock and GPIO restoration. No SYSCLK/AIF/analog output was enabled in
