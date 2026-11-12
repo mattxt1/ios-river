@@ -83,7 +83,7 @@ static bool ri_spmi_read(vm_offset_t obs, unsigned reg, unsigned n, uint32_t *v)
  assert(n == 1 && (obs == 0x145 || obs == 0x11d || obs == 0xc5));
  if (obs == 0xc5) {
   pmic_reads++;
-  if (mode == 30) return false;
+  if (mode == 30 || (mode == 32 && pmic_writes)) return false;
   if (mode == 31 && pmic_reads > 7) { *v = 0xffff; return true; }
   switch (reg) { case 4:*v=0x10;break; case 5:*v=1;break; case 0x40:*v=pmic_mode;break;
    case 0x42:*v=pmic_pull;break;
@@ -104,7 +104,7 @@ static vm_offset_t ri_spmi_chnl(vm_offset_t core, unsigned ppid) {
 static bool ri_spmi_write(vm_offset_t channel, unsigned reg, uint8_t value) {
  assert(channel == 0xc5 && (reg == 0x40 || reg == 0x42));
  pmic_writes++;
- if (pmic_writes == pmic_ignore) return false;
+ if (pmic_writes == pmic_ignore || (mode == 33 && pmic_writes > 2)) return false;
  if (reg == 0x40) { assert(value == 0 || value == 0x1c); pmic_mode = value; }
  else { assert(value == 4 || value == 5); pmic_pull = value; }
  return true;
@@ -174,6 +174,10 @@ int main(void) {
  for (unsigned scenario = 30; scenario <= 31; scenario++) {
   reset(scenario); assert(ri_clock_run_impl(true,true) == EBUSY);
   assert(!pmic_writes && !writes); check_pins();
+ }
+ for (unsigned scenario = 32; scenario <= 33; scenario++) {
+  reset(scenario); assert(ri_clock_run_impl(true,true) == EIO); check_pins();
+  assert(strstr(ri_clock_note,"route_restored=0")); assert(pmic_writes <= 8);
  }
  puts("PASS: PMIC route ownership, fail-closed channel lookup, write/read failures, timeout and full route restoration");
  puts("PASS: FLL framing, full 32k recipe, latched/self-clearing update strobes, repeated snapshots, rollback and stuck-enable detection");
