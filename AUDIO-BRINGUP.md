@@ -42,6 +42,13 @@ at most 25 ten-millisecond polls, disables the FLL and restores its registers
 and the SPI pins. Readback or cleanup failures are errors. It never enables
 SYSCLK/DSPCLK, AIFs or analog outputs. The passive command reads the last result.
 
+Live 0275 testing did not achieve lock. FLL shutdown and GPIO restoration
+verified, but the original clock-restoration comparison failed. Patch 0276
+adds the codec 32 kHz enable from the full Cirrus initialization, explicit N
+update-command rearming/clearing, precise mismatch diagnostics, repeated
+read-only snapshots, and PMIC GPIO6 mode/voltage/pull/source readbacks. PMIC
+clock routing is not changed. See NOTES.md for the current build/test state.
+
 The fixed clock recipe is checked against both the pinned Motorola board/codec
 source and [Cirrus's MCU driver at 82ba920b](https://github.com/CirrusLogic/mcu-drivers/tree/82ba920bace895e1a920aeaf0bb8a7df69c06c40/cs47l35).
 That source documents the phase-control register and integer-mode gain used.

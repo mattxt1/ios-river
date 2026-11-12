@@ -68,6 +68,14 @@
   approval requested; reviewable source/entitlements/hash manifest are in
   the chat outputs `installer-review/`. No signature-validation or microphone
   authorization override was requested or used. Continue unaffected clock work.
+- User supplied the exact app message: "Microphone permission was denied.
+  Allow in Settings to record." This confirms an API-level denial despite the
+  enabled Settings entry, not simply the absence of a new prompt. User explicitly
+  approved the scoped installer-helper entitlement escalation after review, and
+  returned River to fastboot for the prepared 0275 image.
+- Verified fastboot product `river`, then temporarily booted
+  `river-codec-clock-f128166.img` successfully. No partition was flashed.
+  Live clock snapshot/test and approved installer deployment are pending.
 - Post-app-test kernel counters were `version=1 flags=0x3
   output_frames=207872 input_frames=52224`. This shows software endpoint
   activity, not which app buffers were delivered or real microphone capture.
@@ -81,6 +89,31 @@
   Its build expects separately supplied DSP2/DSP3 firmware images. This may
   be an alternative transport to investigate; firmware availability, River mic
   routing, duplex behavior and PCM conversion are not established.
+- Live 0275 snapshot: `clk32=0x2 sys=0x404 async=0x305 dsp=0x305
+  ctl1=0x2 n=0x8 theta=0x18 lambda=0x7d ratio=0 ref=0 gain=0
+  phase=0x2906 sync1=0 sync7=1 mask1=0x100 mask2=0x100 raw=0`,
+  with pins restored. Explicit FLL test returned `phase=lock locked=0 raw=0
+  fll_off=1 clock_restored=0 pins_restored=1 error=5`. Subsequent audio survey
+  and PCM status reads succeeded. No lock achieved; do not treat 0275 as a
+  successful clock bring-up or verified full clock restoration.
+- Correction 0276 committed as `a889f51eb6b8ad09a43f5ead072b99d8362ff084`:
+  enables/restores codec Clock_32k_1 using the Cirrus initialization recipe,
+  explicitly rearms/strobes/clears the N update command, reports exact write
+  and restore mismatch register/value fields, allows repeated read-only clock
+  snapshots, and reads PM8953 GPIO6 configuration via the SPMI observer only.
+  It does not change PMIC routing. Host tests now cover self-clearing and
+  latched update-bit models and detect incomplete cleanup with exact mismatch
+  diagnostics. Build of committed correction is in progress.
+- User-approved installer helper was deployed with the two reviewed installer
+  service capabilities. Its initial normal-install attempt required an explicit
+  CFBundleIdentifier option; after adding that option, MobileInstallation
+  rejected the IPA's ad hoc signature: MIInstallerErrorDomain 13, `0xe8008014`,
+  ApplicationVerificationFailed. Validation was preserved and not bypassed.
+  Local `security find-identity -p codesigning` reported zero valid identities.
+  The separate user app was not installed. The original system-registered
+  test app remains installed; its microphone/API mismatch is unresolved. After
+  the failed normal-install attempt, the remote installer helper was restored
+  to its unprivileged build (no installer-service entitlements).
 - Next: finish/package the FLL test build; temporarily boot it, collect the
   clock snapshot, run the isolated FLL test only if its live prerequisites
   permit, and verify shutdown/restoration. Keep physical audio input/output
