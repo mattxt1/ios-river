@@ -18,3 +18,14 @@ with tempfile.TemporaryDirectory(prefix="river-audio-tests-") as tmp:
     subprocess.run(["cc", "-O2", "-Wall", "-Wextra", "-Werror", "-I", tmp,
                     str(root / "tools/tests/river-audio-survey-host.c"), "-o", str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
+    patch = (root / "xnu/patches/0274-river-codec-identity-probe.patch").read_text()
+    section = patch.split("diff --git a/bsd/dev/river_codec_probe.h", 1)[1]
+    added = "\n".join(line[1:] for line in section.splitlines()
+                       if line.startswith("+") and not line.startswith("+++")) + "\n"
+    # Exercise the probe itself; the sysctl wrappers use XNU-only types.
+    added = added.split("static int\nriver_codec_probe_sysctl", 1)[0]
+    (Path(tmp) / "codec-probe-added.h").write_text(added)
+    binary = Path(tmp) / "codec-probe"
+    subprocess.run(["cc", "-O2", "-Wall", "-Wextra", "-Werror", "-I", tmp,
+                    str(root / "tools/tests/river-codec-probe-host.c"), "-o", str(binary)], check=True)
+    subprocess.run([str(binary)], check=True)

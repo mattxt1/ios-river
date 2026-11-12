@@ -1,0 +1,176 @@
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -4522,6 +4522,7 @@
+ }
+ SYSCTL_PROC(_debug, OID_AUTO, river_audio_prereq, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
+             NULL, 0, river_audio_prereq_sysctl, "A", "River read-only codec prerequisites");
++#include "river_codec_probe.h"
+ static uint64_t
+ ri_ns_since(uint64_t t0)
+ {
+diff --git a/bsd/dev/river_codec_probe.h b/bsd/dev/river_codec_probe.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/river_codec_probe.h
+@@ -0,0 +1,160 @@
++/* One-shot, identity-only CS47L35 SPI probe using idle TLMM pins.
++ * Motorola 2dba45b8: mode 0, BE 32-bit address + 16 pad + BE 16-bit data.
++ * regmap-spi read flag is 0x80 in the first address byte; silicon ID 0x6360.
++ * No codec register writes, reset changes, clocks, regulator votes or LPASS.
++ */
++static LCK_GRP_DECLARE(ri_codec_grp, "river-codec-probe");
++static LCK_MTX_DECLARE(ri_codec_lock, &ri_codec_grp);
++static vm_offset_t ri_codec_pin[4], ri_codec_core, ri_codec_rail[2];
++static vm_offset_t ri_codec_reset, ri_codec_clock;
++static int ri_codec_attempted;
++static char ri_codec_note[256] = "not requested";
++
++static uint8_t
++ri_codec_byte(uint8_t tx)
++{
++ uint8_t rx = 0;
++ for (unsigned bit = 0; bit < 8; bit++) {
++  ri_wr(ri_codec_pin[2], 4, (tx & 0x80) ? 2 : 0);
++  delay(5);
++  ri_wr(ri_codec_pin[0], 4, 2);
++  delay(5);
++  rx = (uint8_t)((rx << 1) | (ri_rd(ri_codec_pin[3], 4) & 1));
++  ri_wr(ri_codec_pin[0], 4, 0);
++  tx <<= 1;
++ }
++ return rx;
++}
++
++static uint16_t
++ri_codec_id_read(unsigned reg)
++{
++ /* Only identity and revision reads are permitted by this probe. */
++ if (reg > 1) return 0xffff;
++ ri_wr(ri_codec_pin[1], 4, 0);
++ delay(5);
++ (void)ri_codec_byte(0x80);
++ (void)ri_codec_byte(0);
++ (void)ri_codec_byte(0);
++ (void)ri_codec_byte((uint8_t)reg);
++ (void)ri_codec_byte(0);
++ (void)ri_codec_byte(0);
++ uint16_t value = (uint16_t)ri_codec_byte(0) << 8;
++ value |= ri_codec_byte(0);
++ ri_wr(ri_codec_pin[1], 4, 2);
++ delay(5);
++ return value;
++}
++
++static int
++ri_codec_probe_once(void)
++{
++ const unsigned ppid[2] = { 0x145, 0x11d };
++ const uint32_t types[2] = { 0x21, 0x3 }, subs[2] = { 0x2a, 0xa };
++ uint32_t cfg[4], latch[4];
++ if (ri_codec_attempted) return EALREADY;
++ if (!ri_speaker_ok) {
++  snprintf(ri_codec_note, sizeof(ri_codec_note), "blocked: speaker/reset initialization incomplete");
++  return EBUSY;
++ }
++ if (!ri_codec_core) ri_codec_core = ri_map(0x0200f000);
++ if (!ri_codec_core || ri_rd(ri_codec_core, 0) != 0x20010000) {
++  snprintf(ri_codec_note, sizeof(ri_codec_note), "blocked: unsupported SPMI controller");
++  return ENXIO;
++ }
++ /* These exact type/subtype and ready/enabled bits were observed in the
++  * preceding on-device survey. Recheck twice before driving any codec pin.
++  * They are prerequisites, not voltage measurements or a supply enable path. */
++ for (unsigned pass = 0; pass < 2; pass++) {
++  for (unsigned i = 0; i < 2; i++) {
++   if (!ri_codec_rail[i]) ri_codec_rail[i] = ri_spmi_obs(ri_codec_core, ppid[i]);
++   uint32_t type, sub, status, enable;
++   if (!ri_codec_rail[i] || !ri_spmi_read(ri_codec_rail[i], 4, 1, &type) ||
++       !ri_spmi_read(ri_codec_rail[i], 5, 1, &sub) ||
++       !ri_spmi_read(ri_codec_rail[i], 8, 1, &status) ||
++       !ri_spmi_read(ri_codec_rail[i], 0x46, 1, &enable) ||
++       type != types[i] || sub != subs[i] || !(status & 0x80) || !(enable & 0x80)) {
++    snprintf(ri_codec_note, sizeof(ri_codec_note), "blocked: rail PPID %#x not identified/ready/enabled", ppid[i]);
++    return EIO;
++   }
++  }
++ }
++ if (!ri_codec_reset) ri_codec_reset = ri_map(0x01044000);
++ if (!ri_codec_clock) ri_codec_clock = ri_map(0x0180f01c);
++ if (!ri_codec_reset || !ri_codec_clock ||
++     ri_rd(ri_codec_reset, 0) != 0x203 || (ri_rd(ri_codec_reset, 4) & 3) != 3 ||
++     ri_rd(ri_codec_clock, 0) != 0x80000000 ||
++     ri_rd(ri_codec_clock, 8) != 0x80000000) {
++  snprintf(ri_codec_note, sizeof(ri_codec_note), "blocked: reset or SPI controller clock state changed");
++  return EBUSY;
++ }
++ for (unsigned i = 0; i < 4; i++) {
++  if (!ri_codec_pin[i]) ri_codec_pin[i] = ri_map(0x01087000 + i * 0x1000);
++  if (!ri_codec_pin[i]) {
++   snprintf(ri_codec_note, sizeof(ri_codec_note), "blocked: SPI pin mapping failed");
++   return ENXIO;
++  }
++  cfg[i] = ri_rd(ri_codec_pin[i], 0);
++  latch[i] = ri_rd(ri_codec_pin[i], 4) & 2;
++  if (cfg[i] != 1) {
++   snprintf(ri_codec_note, sizeof(ri_codec_note), "blocked: GPIO%u is not in observed idle input state", 135 + i);
++   return EBUSY;
++  }
++ }
++ ri_codec_attempted = 1;
++ /* Set output latches before enabling drivers; keep CS high while setting
++  * CLK/MOSI direction. MISO stays an input throughout. */
++ ri_wr(ri_codec_pin[1], 4, 2);
++ ri_wr(ri_codec_pin[1], 0, 0x200);
++ ri_wr(ri_codec_pin[0], 4, 0);
++ ri_wr(ri_codec_pin[2], 4, 0);
++ ri_wr(ri_codec_pin[0], 0, 0x200);
++ ri_wr(ri_codec_pin[2], 0, 0x200);
++ ri_wr(ri_codec_pin[3], 0, 0);
++ delay(10);
++ uint16_t id1 = ri_codec_id_read(0), id2 = ri_codec_id_read(0);
++ uint16_t revision = ri_codec_id_read(1);
++ /* Release every driver before restoring latches/configuration. No early
++  * return is permitted between first pin write and this cleanup. */
++ ri_wr(ri_codec_pin[1], 4, 2);
++ for (unsigned i = 0; i < 4; i++) ri_wr(ri_codec_pin[i], 0, 0);
++ for (unsigned i = 0; i < 4; i++) {
++  ri_wr(ri_codec_pin[i], 4, latch[i]);
++  ri_wr(ri_codec_pin[i], 0, cfg[i]);
++ }
++ bool restored = true;
++ for (unsigned i = 0; i < 4; i++)
++  if (ri_rd(ri_codec_pin[i], 0) != cfg[i] ||
++      (ri_rd(ri_codec_pin[i], 4) & 2) != latch[i]) restored = false;
++ bool matched = id1 == 0x6360 && id2 == id1;
++ snprintf(ri_codec_note, sizeof(ri_codec_note),
++     "attempted=1 id1=%#x id2=%#x revision=%#x cs47l35=%u pins_restored=%u pcm_transport=0",
++     id1, id2, revision, matched, restored);
++ return matched && restored ? 0 : EIO;
++}
++
++static int
++river_codec_probe_sysctl SYSCTL_HANDLER_ARGS
++{
++ int request = 0;
++ int error = sysctl_handle_int(oidp, &request, 0, req);
++ if (error || !req->newptr) return error;
++ if (request != 1) return EINVAL;
++ lck_mtx_lock(&ri_codec_lock);
++ error = ri_codec_probe_once();
++ lck_mtx_unlock(&ri_codec_lock);
++ return error;
++}
++SYSCTL_PROC(_debug, OID_AUTO, river_codec_probe, CTLTYPE_INT | CTLFLAG_RW | CTLFLAG_LOCKED,
++            NULL, 0, river_codec_probe_sysctl, "I", "River one-shot identity-only SPI probe");
++static int
++river_codec_probe_result_sysctl SYSCTL_HANDLER_ARGS
++{
++ char note[sizeof(ri_codec_note)];
++ lck_mtx_lock(&ri_codec_lock);
++ strlcpy(note, ri_codec_note, sizeof(note));
++ lck_mtx_unlock(&ri_codec_lock);
++ return SYSCTL_OUT(req, note, strlen(note) + 1);
++}
++SYSCTL_PROC(_debug, OID_AUTO, river_codec_probe_result, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
++            NULL, 0, river_codec_probe_result_sysctl, "A", "River codec identity probe result");
