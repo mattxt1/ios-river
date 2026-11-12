@@ -4020,3 +4020,30 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
 
 
 
+
+## Status 2026-11-12: r151 Cirrus Logic CS35L41 Smart Audio Amplifier Implementation (Patch 0271)
+- **Hardware Architecture Discovered via `live.dtb`**:
+  - Deep inspection of raw production device tree `/Users/matttyson/Documents/Codex/2026-10-19/i-want-to-experiment-with-getting/work/river-device/live.dtb` revealed the Moto G7 loudspeaker amplifier is an authentic **Cirrus Logic CS35L41** (`cirrus,cs35l41`) at 7-bit I2C address `0x40` on Qualcomm BLSP1 QUP2 (`0x078b6000`), NOT an NXP TFA9874 (`0x34`).
+  - The QUP2 I2C bus hosts three peripherals: AW8691 haptic driver (`0x5b`), CS35L41 smart speaker amplifier (`0x40`), and SX933x grip sensor (`0x28`).
+  - **Hardware Reset Line**: TLMM GPIO 94 (`0x0105e000`). Output-high, 2 mA drive, pull-up (`cs35l41_reset_default`).
+  - **Interrupt Line**: TLMM GPIO 63 (`0x0103f000`).
+  - **Boost Converter Hardware Settings**: Peak current 4500 mA (`0x1194`), inductor 1000 nH (`0x3e8`), capacitor 15 uF.
+  - **Digital Audio Interface**: Primary MI2S lines on TLMM GPIO 91 (`pri_mi2s` DOUT), GPIO 92 (`pri_mi2s_ws` WS), GPIO 93 (`pri_mi2s` DIN), and GPIO 66 (`pri_mi2s` MCLK2), all configured with 8 mA drive strength (`0x0c4`).
+- **CS35L41 Register Architecture**:
+  - Unlike standard 8-bit or 16-bit codecs, CS35L41 uses 32-bit big-endian register addresses and 32-bit big-endian values:
+    - `CS35L41_DEVID` (`0x00000000`): Device ID register (returns `0x00035a40` / `0x00035a41`).
+    - `CS35L41_REVID` (`0x00000004`): Silicon revision register (returns `0x000000b2` Rev B2).
+    - `CS35L41_PWR_CTRL1` (`0x00002014`): Power control 1 (`GLOBAL_EN = 1` bit 0).
+    - `CS35L41_PWR_CTRL2` (`0x00002018`): Power control 2 (`AMP_EN = 1` bit 0, `BST_EN = 2` bit 4-5 internal boost).
+    - `CS35L41_SP_ENABLES` (`0x00004800`): Serial Audio Port (ASP) channel enables (`ASP_RX1_EN = 1`).
+    - `CS35L41_DAC_PCM1_SRC` (`0x00004c00`): DAC PCM1 input routing selector (`0x00000008` routes `ASPRX1` directly to DAC).
+    - `CS35L41_AMP_GAIN_CTRL` (`0x00006c04`): Amplifier gain control (`0x00000084` sets 4.5 dB gain).
+- **Patch 0271 Refactor (`0271-river-cs35l41-speaker-amp.patch`)**:
+  - Implemented 32-bit big-endian read/write helpers: `ri_cs35l41_rd(uint32_t reg, uint32_t *val)` and `ri_cs35l41_wr(uint32_t reg, uint32_t val)` over QUP2 (`ri_qup2`) at slave address `0x40`.
+  - Implemented `river_speaker_init()`:
+    - Drives TLMM GPIO 94 output-high (`0x203`) with a 10 ms delay to release CS35L41 from hardware shutdown.
+    - Configures TLMM MI2S pins: GPIO 91, 92, 93 to Function 1 (`pri_mi2s`/`pri_mi2s_ws`, 8 mA).
+    - Configures TLMM GPIO 66 to Function 1 (`pri_mi2s` MCLK2, 8 mA).
+    - Probes I2C `0x40` for `CS35L41_DEVID` and reads `CS35L41_REVID`.
+    - Programs power and audio registers: activates `GLOBAL_EN`, enables Class-D amplifier core and internal DC-DC boost converter, unmasks `ASPRX1`, routes `ASPRX1` directly to DAC PCM1, and sets output gain.
+    - Updates sysctl `debug.river_audio_hw` to report `ok=%d devid=%#010x rev=%#010x status=%#010x`.
