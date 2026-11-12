@@ -4121,3 +4121,20 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   - Image size: 26,433,536 bytes (< 38 MB limit).
   - Boot cmdline: 562 bytes (< 608 byte limit).
   - Verified audio symbols via nm: `_river_audio_hw_write`, `_ri_cs35l41_dig_vol`, `_ri_cs35l41_out_mute`, `_ri_cs35l41_sp_fmt`, `_ri_csr_spkr_mux`.
+
+## Status 2026-11-12: r154 Removal of LPASS CSR MMIO Abort & Verified Safe Audio Pipeline (Patch 0271)
+- **Problem Statement**:
+  - Phone triggered a kernel Data Abort panic during r153 boot.
+- **Root Cause Analysis**:
+  - In r153, `river_speaker_init()` attempted to map and read Qualcomm LPASS CSR registers at `0x0c051000` (`LPASS_CSR_GP_IO_MUX_SPKR_CTL`) and `0x0c055000` (`LPASS_CSR_GP_IO_LPAIF_PRI_PCM_PRI_MODE_MUXSEL`).
+  - On MSM8953/SDM632, the LPASS address range is unclocked or guarded by TrustZone XPU, so CPU MMIO read/write access generates an external bus error (Data Abort) that immediately panics XNU.
+- **Fixes Applied**:
+  - Removed all accesses to `0x0c051000` and `0x0c055000` from `bsd/dev/sweet_keys.c` (Patch 0271).
+  - Preserved all CS35L41 configuration:
+    - Digital volume unmuted (`0x00006000` = `0x00000000`, 0 dB).
+    - Analog output stage unmuted (`0x00002024` = `0x00000000`).
+    - ASP formatted for 16-bit I2S (`0x00004808` = `0x00021000`).
+    - Word length configured (`0x00004840` = `0x00000010`).
+    - Global clock configured to 48 kHz (`0x00002C0C` = `0x00000003`).
+    - Boost converter inductor current (4500 mA) and slope (1000 nH).
+    - Dispatched audio PCM stream from `/dev/hakios-audio` directly to `river_audio_hw_write()`.
