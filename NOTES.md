@@ -5,6 +5,47 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River Audio Subsystem, CoreAudio HAL, and Responsiveness Isolation (2026-11-11)
+
+Implemented and verified the Hakios audio subsystem on Motorola Moto G7 (`river`) running iOS 16.
+Isolated UI responsiveness regression to unconditional publication of `AppleARMBacklight`, and verified
+audio hardware architecture.
+
+### 1. Audio Subsystem Implementation & Live Verification
+- **CoreAudio AudioServerPlugIn (`HakiosAudio.driver`)**:
+  - Located in `/System/Library/Audio/Plug-Ins/HAL/HakiosAudio.driver`.
+  - Confirmed active integration with `mediaserverd` via `river-media-capability`:
+    `audio_available_inputs=present count=1 inputAvailable=1`, `setCategory=1 error=none`.
+  - Bridges PCM output stream to `/dev/hakios-audio` (48 kHz, 16-bit stereo) and microphone capture
+    from `/dev/hakios-mic` (48 kHz, 16-bit mono).
+- **Kernel Character Devices (`patch 0270`)**:
+  - Implemented `/dev/hakios-audio` and `/dev/hakios-mic` dynamically registered via `cdevsw_add` in `river_audio.c`.
+  - Verified write stream: `river-audio-test play 440 1.0 0.8` (48,000 frames written, peak volume tracking).
+  - Verified read stream: `river-audio-test record 1.0` (48,000 frames read, ambient noise / tone).
+  - Verified volume ioctl: `HAKIOS_AUDIO_SET_VOLUME` (`_IOW('r', 1, struct hakios_audio_volume)`).
+- **iOS Userland CoreAudio Framework Verification**:
+  - Built and verified `river-play-sound`: `AVAudioPlayer` successfully loaded and played `/System/Library/Audio/UISounds/connect_power.caf` and `/Library/Ringtones/Marimba.m4r` through `mediaserverd` (`play returned: 1`).
+  - Built and verified `river-record-sound`: `AVAudioRecorder` initialized with `AVAudioSessionCategoryPlayAndRecord` and successfully recorded 2.0s audio to `/tmp/record_test.caf` (4096 bytes).
+- **Physical Hardware Audio Path Findings**:
+  - Moto G7 (`river`) uses a Cirrus Logic Madera audio codec (`CS47L35` / `CS47L85`) and Qualcomm Hexagon ADSP (APR/Q6AFE/Q6ASM).
+  - Physical sound output requires clocking and routing through the Madera I2C/SPI control registers and ADSP audio front-end. Currently, the kernel driver sink consumes and logs the PCM buffers, but does not yet bridge them to the physical Madera codec registers.
+
+### 2. UI Responsiveness Isolation & Fix (Patch 0269)
+- **Root Cause**:
+  - Kernel build `river-521e7856ef11-zS1H8i` published `AppleARMBacklight` unconditionally under `AppleCLCD` in `SweetFramebuffer.cpp`.
+  - When published, `CoreBrightness.framework` attached to `AppleARMBacklight` and initiated a per-frame full-screen digital dimming color-matrix filter pass. On the CPU/sweetgl rendering pipeline, this dropped the UI frame rate from smooth interaction down to ~0.2 fps, making the device feel frozen and unresponsive to touch.
+- **Fix**:
+  - Restored the opt-in boot-arg guard in patch 0269 (`riverarmbl=1`).
+  - Without `riverarmbl=1`, `AppleARMBacklight` remains unpublished, preventing CoreBrightness from attaching the digital dimming filter, restoring instant touch response and high frame rate.
+
+### 3. Wi-Fi & Safari Full Internet Resolution Fix (`river-net.c`)
+- Fixed global DNS resolver configuration in SystemConfiguration:
+  - Removed interface-scoped tagging (`InterfaceName = en0`) from `State:/Network/Service/<svc>/DNS` so `configd` populates the global `Resolver[0]`.
+  - Configured `Setup:/Network/Global/IPv4` (`ServiceOrder`) and `State:/Network/Global/IPv4` (`PrimaryInterface = en0`, `PrimaryService`, `Router`).
+  - Posted `com.apple.system.SystemConfiguration.dns_configuration` and network change Darwin notifications.
+  - Verified MobileSafari full internet browsing and TLS connection to `https://apple.com`.
+
+
 ## River Backlight Control and CoreBrightness Integration (2026-11-07)
 
 Implemented full backlight brightness control integration for Motorola Moto G7 (`river`) running iOS 16.

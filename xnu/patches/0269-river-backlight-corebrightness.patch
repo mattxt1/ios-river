@@ -20,26 +20,34 @@
  	}
  	if (level < 1) {
  		level = 1;
-@@ -1531,6 +1536,23 @@
+@@ -1531,6 +1536,30 @@
  		if (fDsi == NULL || fDsiBuf == NULL || !fDsiBufPhys || fBlLock == NULL) {
  			fDsi = NULL;
  		}
 +		if (fDsi != NULL) {
 +			setProperty("IOMFBBrightnessLevel", (unsigned long long)(300u << 16), 32);
 +			setProperty("IOMFBLinearBrightnessLevel", (unsigned long long)(300u << 16), 32);
-+			AppleARMBacklight *blService = OSTypeAlloc(AppleARMBacklight);
-+			if (blService != NULL && blService->init()) {
-+				blService->fFB = this;
-+				blService->setProperty("backlight-control", true);
-+				blService->setProperty("brightness-nits", (unsigned long long)300, 32);
-+				blService->setProperty("max-nits", (unsigned long long)SWEET_FB_MAX_NITS, 32);
-+				blService->setProperty("min-nits", (unsigned long long)1, 32);
-+				if (blService->attach(this)) {
-+					blService->registerService();
-+					IOLog("RIVER FB: AppleARMBacklight published\n");
++			/*
++			 * AppleARMBacklight is opt-in via riverarmbl=1: CoreBrightness attaches
++			 * when published and runs a full-screen digital dimming color-matrix filter pass
++			 * on every frame, which stalls sweetgl and drops UI frame rate from smooth to 0.2 fps.
++			 */
++			int armbl = 0;
++			if (PE_parse_boot_argn("riverarmbl", &armbl, sizeof(armbl)) && armbl) {
++				AppleARMBacklight *blService = OSTypeAlloc(AppleARMBacklight);
++				if (blService != NULL && blService->init()) {
++					blService->fFB = this;
++					blService->setProperty("backlight-control", true);
++					blService->setProperty("brightness-nits", (unsigned long long)300, 32);
++					blService->setProperty("max-nits", (unsigned long long)SWEET_FB_MAX_NITS, 32);
++					blService->setProperty("min-nits", (unsigned long long)1, 32);
++					if (blService->attach(this)) {
++						blService->registerService();
++						IOLog("RIVER FB: AppleARMBacklight published (riverarmbl=1)\n");
++					}
 +				}
++				OSSafeReleaseNULL(blService);
 +			}
-+			OSSafeReleaseNULL(blService);
 +		}
  		size_t l = strlen(river_mdp_note);
  		snprintf(river_mdp_note + l, sizeof(river_mdp_note) - l, "; DSI0 ctrl %#x trig %#x dma %#x -> DCS backlight %s",

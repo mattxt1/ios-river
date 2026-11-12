@@ -19,22 +19,7 @@
 
 static void cglog(const char *fmt, ...)
 {
-	char buf[1024];
-	va_list ap;
-	va_start(ap, fmt);
-	int n = vsnprintf(buf, sizeof(buf), fmt, ap);
-	va_end(ap);
-	if (n <= 0) return;
-
-	int fd = open("/var/mobile/Library/SpringBoard/cgprobe.log", O_WRONLY | O_CREAT | O_APPEND, 0666);
-	if (fd < 0) {
-		fd = open("/tmp/cgprobe.log", O_WRONLY | O_CREAT | O_APPEND, 0666);
-	}
-	if (fd >= 0) {
-		write(fd, buf, (size_t)n);
-		close(fd);
-	}
-	os_log(OS_LOG_DEFAULT, "CGPROBE: %{public}s", buf);
+	(void)fmt;
 }
 
 static uint64_t

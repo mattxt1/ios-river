@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
 			uint32_t best_id = 0;
 			IOSurfaceRef best_surf = NULL;
 
-			for (uint32_t cid = 1; cid <= 32; cid++) {
+			for (uint32_t cid = 1; cid <= 4096; cid++) {
 				IOSurfaceRef s = IOSurfaceLookup(cid);
 				if (s) {
 					size_t w = IOSurfaceGetWidth(s);

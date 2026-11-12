@@ -306,9 +306,15 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
 
  const void *order_v[1] = { cf_svcid };
  CFArrayRef order_arr = CFArrayCreate(NULL, order_v, 1, &kCFTypeArrayCallBacks);
- const void *gipv4_k[4] = { CFSTR("PrimaryInterface"), CFSTR("PrimaryService"), CFSTR("Router"), CFSTR("ServiceOrder") };
- const void *gipv4_v[4] = { cf_ifname, cf_svcid, cf_gw, order_arr };
- CFDictionaryRef cf_gipv4_dict = CFDictionaryCreate(NULL, gipv4_k, gipv4_v, 4, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+ const void *setup_gipv4_k[1] = { CFSTR("ServiceOrder") };
+ const void *setup_gipv4_v[1] = { order_arr };
+ CFDictionaryRef cf_setup_gipv4_dict = CFDictionaryCreate(NULL, setup_gipv4_k, setup_gipv4_v, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+ fn_SetValue(ds, CFSTR("Setup:/Network/Global/IPv4"), cf_setup_gipv4_dict);
+ CFRelease(cf_setup_gipv4_dict); CFRelease(order_arr);
+
+ const void *gipv4_k[3] = { CFSTR("PrimaryInterface"), CFSTR("PrimaryService"), CFSTR("Router") };
+ const void *gipv4_v[3] = { cf_ifname, cf_svcid, cf_gw };
+ CFDictionaryRef cf_gipv4_dict = CFDictionaryCreate(NULL, gipv4_k, gipv4_v, 3, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
  fn_SetValue(ds, CFSTR("State:/Network/Global/IPv4"), cf_gipv4_dict);
 
  const void *addrs_v[1] = { cf_ip };
@@ -323,12 +329,14 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
  CFStringRef cf_svc_ipv4 = CFStringCreateWithFormat(NULL, NULL, CFSTR("State:/Network/Service/%s/IPv4"), svc_id);
  fn_SetValue(ds, cf_svc_ipv4, cf_sipv4_dict);
 
- const void *sdns_k[3] = { CFSTR("ServerAddresses"), CFSTR("InterfaceName"), CFSTR("__FLAGS__") };
- const void *sdns_v[3] = { cf_dns_arr, cf_ifname, cf_flags };
- CFDictionaryRef cf_sdns_dict = CFDictionaryCreate(NULL, sdns_k, sdns_v, 3, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+ const void *sdns_k[1] = { CFSTR("ServerAddresses") };
+ const void *sdns_v[1] = { cf_dns_arr };
+ CFDictionaryRef cf_sdns_dict = CFDictionaryCreate(NULL, sdns_k, sdns_v, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
  CFStringRef cf_svc_dns = CFStringCreateWithFormat(NULL, NULL, CFSTR("State:/Network/Service/%s/DNS"), svc_id);
  fn_SetValue(ds, cf_svc_dns, cf_sdns_dict);
- CFRelease(cf_sdns_dict); CFRelease(cf_svc_dns);
+ CFStringRef cf_setup_svc_dns = CFStringCreateWithFormat(NULL, NULL, CFSTR("Setup:/Network/Service/%s/DNS"), svc_id);
+ fn_SetValue(ds, cf_setup_svc_dns, cf_sdns_dict);
+ CFRelease(cf_setup_svc_dns); CFRelease(cf_svc_dns); CFRelease(cf_sdns_dict);
 
  pid_t sp_pid;
  char *sp_argv[] = { "/usr/sbin/addNetworkInterface", "-i", (char *)name, NULL };
@@ -391,15 +399,15 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
  CFRelease(cf_if_ap); CFRelease(cf_if_link);
  CFRelease(cf_ap); CFRelease(cf_link);
 
- ask_ipconfiguration(name);
-
  (void)notify_post("com.apple.system.config.network_change");
+ (void)notify_post("com.apple.system.SystemConfiguration.dns_configuration");
+ (void)notify_post("com.apple.system.SystemConfiguration.network_change");
  (void)notify_post("com.apple.wifi.link-changed");
  (void)notify_post("com.apple.wifi.power-changed");
  (void)notify_post("com.apple.wifimanager.link-quality");
 
  CFRelease(cf_if_ipv4); CFRelease(cf_if_ipv4_dict);
- CFRelease(cf_svc_dns); CFRelease(cf_svc_ipv4); CFRelease(cf_sipv4_dict);
+ CFRelease(cf_svc_ipv4); CFRelease(cf_sipv4_dict);
  CFRelease(cf_masks_arr); CFRelease(cf_addrs_arr);
  CFRelease(cf_gipv4_dict); CFRelease(cf_dns_dict); CFRelease(cf_dns_arr);
  CFRelease(cf_dns); CFRelease(cf_gw); CFRelease(cf_mask); CFRelease(cf_ip); CFRelease(cf_svcid); CFRelease(cf_ifname);
