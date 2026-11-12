@@ -4065,3 +4065,9 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   - **Individual TLMM Mapping**: Separated pinmux configuration to map each GPIO at its exact physical address via `ri_map(0x0105b000)` (GPIO 91), `ri_map(0x0105c000)` (GPIO 92), and `ri_map(0x0105d000)` (GPIO 93), completely preventing any out-of-bounds memory accesses.
   - **Decoupled Asynchronous Thread**: Moved `river_speaker_init()` out of synchronous `ri_probe()` and into a dedicated `river_speaker_thread` via `kernel_thread_start()`. This guarantees the input/touch thread `ri_thread` runs unimpeded at 60 fps without any delay from I2C transfers.
   - **Safe QUP2 Guard**: Added explicit NULL checks for `ri_qup2` in both `ri_cs35l41_rd` and `ri_cs35l41_wr`.
+
+- **Local Kernel Build & Packaging (r152)**:
+  - Build directory: `/Users/matttyson/Documents/Codex/2026-11-05/d-2/work/local-build/river-cd51b005df54-7qvoOz`.
+  - Kernel binary: `kernel.development.sweet` (SHA256: `0f7c293328d8030335f9d050a77a94232dc2598ebdb654c4c7fd5b902f5c1839`).
+  - Boot image: `/Users/matttyson/Documents/Codex/2026-11-05/river-battery-implementation/work/river-audio-boot.img` (26,417,152 bytes).
+  - Verified symbols and per-GPIO TLMM mapping logic.
