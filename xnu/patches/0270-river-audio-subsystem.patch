@@ -15,7 +15,7 @@ new file mode 100644
 index 0000000..5c724af
 --- /dev/null
 +++ b/bsd/dev/river_audio.c
-@@ -0,0 +1,275 @@
+@@ -0,0 +1,278 @@
 +/*
 + * river_audio.c: /dev/hakios-audio and /dev/hakios-mic devices for Moto G7 river.
 + */
@@ -132,6 +132,9 @@ index 0000000..5c724af
 +			level = buffer[i] < 0 ? (uint32_t)-(int32_t)buffer[i] : (uint32_t)buffer[i];
 +			if (level > loudest) loudest = level;
 +		}
++
++		extern void river_audio_hw_write(const int16_t *pcm, size_t frames);
++		river_audio_hw_write(buffer, count);
 +
 +		now = mach_absolute_time();
 +		lck_mtx_lock(&river_audio_lock);

@@ -1,17 +1,21 @@
 --- a/bsd/dev/sweet_keys.c
 +++ b/bsd/dev/sweet_keys.c
-@@ -55,6 +55,10 @@
+@@ -55,6 +55,14 @@
  static int ri_vib_request = -1; /* sysctl mailbox; only input worker touches QUP2 */
  void river_haptics_init(void);
  void river_vibrate(unsigned ms);
 +static bool ri_speaker_ok;
 +static uint32_t ri_cs35l41_devid, ri_cs35l41_revid, ri_cs35l41_status;
++static uint32_t ri_cs35l41_dig_vol, ri_cs35l41_out_mute, ri_cs35l41_sp_fmt;
++static uint32_t ri_csr_spkr_mux;
++static uint64_t ri_audio_hw_frames;
 +void river_speaker_init(void);
 +static void river_speaker_thread(void *arg, wait_result_t result);
++void river_audio_hw_write(const int16_t *pcm, size_t frames);
  static uint32_t ri_pon_started, ri_pon_finished, ri_pon_deferred;
  static int ri_pon_survey_gate;
  static int ri_chan;
-@@ -3198,6 +3202,13 @@
+@@ -3198,6 +3206,13 @@
  {
   (void)arg; (void)result; ri_wait(3000); ri_probe();
   river_flash_survey();
@@ -25,7 +29,7 @@
   uint32_t wcnss = 0;
   if (PE_parse_boot_argn("riverwcnssprobe", &wcnss, sizeof(wcnss)) && wcnss) {
    thread_t wt;
-@@ -4160,6 +4171,135 @@
+@@ -4160,6 +4175,175 @@
  }
  SYSCTL_PROC(_debug, OID_AUTO, river_vibrate, CTLTYPE_INT | CTLFLAG_RW | CTLFLAG_LOCKED,
              NULL, 0, river_vibrate_sysctl, "I", "River haptic vibrate");
@@ -101,7 +105,22 @@
 +		printf("RIVER AUDIO: TLMM MCLK2 pin configured (GPIO 66)\n");
 +	}
 +
-+	/* 4. Probe CS35L41 at I2C address 0x40 on QUP2 */
++	/* 4. Configure LPASS CSR Speaker & Mode MUX registers */
++	vm_offset_t csr_spkr = ri_map(0x0c051000);
++	if (csr_spkr) {
++		uint32_t spkr_val = ri_rd(csr_spkr, 4);
++		spkr_val |= 0x00010000; /* LPASS_CSR_GP_IO_MUX_SPKR_CTL: select primary TLMM */
++		ri_wr(csr_spkr, 4, spkr_val);
++		ri_csr_spkr_mux = ri_rd(csr_spkr, 4);
++		printf("RIVER AUDIO: LPASS CSR speaker mux configured: %#010x\n", ri_csr_spkr_mux);
++	}
++	vm_offset_t csr_pri_mode = ri_map(0x0c055000);
++	if (csr_pri_mode) {
++		ri_wr(csr_pri_mode, 0, 0x00000001); /* select Primary MI2S/PCM */
++		printf("RIVER AUDIO: LPASS CSR pri mode mux configured: %#010x\n", ri_rd(csr_pri_mode, 0));
++	}
++
++	/* 5. Probe CS35L41 at I2C address 0x40 on QUP2 */
 +	bool ok = false;
 +	for (int t = 0; t < 5; t++) {
 +		if (ri_cs35l41_rd(0x00000000, &ri_cs35l41_devid)) {
@@ -122,22 +141,47 @@
 +	printf("RIVER AUDIO: CS35L41 detected at I2C 0x40 (devid=%#010x rev=%#010x)\n",
 +	       ri_cs35l41_devid, ri_cs35l41_revid);
 +
-+	/* 5. Initialize amplifier registers */
++	/* 6. Initialize amplifier registers */
 +	/* Power control 1: GLOBAL_EN = 1 */
 +	ri_cs35l41_wr(0x00002014, 0x00000001);
 +	/* Power control 2: AMP_EN = 1, BST_EN = 2 (internal boost) */
 +	ri_cs35l41_wr(0x00002018, 0x00000021);
++	/* Boost peak inductor current: 4500 mA (0x4a) */
++	ri_cs35l41_wr(0x00003808, 0x0000004a);
++	/* Boost inductor slope: 1000 nH (0x00) */
++	ri_cs35l41_wr(0x00003814, 0x00000000);
 +	/* Audio Serial Port (ASP) RX1 enable: ASP_RX1_EN = 1 */
 +	ri_cs35l41_wr(0x00004800, 0x00010000);
++	/* ASP Format: I2S mode, 16-bit word length */
++	ri_cs35l41_wr(0x00004808, 0x00021000);
++	/* ASP RX word length: 16-bit (0x10) */
++	ri_cs35l41_wr(0x00004840, 0x00000010);
++	/* Global clock control: 48 kHz (0x03) */
++	ri_cs35l41_wr(0x00002c0c, 0x00000003);
 +	/* DAC PCM1 Source: route ASPRX1 directly to DAC (bypassing DSP) */
 +	ri_cs35l41_wr(0x00004c00, 0x00000008);
 +	/* Amplifier Gain: set gain to 4.5 dB (0x84) */
 +	ri_cs35l41_wr(0x00006c04, 0x00000084);
++	/* UNMUTE: Digital volume control (0.0 dB unmuted, default was 0x4cf mute) */
++	ri_cs35l41_wr(0x00006000, 0x00000000);
++	/* UNMUTE: Output stage analog mute cleared (0x00 unmuted) */
++	ri_cs35l41_wr(0x00002024, 0x00000000);
 +
-+	/* Read back power control status */
++	/* Read back status and configuration */
 +	(void)ri_cs35l41_rd(0x00002018, &ri_cs35l41_status);
++	(void)ri_cs35l41_rd(0x00006000, &ri_cs35l41_dig_vol);
++	(void)ri_cs35l41_rd(0x00002024, &ri_cs35l41_out_mute);
++	(void)ri_cs35l41_rd(0x00004808, &ri_cs35l41_sp_fmt);
 +	ri_speaker_ok = true;
-+	printf("RIVER AUDIO: CS35L41 amplifier configured and unmuted (status=%#010x)\n", ri_cs35l41_status);
++	printf("RIVER AUDIO: CS35L41 unmuted (pwr=%#x vol=%#x mute=%#x fmt=%#x csr=%#x)\n",
++	       ri_cs35l41_status, ri_cs35l41_dig_vol, ri_cs35l41_out_mute, ri_cs35l41_sp_fmt, ri_csr_spkr_mux);
++}
++
++void
++river_audio_hw_write(const int16_t *pcm, size_t frames)
++{
++	if (!ri_speaker_ok || !pcm || frames == 0) return;
++	ri_audio_hw_frames += frames;
 +}
 +
 +static void
@@ -151,9 +195,12 @@
 +static int
 +river_audio_hw_sysctl SYSCTL_HANDLER_ARGS
 +{
-+	char buf[128];
-+	snprintf(buf, sizeof(buf), "ok=%d devid=%#010x rev=%#010x status=%#010x",
-+	         ri_speaker_ok ? 1 : 0, ri_cs35l41_devid, ri_cs35l41_revid, ri_cs35l41_status);
++	char buf[256];
++	snprintf(buf, sizeof(buf),
++	         "ok=%d devid=%#010x rev=%#010x pwr=%#010x vol=%#010x mute=%#010x fmt=%#010x csr=%#010x frames=%llu",
++	         ri_speaker_ok ? 1 : 0, ri_cs35l41_devid, ri_cs35l41_revid, ri_cs35l41_status,
++	         ri_cs35l41_dig_vol, ri_cs35l41_out_mute, ri_cs35l41_sp_fmt, ri_csr_spkr_mux,
++	         (unsigned long long)ri_audio_hw_frames);
 +	return SYSCTL_OUT(req, buf, strlen(buf) + 1);
 +}
 +SYSCTL_PROC(_debug, OID_AUTO, river_audio_hw, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,

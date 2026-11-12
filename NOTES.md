@@ -4089,3 +4089,27 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   - **UI & Touch Responsiveness**:
     - SpringBoard (PID 26) and backboardd (PID 60) active and running smoothly at 60 fps.
     - Lockscreen swipe-up touch dispatch verified.
+
+## Status 2026-11-12: r153 CS35L41 Unmute, ASP Format, LPASS CSR Mux & Sample Pipeline (Patches 0270, 0271)
+- **Problem Statement**:
+  - In r152, CoreAudio and HAL playback ran without errors (`river-audio-test play` wrote 96,000 frames to `/dev/hakios-audio`), but no physical sound was audible from the loudspeaker.
+- **Root Cause Analysis**:
+  1. **Digital Volume Mute State**: Register `CS35L41_AMP_DIG_VOL_CTRL` (`0x00006000`) defaults to `0x000004cf` on reset, which completely mutes digital volume.
+  2. **Analog Output Stage Mute**: Register `CS35L41_AMP_OUT_MUTE` (`0x00002024`) was not cleared to unmuted (`0x00000000`).
+  3. **ASP Serial Port Format**: `CS35L41_SP_FORMAT` (`0x00004808`) and `CS35L41_SP_RX_WL` (`0x00004840`) were not configured for 16-bit I2S.
+  4. **Global Sample Rate**: `CS35L41_GLOBAL_CLK_CTRL` (`0x00002C0C`) was not set to 48 kHz (`0x03`).
+  5. **LPASS CSR Speaker MUX**: Qualcomm LPASS CSR speaker multiplexer `LPASS_CSR_GP_IO_MUX_SPKR_CTL` at `0x0c051004` bit 16 was not configured to route the speaker path to primary TLMM lines (GPIO 91/92/93).
+  6. **Audio Pipeline Disconnect**: `river_audio_write()` in `river_audio.c` dropped incoming PCM frames after computing peak amplitude without forwarding them to hardware routines.
+- **Fixes Applied**:
+  - **Patch 0270 (`river_audio.c`)**:
+    - Declared `extern void river_audio_hw_write(const int16_t *pcm, size_t frames);`.
+    - Dispatched `river_audio_hw_write(buffer, count);` directly inside `river_audio_write()`.
+  - **Patch 0271 (`sweet_keys.c`)**:
+    - Unmuted digital volume: `ri_cs35l41_wr(0x00006000, 0x00000000)` (0.0 dB).
+    - Cleared analog output mute: `ri_cs35l41_wr(0x00002024, 0x00000000)`.
+    - Configured ASP for 16-bit I2S: `ri_cs35l41_wr(0x00004808, 0x00021000)` and `ri_cs35l41_wr(0x00004840, 0x00000010)`.
+    - Configured global clock to 48 kHz: `ri_cs35l41_wr(0x00002c0c, 0x00000003)`.
+    - Configured boost converter peak inductor current (4500 mA at `0x00003808`) and slope (1000 nH at `0x00003814`).
+    - Configured LPASS CSR registers: `LPASS_CSR_GP_IO_MUX_SPKR_CTL` (`0x0c051004` |= `0x00010000`) and `LPASS_CSR_GP_IO_LPAIF_PRI_PCM_PRI_MODE_MUXSEL` (`0x0c055000` = `0x00000001`).
+    - Added `river_audio_hw_write()` tracking hardware frame counters.
+    - Expanded `debug.river_audio_hw` sysctl to report `ok`, `devid`, `rev`, `pwr`, `vol`, `mute`, `fmt`, `csr`, and `frames`.
