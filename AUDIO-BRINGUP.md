@@ -32,6 +32,18 @@ reports PLL unlock because its ASP clocks were not enabled; PCM input/output
 remain placeholders. Next is a bounded AIF1 clock test with the amplifier
 muted and verified in slave mode before codec clocks drive the shared lines.
 
+Patch 0278 adds `--i2s-snapshot` and a one-shot `--i2s-test`. The test keeps
+the CS35L41 muted with its Class-D output stage disabled and its ASP in slave
+mode before the CS47L35 drives native AIF1 BCLK/LRCLK. It requests 48 kHz
+stereo S16 I2S clocks (1.536 MHz BCLK), while TXDATA is tri-stated and PCM
+channels stay disabled. Raw amplifier PLL-unlock must clear twice to pass.
+Codec, PMIC and amplifier registers are restored afterward; a cleanup failure
+retains protective amplifier mute/output-disable/slave settings. The volume
+helper now uses the actual CS35L41 mute bit4 (`0x10`) and shares a control mutex
+with the test so an iOS volume command cannot override its mute mid-test.
+Run the snapshot before the test, and do not consume the shared one-shot with
+`--test` or `--route-test` first. This is a clock-path test, not audible audio.
+
 ## Current continuation
 
 Patch 0273 adds `debug.river_audio_prereq`, a read-only, on-demand survey:

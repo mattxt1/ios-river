@@ -5,6 +5,57 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Muted I2S clock-test preparation (2026-11-12)
+
+- User requested the muted codec-to-amplifier I2S clock test after the 0277
+  reference-clock lock/restoration success. Patch 0278 adds explicit
+  `river-codec-clock --i2s-snapshot` and `--i2s-test` (shared one-shot limit).
+- Pinned Motorola CS35L41 header/driver specifies AMP_OUT_MUTE bit `0x10`,
+  not the `0x01` previously written by River's volume/tone helper. Corrected
+  the volume path to preserve unrelated control bits and use bit4, plus a
+  speaker-control mutex shared by volume, historical tone and the I2S test.
+  Existing QUP2 per-transaction locking still serializes haptics transfers.
+- New test snapshots stable codec/AIF1/GPIO9/11 and amplifier registers,
+  refuses active codec streams/clocks or non-native GPIO functions, and
+  requires exact amplifier identity. Before codec clock output, writes and
+  reads back AMP_MUTE, clears PWR_CTRL2 AMP_EN bit0 (Class-D stage disabled),
+  disables amplifier ASP channels, and verifies amplifier slave mode.
+- Source-derived settings: 48 kHz stereo S16_LE I2S, codec BCLK table index11
+  (1.536 MHz), 32 BCLK/frame, 16-bit slots/word; amplifier PLL source SCLK,
+  frequency encoding `0x1b` using its driver's open-loop/disable/select/close/
+  enable sequence. Codec TXDATA remains tri-stated and AIF TX/RX channel
+  enables remain zero. No PCM or codec analog outputs are enabled.
+- Uses verified GPIO6 reference route and codec FLL, then enables SYSCLK/AIF1
+  forced BCLK/LRCLK on native codec GPIO9/11. Polls amplifier raw PLL-unlock
+  bit for two consecutive clear readings, while rechecking mute, Class-D
+  disable, slave mode and codec FLL lock. All waits bounded.
+- Cleanup first releases codec clock pins, disables/restores SYSCLK and AIF
+  registers, restores FLL/PMIC/SPI state, then restores amplifier registers.
+  If codec or amplifier restoration fails, retains/reapplies amplifier mute,
+  Class-D disable and slave mode and reports failure rather than unmuting.
+- Host tests compile actual added code with GPIO SPI, PMIC and amplifier
+  models. Passed ordering/master exclusion, quiet-state verification, no data
+  channel enables, amp-lock and timeout paths, each amp/codec write failure,
+  retained quiet state on cleanup failure, and corrected volume helper's
+  bit4/preserved fields/clamp/mutex sequence. iOS arm64 clock helper compiled
+  with `-Wall -Wextra -Werror` and ad-hoc signed.
+- Implementation committed as `6b7a6b20526443eaa057200ec8477d3d4fb0cb86`.
+  Local build started from fresh detached worktree `work/i2s-build-source`
+  using the standard pinned build script/KDK. Build succeeded.
+- Packaged `outputs/river-muted-i2s-6b7a6b2.img`: 26,626,048 bytes,
+  cmdline 562 bytes, SHA256
+  `eb60a91a3a2b52f00eeb61b9a63ab7dbaf46d2d9eaaa64039d2fa1a5c5dc2884`.
+  Kernel SHA256
+  `d88517554341f053add8c152b25d80fd7d5ab3adc700c3b7b8450e3c802e870d`.
+  Payload segment checks passed. Awaiting user fastboot coordination; no
+  0278 hardware result yet.
+- Checkout filesystem reads stalled on Git config/HEAD and old unrelated
+  documentation during index refresh. Preserved prior metadata under
+  `work/ios-river-git-before-i2s-recovery`, recovered exact branch `33a4f13`
+  from a fresh public clone plus the verified local bundle, and committed
+  the already-staged tree without refreshing unrelated historical files.
+  Working edits were preserved; no remote branch was changed.
+
 ## Codec reference-clock route verified on hardware (2026-11-12)
 
 - User returned River to fastboot. Verified product `river`, temporarily booted
