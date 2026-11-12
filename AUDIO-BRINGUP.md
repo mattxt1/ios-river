@@ -34,6 +34,28 @@ change codec registers, program supplies or touch LPASS. A failed prerequisite
 leaves the pins alone. A transaction consumes the one attempt even on bad ID.
 CS47L35 ID must equal `0x6360` on both reads; `0x6338` is CS47L85.
 
+Patch 0275 adds `river-codec-clock --snapshot` (one clock snapshot per boot)
+and `river-codec-clock --test` (one isolated FLL1 experiment per boot). The test
+requires idle codec clocks and masked lock interrupts, configures only FLL
+controls for a 32.768 kHz MCLK2 reference and requested 98.304 MHz output, waits
+at most 25 ten-millisecond polls, disables the FLL and restores its registers
+and the SPI pins. Readback or cleanup failures are errors. It never enables
+SYSCLK/DSPCLK, AIFs or analog outputs. The passive command reads the last result.
+
+The fixed clock recipe is checked against both the pinned Motorola board/codec
+source and [Cirrus's MCU driver at 82ba920b](https://github.com/CirrusLogic/mcu-drivers/tree/82ba920bace895e1a920aeaf0bb8a7df69c06c40/cs47l35).
+That source documents the phase-control register and integer-mode gain used.
+The board's `msm8952-dai-links.c` explicitly connects codec AIF1 to amplifier
+PCM at 48 kHz stereo S16_LE, I2S, amplifier slave: 1.536 MHz bit clock. This
+source route still needs physical clock/data validation.
+
+A foreground app can be built with
+`tools/build-river-audio-check.sh /absolute/output/directory`. The resulting
+`RiverAudioCheck.tar` is accepted by the existing `appinstall --install` tool.
+The app uses standard microphone consent, a quiet test tone, a three-second
+capture with decoded frame/duration validation, and replay. A valid file can
+still contain synthetic input; confirm physical sound separately.
+
 `HAKIOS_AUDIO_GET_STATUS` is a versioned ioctl on both PCM endpoints. It reports
 software frame counters and the current `PLAYBACK_DISCARD` and
 `CAPTURE_SYNTHETIC` flags. It does not advertise a real transport. Misaligned

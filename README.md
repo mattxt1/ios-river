@@ -159,14 +159,14 @@ configuration. Preparing or writing one is destructive to the target partition.
   fit experiments and diagnostics.
 - [LOCAL-BUILD.md](LOCAL-BUILD.md): verified local XNU build setup.
 - `shim-river/`, `xnu/patches/`, `tools/`, `phone-tools/`, `mesa/`: loader,
-  ordered kernel patches (currently through patch 0274), host utilities, device tools and Mesa integration.
+  ordered kernel patches (currently through patch 0275), host utilities, device tools and Mesa integration.
 
 ## Next work
 
 **Next milestone: real iOS audio input and output.** Patch 0273 adds a read-only
 codec prerequisite survey and explicit synthetic/discard backend status. Patch 0274 adds an explicit, guarded codec identity-only probe. Live SPI reads verified CS47L35 ID `0x6360`, revision `0x1`, with pin restoration. The
 updated tests save captures and report incomplete I/O; they do not implement
-physical audio. See [AUDIO-BRINGUP.md](AUDIO-BRINGUP.md) for the current test
+physical audio. Patch 0275 provides an explicit, isolated FLL clock test with shutdown and register restoration. See [AUDIO-BRINGUP.md](AUDIO-BRINGUP.md) for the current test
 commands, source evidence and remaining codec/ADSP/SLIMbus work.
 
 1. **CS35L41 Clock Lock & Physical Speaker Sound**:

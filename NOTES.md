@@ -5,6 +5,87 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Codec clock continuation (2026-11-12)
+
+- User instructed continuation from `7083cbb`; working on local branch
+  `codex/ios-audio-bringup`. Running 0274 baseline was read successfully:
+  CS47L35 ID `0x6360` twice/revision `0x1`, pins restored; PCM status still
+  `version=1 flags=0x3 output_frames=155648 input_frames=0`.
+- Pinned Motorola `2dba45b8` source `techpack/audio/asoc/msm8952-dai-links.c`
+  explicitly connects `cs47l35-aif1` to `cs35l41-pcm`: I2S, normal polarity,
+  amplifier slave, 48 kHz stereo S16_LE (1.536 MHz BCLK). This is source
+  evidence of the board route, not a measured signal. The machine driver
+  starts FLL1 from MCLK2/32768 Hz at requested 98.304 MHz, then switches its
+  reference to SLIMbus/1.536 MHz during streaming.
+- Audited Cirrus Logic's own MCU driver at
+  `82ba920bace895e1a920aeaf0bb8a7df69c06c40` (`work/cirrus-mcu` outside Git).
+  It independently configures MCLK2/32768 -> 98.304 MHz, documents FLL1
+  Control 8 at `0x17a`, and supplies integer-mode alternate gain/phase rules.
+  The older Motorola readable-register table omits `0x17a`, despite generic
+  Madera code referring to it; the Cirrus register specification resolves
+  the address. Use CS47L35-specific synchronizer addresses `0x17f`/`0x185`.
+- Patch 0275 committed as `f12816680b20b723919ae1b4ef214d621eb97c0b`:
+  shared guarded GPIO SPI acquisition/restoration, one-shot read-only clock
+  snapshot, and separately requested isolated FLL1 test. Fixed recipe has
+  FRATIO=2 (ratio 3), N=1000, theta=lambda=0, MCLK2 source=1, refdiv=0,
+  integer gain=2 and phase gain=2/enable. No SYSCLK/DSPCLK or audio interface
+  enables, analog routes, amplifier or LPASS writes are allowed.
+- FLL test refuses active SYSCLK/ASYNC/DSP clocks, enabled FLL/synchronizer,
+  an existing lock, unmasked FLL lock IRQs, unstable snapshots or changed
+  bus prerequisites. Each write is read back; lock wait is bounded to 25
+  polls at 10 ms. Cleanup disables and verifies the FLL, restores all saved
+  clock registers (including an N update strobe), then restores GPIO states.
+  A failed cleanup is explicitly reported rather than treated as success.
+- Host tests pass actual GPIO/SPI framing, fixed clock recipe, active-clock
+  and IRQ gates, timeout, ignored writes at each setup stage, full rollback,
+  and stuck-enable detection. Existing probe/survey/PCM tests also pass.
+  Kernel build of committed `f128166` passed. Kernel SHA-256
+  `7562fc4bbfa6e6c24b248d91dc40a2525511445a0233d60983654ff5af2e0f2d`.
+  Packaged image `river-codec-clock-f128166.img`: 26,607,616 bytes, cmdline
+  562 bytes; SHA-256 `9e76b78442f27f2d219876769c257110eac6e1dfe823bec4d981fac662180134`.
+  Verified all kernel payload segments against the rebased built Mach-O.
+  No live FLL result yet.
+- Foreground `River Audio Check` app added in `c23a7af` and built for iOS
+  arm64 with normal NSMicrophoneUsageDescription/requestRecordPermission.
+  It supports a quiet tone, 3-second PCM recording with decoded frame/duration
+  checks, and replay. It does not grant or bypass microphone permission.
+  Installed without replacing another app: `registered=yes`; launched via
+  `applaunch org.river.AudioCheck`: `open=yes`. User initially selected
+  "Permission denied or no prompt", then confirmed the app is listed and
+  enabled in Settings -> Privacy & Security -> Microphone. Requested exact
+  app status text to distinguish an existing grant/no-prompt from denial or
+  capture failure; no privacy settings were overridden.
+- A scoped registration query found `org.river.AudioCheck` installed as type
+  `System`, with no isolated data container. This may affect app permission
+  testing; it is not established as the cause of the reported result.
+- Prepared a distinct `org.river.AudioCapture` IPA through the updated builder,
+  preserving the first app. Standard user installation API exists, but the
+  normal helper was refused with `Missing Entitlement=InstallForLaunchServices`.
+  A prepared helper with only `com.apple.private.mobileinstall.allowedSPI`
+  values `InstallForLaunchServices` and `Install` was signed locally, but its
+  deployment was rejected by automatic approval review as an installer privilege
+  escalation beyond the normal install attempt. It was NOT deployed. Explicit
+  approval requested; reviewable source/entitlements/hash manifest are in
+  the chat outputs `installer-review/`. No signature-validation or microphone
+  authorization override was requested or used. Continue unaffected clock work.
+- Post-app-test kernel counters were `version=1 flags=0x3
+  output_frames=207872 input_frames=52224`. This shows software endpoint
+  activity, not which app buffers were delivered or real microphone capture.
+- Amplifier audit before any future AIF clock output: current SP_FORMAT
+  `0x20200233` sets SCLK master (`0x10`) and LRCLK master (`0x01`), plus
+  force-clock bits `0x20`/`0x02`. The pinned board DAI link specifies amplifier
+  slave. This must be corrected and verified under mute before codec-master
+  BCLK/LRCLK output to avoid opposing clock drivers. The isolated FLL test
+  does not enable AIF pins and does not change the amplifier.
+- Cirrus MCU code contains DSP ring-buffer SPI APIs for Opus record/playback.
+  Its build expects separately supplied DSP2/DSP3 firmware images. This may
+  be an alternative transport to investigate; firmware availability, River mic
+  routing, duplex behavior and PCM conversion are not established.
+- Next: finish/package the FLL test build; temporarily boot it, collect the
+  clock snapshot, run the isolated FLL test only if its live prerequisites
+  permit, and verify shutdown/restoration. Keep physical audio input/output
+  as the milestone; successful FLL lock alone is not that milestone.
+
 ## Audio milestone continuation: diagnostics and reliable capture tests (2026-11-12)
 
 - Started from upstream `river` commit `b7a01b2` in a fresh checkout. Work is on
