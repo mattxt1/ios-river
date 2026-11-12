@@ -35,7 +35,25 @@
   wrong ownership, each PMIC write failure, FLL timeout, exact PMIC/codec/SPI
   restoration, codec failures and one-shot limits. Updated helper compiled
   for iOS arm64 with `-Wall -Wextra -Werror`, ad-hoc signed. Local committed
-  kernel build started; no 0277 hardware result yet.
+  kernel build passed for source `2dfc68b089e738fcbf3f236ee5dba6c531879442`.
+  Kernel SHA-256 `2686b00628d72d90283e7c980a4982b197c57ca91ab640cdae45633ff6375662`.
+  No 0277 hardware result yet.
+- Packaged `river-mclk-route-2dfc68b.img`: 26,626,048 bytes, cmdline 562
+  bytes, SHA-256 `03dab48f49a7326086cf78cd47c629e6ef03db36736166823f0015098c3738ad`.
+  Repacked from hash-verified 0276 baseline with unchanged shim, firmware,
+  ADT configuration and all other RiverFiles entries; replaced only kernel
+  and clock helper. All rebased kernel segments verified. Awaiting temporary
+  boot; snapshot first, then explicit `river-codec-clock --route-test`, then
+  snapshot/PCM status and user UI responsiveness check. Do not run `--test`
+  first: it consumes the same one-shot attempt without enabling the route.
+- Added `tools/river-repack-audio.py` in `4d037cd`: verifies the prior boot
+  image SHA-256, recovers firmware and ADT from its bounded segments, preserves
+  shim/command line/other RiverFiles entries, replaces only the kernel and clock
+  helper, checks each rebased kernel payload segment and image size, refuses
+  output replacement, and writes private images mode 0600. A real repack using
+  the known 0276 kernel passed all checks. This avoids the historical cloud-file
+  stalls seen in prior packaging. Additional host checks cover persistent PMIC
+  write/read failure during cleanup and correctly report route_restored=0.
 
 ## Corrected codec clock test on hardware (2026-11-12)
 
