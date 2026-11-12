@@ -1,0 +1,143 @@
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -4468,6 +4468,60 @@
+ }
+ SYSCTL_PROC(_debug, OID_AUTO, river_audio_hw, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
+             NULL, 0, river_audio_hw_sysctl, "A", "River audio hardware status");
++/* Read-only codec prerequisites. Never touches unowned QUP7 or LPASS.
++ * PPIDs are candidates from PM8953 layout, not measured rail voltages.
++ * The existing SPMI helper serializes observer commands and poisons timeouts.
++ */
++static LCK_GRP_DECLARE(ri_audio_survey_grp, "river-audio-survey");
++static LCK_MTX_DECLARE(ri_audio_survey_lock, &ri_audio_survey_grp);
++static int
++river_audio_prereq_sysctl SYSCTL_HANDLER_ARGS
++{
++ char buf[2048];
++ size_t used = 0;
++ static vm_offset_t core, rail[3], pins[6], gcc_ahb, gcc_spi;
++ const unsigned ppids[] = { 0x145, 0x11d, 0x0c5 };
++ const char *names[] = { "L6", "S4", "PMGPIO6" };
++ const unsigned gpios[] = { 46, 68, 135, 136, 137, 138 };
++ if (req->newptr) return EPERM;
++ lck_mtx_lock(&ri_audio_survey_lock);
++#define RAP(...) do { used += snprintf(buf + used, sizeof(buf) - used, __VA_ARGS__); } while (0)
++ RAP("transport=unimplemented capture=synthetic playback=discarded\n");
++ if (!core) core = ri_map(0x0200f000);
++ uint32_t ver = core ? ri_rd(core, 0) : 0;
++ RAP("spmi_version=%#x\n", ver);
++ if (ver >= 0x20010000 && ver < 0x50000000) {
++  for (unsigned i = 0; i < 3; i++) {
++   if (!rail[i]) rail[i] = ri_spmi_obs(core, ppids[i]);
++   uint32_t type = 0, subtype = 0, status = 0, enable = 0;
++   bool ok = rail[i] && ri_spmi_read(rail[i], 4, 1, &type) &&
++       ri_spmi_read(rail[i], 5, 1, &subtype) &&
++       ri_spmi_read(rail[i], 8, 1, &status) &&
++       ri_spmi_read(rail[i], 0x46, 1, &enable);
++   RAP("%s candidate_ppid=%#x readable=%u type=%#x subtype=%#x status=%#x enable=%#x\n",
++       names[i], ppids[i], ok, type, subtype, status, enable);
++  }
++ }
++ for (unsigned i = 0; i < 6; i++) {
++  if (!pins[i]) pins[i] = ri_map(0x01000000 + gpios[i] * 0x1000);
++  if (!pins[i]) { RAP("gpio%u unmapped\n", gpios[i]); continue; }
++  RAP("gpio%u cfg=%#x inout=%#x\n", gpios[i], ri_rd(pins[i], 0), ri_rd(pins[i], 4));
++ }
++ /* GCC is AP-owned and already used for touch/haptics/WCNSS clocks.
++  * Read branch state only; do not enable clocks or access the QUP window.
++  * Offsets: pinned msm-clocks-hwio-8953.h, GCC base 0x01800000. */
++ if (!gcc_ahb) gcc_ahb = ri_map(0x0180b008);
++ if (!gcc_spi) gcc_spi = ri_map(0x0180f01c);
++ if (gcc_ahb && gcc_spi)
++  RAP("blsp2_ahb_cbcr=%#x qup3_spi_cbcr=%#x qup3_spi_cmd=%#x\n",
++      ri_rd(gcc_ahb, 0), ri_rd(gcc_spi, 0), ri_rd(gcc_spi, 8));
++ else RAP("gcc unmapped\n");
++#undef RAP
++ lck_mtx_unlock(&ri_audio_survey_lock);
++ return SYSCTL_OUT(req, buf, strlen(buf) + 1);
++}
++SYSCTL_PROC(_debug, OID_AUTO, river_audio_prereq, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
++            NULL, 0, river_audio_prereq_sysctl, "A", "River read-only codec prerequisites");
+ static uint64_t
+ ri_ns_since(uint64_t t0)
+ {
+diff --git a/bsd/sys/hakios.audio.h b/bsd/sys/hakios.audio.h
+--- a/bsd/sys/hakios.audio.h
++++ b/bsd/sys/hakios.audio.h
+@@ -17,4 +17,17 @@
+ };
+ #define HAKIOS_AUDIO_SET_VOLUME _IOW('r', 1, struct hakios_audio_volume)
+ 
++/* Versioned diagnostic ABI: counters describe software traffic, never proof
++ * of physical audio. A future transport must explicitly advertise real PCM. */
++#define HAKIOS_AUDIO_STATUS_VERSION 1
++#define HAKIOS_AUDIO_PLAYBACK_DISCARD (1u << 0)
++#define HAKIOS_AUDIO_CAPTURE_SYNTHETIC (1u << 1)
++struct hakios_audio_status {
++ uint32_t version;
++ uint32_t flags;
++ uint64_t output_frames;
++ uint64_t input_frames;
++};
++#define HAKIOS_AUDIO_GET_STATUS _IOR('r', 2, struct hakios_audio_status)
++
+ #endif /* _SYS_HAKIOS_AUDIO_H_ */
+diff --git a/bsd/dev/river_audio.c b/bsd/dev/river_audio.c
+--- a/bsd/dev/river_audio.c
++++ b/bsd/dev/river_audio.c
+@@ -97,6 +97,7 @@
+ 	uint32_t count, loudest, i, level;
+ 	uint64_t now, deadline;
+ 
++	if (uio_resid(uio) % HAKIOS_AUDIO_FRAME) return EINVAL;
+ 	while (uio_resid(uio) >= HAKIOS_AUDIO_FRAME) {
+ 		bytes = uio_resid(uio);
+ 		if (bytes > (user_ssize_t)sizeof(buffer)) {
+@@ -152,6 +153,17 @@
+ 	const struct hakios_audio_volume *vol;
+ 	uint32_t below;
+ 
++ if (cmd == HAKIOS_AUDIO_GET_STATUS) {
++  struct hakios_audio_status *status = (void *)data;
++  bzero(status, sizeof(*status));
++  status->version = HAKIOS_AUDIO_STATUS_VERSION;
++  status->flags = HAKIOS_AUDIO_PLAYBACK_DISCARD | HAKIOS_AUDIO_CAPTURE_SYNTHETIC;
++  lck_mtx_lock(&river_audio_lock);
++  status->output_frames = audio_frames_total;
++  status->input_frames = mic_frames_read;
++  lck_mtx_unlock(&river_audio_lock);
++  return 0;
++ }
+ 	if (cmd != HAKIOS_AUDIO_SET_VOLUME) {
+ 		return ENOTTY;
+ 	}
+@@ -221,6 +233,7 @@
+ 	uint32_t count, i;
+ 	int16_t s;
+ 
++	if (uio_resid(uio) % 2) return EINVAL;
+ 	while (uio_resid(uio) >= 2) {
+ 		bytes = uio_resid(uio);
+ 		if (bytes > (user_ssize_t)sizeof(mic_buf)) {
+@@ -245,12 +258,19 @@
+ 	return error;
+ }
+ 
++static int
++river_mic_ioctl(dev_t dev, u_long cmd, caddr_t data, int flags, struct proc *p)
++{
++ if (cmd != HAKIOS_AUDIO_GET_STATUS) return ENOTTY;
++ return river_audio_ioctl(dev, cmd, data, flags, p);
++}
++
+ static const struct cdevsw river_mic_cdevsw = {
+ 	.d_open = river_mic_open,
+ 	.d_close = river_mic_close,
+ 	.d_read = river_mic_read,
+ 	.d_write = eno_rdwrt,
+-	.d_ioctl = eno_ioctl,
++	.d_ioctl = river_mic_ioctl,
+ 	.d_stop = eno_stop,
+ 	.d_reset = eno_reset,
+ 	.d_select = eno_select,
