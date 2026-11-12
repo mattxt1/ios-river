@@ -5,6 +5,36 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Codec reference-clock route verified on hardware (2026-11-12)
+
+- User returned River to fastboot. Verified product `river`, temporarily booted
+  `river-mclk-route-2dfc68b.img` successfully; no partition was flashed.
+  Baseline status was `not requested`; GPIO6 remained input mode0, VIN0,
+  pull4, source0, enable0x80; codec clocks idle and FLL lock IRQs masked.
+- Explicit `river-codec-clock --route-test` returned exit 0:
+  `test=1 route=1 route_touched=1 route_restored=1 attempted=1 phase=lock
+  locked=1 raw=0x100 fll_off=1 clock_restored=1 pins_restored=1 error=0
+  write_reg=0 write_want=0 write_got=0 restore_reg=0 restore_want=0
+  restore_got=0 pcm_transport=0`.
+- This supports the board-specified GPIO6 DTEST3 route providing a usable
+  CS47L35 MCLK2 reference. FLL was configured for the source-derived 32768 Hz
+  reference/requested 98.304 MHz output. Neither frequency was directly
+  measured. No internal DTEST clock producer or global clock was changed.
+- Post-test clock snapshot exactly matched baseline: `clk32=0x2 sys=0x404
+  async=0x305 dsp=0x305 ctl1=0x2 n=0x8 theta=0x18 lambda=0x7d ratio=0
+  ref=0 gain=0 phase=0x2906 sync1=0 sync7=1 mask1=0x100 mask2=0x100
+  raw=0`; GPIO6 type0x10/subtype1/mode0/VIN0/pull4/source0/enable0x80.
+  SPI GPIO135-138 cfg1/inout0. All PMIC, codec and SPI restoration verified.
+- Amplifier still reports PLL raw IRQ3 `0x20000010`; its ASP clock path was
+  not enabled. PCM status remains `version=1 flags=0x3 output_frames=0
+  input_frames=0`. No physical playback or real microphone capture achieved.
+- Next: bounded codec AIF1 clock-only test after putting the amplifier into
+  verified mute/slave mode. Current SP_FORMAT `0x20200233` sets master/force
+  clock bits, conflicting with the pinned board's amplifier-slave DAI link;
+  do not drive codec master clocks until that is corrected/read back. Configure
+  AIF1 for the source-derived 48 kHz stereo S16_LE I2S/1.536 MHz BCLK path,
+  check amplifier lock, and restore all states before any audible test.
+
 ## PM8953 MCLK route experiment (2026-11-12)
 
 - User authorized tracing/enabling the reference-clock route after verified

@@ -24,6 +24,14 @@ unchanged and its availability is unknown; this is not a generic PMIC writer.
 The source-derived values are mode `0x1c` and pull-disable `0x5`. Waits/retries
 are bounded and cleanup failures are reported. No audio output is enabled.
 
+**0277 live result:** enabling the pinned GPIO6 DTEST3 route allowed codec
+FLL1 to lock (`raw=0x100`). The test exited successfully and verified PMIC
+route, codec clock and SPI pin restoration afterward. This establishes a
+usable reference path, without measuring frequency. The amplifier still
+reports PLL unlock because its ASP clocks were not enabled; PCM input/output
+remain placeholders. Next is a bounded AIF1 clock test with the amplifier
+muted and verified in slave mode before codec clocks drive the shared lines.
+
 ## Current continuation
 
 Patch 0273 adds `debug.river_audio_prereq`, a read-only, on-demand survey:
