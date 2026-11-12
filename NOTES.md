@@ -114,6 +114,16 @@
   test app remains installed; its microphone/API mismatch is unresolved. After
   the failed normal-install attempt, the remote installer helper was restored
   to its unprivileged build (no installer-service entitlements).
+- After the brief interruption, committed correction `a889f51` local build
+  completed successfully. Kernel SHA-256
+  `03df9676cfbe186ae14e691ae0fe6abf8cd46b2c5075ac006a3acaa184eecc90`.
+  Packaged `river-codec-clock-a889f51.img`: 26,609,664 bytes, cmdline 562
+  bytes; SHA-256 `9a23f274a15dde0cad69e151d362543b0721dcaa6a5f5675acaf00f5e4c84a6a`.
+  Every kernel payload segment was verified against the rebased built Mach-O.
+  Historical input reads stalled or failed parsing; recovered the identical
+  helper, firmware and ADT from the prior hash-verified 0275 package/image,
+  preserving its command line and launchd configuration. Private recovered
+  inputs are under chat work/, outside Git. Awaiting next temporary boot.
 - Next: finish/package the FLL test build; temporarily boot it, collect the
   clock snapshot, run the isolated FLL test only if its live prerequisites
   permit, and verify shutdown/restoration. Keep physical audio input/output
