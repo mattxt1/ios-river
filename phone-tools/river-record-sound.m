@@ -36,6 +36,15 @@ int main(int argc, char **argv) {
             NSLog(@"Refusing to overwrite %@; choose a new capture path", path); return 1;
         }
         AVAudioSession *session = [AVAudioSession sharedInstance];
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        AVAudioSessionRecordPermission permission = session.recordPermission;
+#pragma clang diagnostic pop
+        if (permission != AVAudioSessionRecordPermissionGranted) {
+            NSLog(@"Microphone permission is not granted for this command-line process (%#lx). "
+                   "Test recording from an authorized iOS app; no capture was started.", (unsigned long)permission);
+            return 1;
+        }
         NSError *error = nil;
         if (![session setCategory:AVAudioSessionCategoryPlayAndRecord
                      withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker error:&error] ||
