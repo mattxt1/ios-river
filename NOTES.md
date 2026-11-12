@@ -4188,3 +4188,41 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
     - Global clock configured to 48 kHz (`0x00002C0C` = `0x00000003`).
     - Boost converter inductor current (4500 mA) and slope (1000 nH).
     - Dispatched audio PCM stream from `/dev/hakios-audio` directly to `river_audio_hw_write()`.
+
+## Status 2026-11-12: r155 Cirrus Gold-Standard I2S Registers, Dynamic Volume Control, & Status Monitoring (Patches 0270, 0271)
+- **Problem Statement**:
+  - r154 booted stably and communicated with CS35L41 over I2C, but digital audio format registers, PLL clocking, slot mapping, and CoreAudio volume ioctl integration were unconfigured.
+- **Implementation Details**:
+  - **Patch 0270 (`river_audio.c`)**:
+    - Wired `HAKIOS_AUDIO_SET_VOLUME` ioctl in `river_audio.c` directly to `river_speaker_set_volume(below, river_vol_muted)`.
+  - **Patch 0271 (`sweet_keys.c`)**:
+    - Implemented Cirrus ALSA gold-standard register sequence for CS35L41:
+      - `GLOBAL_EN` held cleared (`0x00002014` = 0) during slot and clock configuration.
+      - Boost inductor current configured for 4500 mA (`0x00003808` = `0x00000024`), slope 1000 nH (`0x00003814` = `0x00000003`).
+      - Class-H power mode set (`0x0000201c` = `0x01000010`).
+      - PLL BCLK clocking configured: 3.072 MHz (48 kHz * 32 * 2), `PLL_REFCLK_EN = 1` (`0x00002c04` = `0x00000430`).
+      - Internal DSP clock (`0x00002c08` = `0x00000003`) and global sample rate (`0x00002c0c` = `0x00000003`, 48 kHz).
+      - Serial port enables: `CS35L41_SP_ENABLES` (`0x00004800` = `0x00010001`).
+      - Serial port format: `CS35L41_SP_FORMAT` (`0x00004808` = `0x20200200`, 32-bit slot I2S).
+      - Port Hi-Z and RX slot mapping: `0x0000480c` = 3, `0x00004820` = 3.
+      - Direct DAC routing: `CS35L41_DAC_PCM1_SRC` (`0x00004c00` = `0x00000008`, route ASPRX1 directly to DAC).
+      - Analog output unmuted (`0x00002024` = 0), digital volume unmuted (`0x00006000` = 0), amplifier gain set (`0x00006c04` = `0x00000084`, +4.5 dB).
+      - Power-on sequence: `CS35L41_PWR_CTRL2` = `0x00000021` (`AMP_EN=1`, `BST_EN=2`), 5 ms boost settle, then `GLOBAL_EN` = 1.
+    - Added `river_speaker_set_volume(below_eighths, muted)` updating digital volume register `0x00006000`.
+    - Added hardware fault monitoring: reads IRQ1 status (`0x00000040` - `0x0000004c`) and PLL register (`0x00002c04`).
+    - Expanded `debug.river_audio_hw` sysctl to report `ok`, `devid`, `rev`, `pwr`, `vol`, `mute`, `fmt`, `pll`, `irq`, `frames`.
+- **Build and Packaging**:
+  - Source Commit: `5176a744672059036fa1268abf06e5ca1b3690d0`
+  - Kernel Binary: `kernel.development.sweet` (SHA256: `725b06868c28b9fed8204d7799bbd3f7cc206055e5dc9dd2c3fad5cef0db3070`)
+  - Image: `river-audio-boot.img` (26,451,968 bytes < 38 MB)
+  - Cmdline: 562 bytes (< 608 bytes)
+- **Live Device Verification (XT1962-1 River)**:
+  - Booted cleanly via `fastboot boot`, ping active within 2 seconds at `192.168.7.2`.
+  - `debug.river_audio_hw` readback:
+    `ok=1 devid=0x00035a40 rev=0x000000b0 pwr=0x00000021 vol=0000000000 mute=0000000000 fmt=0x20200200 pll=0x00000430 irq=0,0,0,0 frames=319232`
+  - Fault registers confirm 0 faults (`irq=0,0,0,0`).
+  - Dynamic volume setting tested: `river-audio-test vol 80 0` -> `vol=0x00000050` (-10 dB). Mute tested: `river-audio-test vol 0 1` -> `vol=0x000004cf mute=0x00000001`.
+  - 440 Hz tone test: 96,000 frames successfully dispatched to `/dev/hakios-audio`.
+  - CoreAudio UI sound playback: `/System/Library/Audio/UISounds/connect_power.caf` played via `mediaserverd` (`play returned: 1`, total 319,232 frames).
+  - Microphone recording: `river-record-sound` recorded 2.0s via `AVAudioRecorder` to `/tmp/record_test.caf` (4096 bytes).
+  - SpringBoard / UI 60 fps verified.
