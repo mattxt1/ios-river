@@ -11,7 +11,7 @@ typedef uintptr_t vm_offset_t;
 static bool ri_speaker_ok = true;
 static uint16_t regs[0x2000], initial[0x2000];
 static uint32_t cfg[4], out[4];
-static unsigned active_n;
+static unsigned active_n, pmic_writes, pmic_ignore, pmic_mode, pmic_pull, cmd_missing, pmic_reads;
 static unsigned mode, writes, ignore_write, bits, reply, elapsed, enabled_once;
 static uint8_t tx[8];
 static vm_offset_t ri_map(vm_offset_t pa) {
@@ -82,8 +82,12 @@ static vm_offset_t ri_spmi_obs(vm_offset_t core, unsigned ppid) {
 static bool ri_spmi_read(vm_offset_t obs, unsigned reg, unsigned n, uint32_t *v) {
  assert(n == 1 && (obs == 0x145 || obs == 0x11d || obs == 0xc5));
  if (obs == 0xc5) {
-  switch (reg) { case 4:*v=0x10;break; case 5:*v=1;break; case 0x40:*v=0x1c;break;
-   case 0x41:case 0x42:case 0x44:*v=0;break; case 0x46:*v=0x80;break; default:assert(0); }
+  pmic_reads++;
+  if (mode == 30) return false;
+  if (mode == 31 && pmic_reads > 7) { *v = 0xffff; return true; }
+  switch (reg) { case 4:*v=0x10;break; case 5:*v=1;break; case 0x40:*v=pmic_mode;break;
+   case 0x42:*v=pmic_pull;break;
+   case 0x41:case 0x44:*v=0;break; case 0x46:*v=0x80;break; default:assert(0); }
   return true;
  }
  switch (reg) {
@@ -94,11 +98,23 @@ static bool ri_spmi_read(vm_offset_t obs, unsigned reg, unsigned n, uint32_t *v)
  }
  return true;
 }
+static vm_offset_t ri_spmi_chnl(vm_offset_t core, unsigned ppid) {
+ assert(core == 0x0200f000 && ppid == 0xc5); return cmd_missing ? 0 : ppid;
+}
+static bool ri_spmi_write(vm_offset_t channel, unsigned reg, uint8_t value) {
+ assert(channel == 0xc5 && (reg == 0x40 || reg == 0x42));
+ pmic_writes++;
+ if (pmic_writes == pmic_ignore) return false;
+ if (reg == 0x40) { assert(value == 0 || value == 0x1c); pmic_mode = value; }
+ else { assert(value == 4 || value == 5); pmic_pull = value; }
+ return true;
+}
 #include "codec-probe-added.h"
 #include "codec-clock-added.h"
 static void reset(unsigned scenario) {
  mode = scenario; writes = ignore_write = bits = reply = elapsed = enabled_once = 0;
  ri_clock_attempted = ri_clock_surveyed = 0; active_n = 8;
+ pmic_mode = 0; pmic_pull = 4; pmic_writes = pmic_ignore = cmd_missing = pmic_reads = 0; ri_clock_mclk_cmd = 0;
  for (unsigned i = 0; i < 4; i++) { cfg[i] = 1; out[i] = 0; }
  memset(regs, 0, sizeof(regs)); regs[0] = 0x6360; regs[1] = 1;
  regs[0x100] = 2; regs[0x101] = 0x404; regs[0x171] = 2; regs[0x172] = 8;
@@ -139,5 +155,26 @@ int main(void) {
  reset(25); assert(ri_clock_run(true) == EIO); check_pins();
  assert(strstr(ri_clock_note, "clock_restored=0"));
  assert(!ri_clock_write_allowed(0x101) && !ri_clock_write_allowed(0x500));
+ reset(0); assert(!ri_clock_run_impl(true,true)); check_restore();
+ assert(pmic_mode == 0 && pmic_pull == 4 && pmic_writes == 4);
+ assert(strstr(ri_clock_note,"route_restored=1"));
+ reset(20); assert(ri_clock_run_impl(true,true) == ETIMEDOUT); check_restore();
+ assert(pmic_mode == 0 && pmic_pull == 4);
+ for (unsigned fail = 1; fail <= 4; fail++) {
+  reset(0); pmic_ignore = fail;
+  int rc = ri_clock_run_impl(true,true); assert(rc == 0 || rc == EIO);
+  check_restore(); assert(pmic_mode == 0 && pmic_pull == 4);
+ }
+ reset(0); cmd_missing = 1; assert(ri_clock_run_impl(true,true) == ENXIO);
+ assert(!pmic_writes && !writes); check_pins();
+ reset(0); pmic_mode = 0x1c; assert(ri_clock_run_impl(true,true) == EBUSY);
+ assert(!pmic_writes && !writes); check_pins();
+ reset(0); pmic_pull = 5; assert(ri_clock_run_impl(true,true) == EBUSY);
+ assert(!pmic_writes && !writes); check_pins();
+ for (unsigned scenario = 30; scenario <= 31; scenario++) {
+  reset(scenario); assert(ri_clock_run_impl(true,true) == EBUSY);
+  assert(!pmic_writes && !writes); check_pins();
+ }
+ puts("PASS: PMIC route ownership, fail-closed channel lookup, write/read failures, timeout and full route restoration");
  puts("PASS: FLL framing, full 32k recipe, latched/self-clearing update strobes, repeated snapshots, rollback and stuck-enable detection");
 }

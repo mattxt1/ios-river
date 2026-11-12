@@ -42,6 +42,8 @@ with tempfile.TemporaryDirectory(prefix="river-audio-tests-") as tmp:
     (dev / "river_codec_clock.h").write_text(added)
     subprocess.run(["git", "apply", "--include=bsd/dev/river_codec_clock.h",
                     str(root / "xnu/patches/0276-river-codec-clock-restore.patch")], cwd=tmp, check=True)
+    subprocess.run(["git", "apply", "--include=bsd/dev/river_codec_clock.h",
+                    str(root / "xnu/patches/0277-river-mclk-route-test.patch")], cwd=tmp, check=True)
     added = (dev / "river_codec_clock.h").read_text()
     added = added.split("static int\nriver_codec_clock_sysctl", 1)[0]
     (Path(tmp) / "codec-clock-added.h").write_text(added)
