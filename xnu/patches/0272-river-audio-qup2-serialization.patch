@@ -1,0 +1,58 @@
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+index a382001..c59640f 100644
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -50,6 +50,8 @@ static void river_torch_pulse(void);
+ static int ri_torch_request, ri_torch_status, ri_torch_attempted;
+ static bool ri_started, ri_pon_ok, ri_touch_ok;
+ static vm_offset_t ri_qup2;
++static LCK_GRP_DECLARE(ri_qup2_grp, "river-qup2");
++static LCK_MTX_DECLARE(ri_qup2_lock, &ri_qup2_grp);
+ static bool ri_haptics_ok;
+ static uint64_t ri_vib_deadline;
+ static int ri_vib_request = -1; /* sysctl mailbox; only input worker touches QUP2 */
+@@ -162,7 +164,7 @@ ri_qup_state(vm_offset_t qup, unsigned state)
+  return false;
+ }
+ static bool
+-ri_qup_xfer(vm_offset_t qup, uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx, unsigned nr)
++ri_qup_xfer_locked(vm_offset_t qup, uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx, unsigned nr)
+ {
+  uint8_t out[32], in[68];
+  unsigned no = 0, ni = 0, want = nr ? nr + 2 : 0;
+@@ -212,6 +214,17 @@ ri_qup_xfer(vm_offset_t qup, uint8_t addr, const uint8_t *tx, unsigned nt, uint8
+  if (ok && nr) for (unsigned i = 0; i < nr; i++) rx[i] = in[i+2];
+  return ok;
+ }
++/* QUP2 is shared by the haptics worker and speaker control threads.
++ * Keep each complete FIFO transaction, including error recovery, atomic. */
++static bool
++ri_qup_xfer(vm_offset_t qup, uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx, unsigned nr)
++{
++ bool shared = qup && qup == ri_qup2;
++ if (shared) lck_mtx_lock(&ri_qup2_lock);
++ bool ok = ri_qup_xfer_locked(qup, addr, tx, nt, rx, nr);
++ if (shared) lck_mtx_unlock(&ri_qup2_lock);
++ return ok;
++}
+ static bool
+ ri_state(unsigned state)
+ {
+@@ -4417,16 +4430,7 @@ river_audio_hw_write(const int16_t *pcm, size_t frames)
+ 	if (!ri_speaker_ok || !pcm || frames == 0) return;
+ 	ri_audio_hw_frames += frames;
+ 
+-	int16_t max_sample = 0;
+-	size_t count = frames * 2;
+-	for (size_t i = 0; i < count; i++) {
+-		int16_t val = pcm[i] < 0 ? -pcm[i] : pcm[i];
+-		if (val > max_sample) max_sample = val;
+-	}
+-
+-	if (max_sample > 100) {
+-		ri_cs35l41_wr(0x00002024, 0x00000000);
+-	}
++	/* PCM transport to the audio hardware is not implemented yet. */
+ }
+ 
+ static void

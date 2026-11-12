@@ -5,6 +5,23 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Audio continuation (2026-11-12, based on bd70458)
+
+- Patch 0272 serializes individual QUP2 transfers shared by the amplifier and
+  haptics. It also removes the PCM peak-triggered amplifier unmute, which could
+  override a mute request. This does not serialize multi-register operations.
+- Source inspection confirms that output PCM is counted and discarded and that
+  microphone samples are synthetic. The prior AVAudioPlayer/AVAudioRecorder
+  results demonstrate iOS API plumbing only, not physical audio or capture.
+- Patch application was checked against the r156 patched XNU source. No phone
+  boot, physical audio test, or new kernel build has been verified in this
+  continuation. The device was not detected by `fastboot devices`; sandboxed
+  ping was denied, so the running phone's availability is unknown.
+- Next: establish and verify codec power, clock, SPI and audio data path using
+  pinned hardware sources; implement real duplex PCM transport and capture,
+  then validate audible output and recorded real-world sound on the phone.
+  Do not access LPASS MMIO directly: r153 aborted on those accesses.
+
 ## River Audio Hardware Bring-up & CS35L41 Live Verification (r154, 2026-11-12)
 
 Resolved the r153 boot panic and successfully booted r154 on Motorola Moto G7 (`river`, XT1962-1, SDM632)
