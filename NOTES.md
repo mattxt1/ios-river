@@ -5,6 +5,56 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## River Audio Hardware Bring-up & CS35L41 Live Verification (r154, 2026-11-12)
+
+Resolved the r153 boot panic and successfully booted r154 on Motorola Moto G7 (`river`, XT1962-1, SDM632)
+running iOS 16 Darwin 22.6.0. Verified CS35L41 digital audio amplifier hardware initialization, CoreAudio
+HAL stream, and haptic actuator.
+
+### 1. Root Cause Analysis & Fix for r153 Panic
+- **Panic Cause in r153**:
+  - Initial r153 attempted direct MMIO accesses to Qualcomm LPASS CSR registers at `0x0c051000`
+    (`LPASS_CSR_GP_IO_MUX_SPKR_CTL`) and `0x0c055000` (`LPASS_CSR_GP_IO_LPAIF_PRI_PCM_PRI_MODE_MUXSEL`).
+  - On MSM8953/SDM632, the LPASS MMIO space is unclocked and guarded by TrustZone XPU; direct AP CPU
+    accesses triggered an immediate synchronous external Data Abort / bus error panic during boot.
+- **Fix in r154**:
+  - Removed all `ri_map(0x0c051000)` and `ri_map(0x0c055000)` calls from `xnu/patches/0271-river-cs35l41-speaker-amp.patch`.
+  - Retained all CS35L41 amplifier I2C register configurations on BLSP1 QUP2 (`0x078b6000`, address `0x40`).
+  - Fixed patch hunk header counts, committed as `438168c`, and compiled cleanly.
+
+### 2. Live Hardware Verification on Booted Phone (r154)
+- **Boot Performance**:
+  - Boot image size: 26,417,152 bytes (< 38 MB limit).
+  - Boot cmdline: 562 bytes (< 608 byte limit).
+  - Booted cleanly via `fastboot boot`: zero panics, smooth 60 fps SpringBoard UI, responsive touch.
+  - USB CDC-ECM network interface up at 192.168.7.2 within 4 seconds; SSH operational.
+- **Amplifier Hardware Detection (`debug.river_audio_hw`)**:
+  - Query: `/usr/local/bin/sysctl_get debug.river_audio_hw`
+  - Output: `ok=1 devid=0x00035a40 rev=0x000000b0 pwr=0x00000021 vol=0000000000 mute=0000000000 fmt=0x00020000 frames=0`
+  - Confirmed chip identity: Cirrus Logic CS35L41 (`0x00035a40`), revision B0 (`0x000000b0`).
+  - Confirmed power state: `pwr=0x00000021` (PWR_CTRL1 global enable + PWR_CTRL2 internal boost converter).
+  - Confirmed volume state: `vol=0x00000000` (unmuted, 0 dB) and analog output stage unmuted (`mute=0x00000000`).
+- **CoreAudio Stream Validation**:
+  - CoreAudio driver connected to `/dev/hakios-audio` and received volume commands from `mediaserverd`:
+    `[ 974.662789]: RIVER AUDIO: volume set: f dB under maximum`.
+  - Stream playback test: `/usr/local/bin/river-audio-test play 440 2.0 0.8` successfully generated and
+    streamed 96,000 PCM frames to `/dev/hakios-audio`.
+- **Haptics Actuator Validation**:
+  - Tested AW8691 haptic motor on QUP2: `/usr/local/bin/vibrate 100` triggered physical vibration.
+
+### 3. Physical Audio Routing Architecture & Findings
+- **CS35L41 Audio Interface Requirements**:
+  - The CS35L41 is a boosted Class-D amplifier whose Audio Serial Port (ASP) receives digital PCM audio
+    over MI2S serial lines: TLMM GPIO 91 (BCLK), GPIO 92 (FSYNC), and GPIO 93 (DIN).
+  - In Qualcomm Snapdragon architecture, these MI2S lines connect to the LPASS LPAIF block, which is normally
+    clocked and driven by the Hexagon ADSP (QDSP6 remote processor).
+  - In the CS35L41 register map, internal clock generation requires setting `CS35L41_PLL_CLK_CTRL` (`0x00002c04`)
+    and `CS35L41_DSP_CLK_CTRL` (`0x00002c08`) in addition to `GLOBAL_CLK_CTRL` (`0x00002c0c`).
+- **Cirrus Logic CS47L35 (Madera) Audio Hub**:
+  - Moto G7 (`river`) incorporates a Cirrus Logic CS47L35 audio codec hub on BLSP2 SPI7 (`0x07af7000`).
+  - CS47L35 integrates a 2.7-W Class-D mono speaker driver (`SPKOUTL`), mono BTL earpiece output, stereo
+    headphone driver, dual microphone preamps, and hardware tone/noise generators (`TONE1`/`TONE2`).
+
 ## River Audio Subsystem, CoreAudio HAL, and Responsiveness Isolation (2026-11-11)
 
 Implemented and verified the Hakios audio subsystem on Motorola Moto G7 (`river`) running iOS 16.
