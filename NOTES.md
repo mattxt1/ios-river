@@ -13,10 +13,12 @@
 - Source inspection confirms that output PCM is counted and discarded and that
   microphone samples are synthetic. The prior AVAudioPlayer/AVAudioRecorder
   results demonstrate iOS API plumbing only, not physical audio or capture.
-- Patch application was checked against the r156 patched XNU source. No phone
-  boot, physical audio test, or new kernel build has been verified in this
-  continuation. The device was not detected by `fastboot devices`; sandboxed
-  ping was denied, so the running phone's availability is unknown.
+- Patch application was checked against the r156 patched XNU source. Local
+  build of source commit `a5b9d19167cf7d46be925adc9a363428d3514cb5` passed;
+  kernel SHA-256 `21d0400ec0febdd25535a405419e5a1c4d69b5be977d713672cfb3963c9f7c39`.
+  No phone boot or physical audio test was performed. The device was not
+  detected by `fastboot devices`; sandboxed ping was denied, so the running
+  phone's availability is unknown.
 - Next: establish and verify codec power, clock, SPI and audio data path using
   pinned hardware sources; implement real duplex PCM transport and capture,
   then validate audible output and recorded real-world sound on the phone.
