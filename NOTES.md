@@ -4071,3 +4071,21 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   - Kernel binary: `kernel.development.sweet` (SHA256: `0f7c293328d8030335f9d050a77a94232dc2598ebdb654c4c7fd5b902f5c1839`).
   - Boot image: `/Users/matttyson/Documents/Codex/2026-11-05/river-battery-implementation/work/river-audio-boot.img` (26,417,152 bytes).
   - Verified symbols and per-GPIO TLMM mapping logic.
+
+- **Hardware Verification (r152 Live Test)**:
+  - Phone booted via `fastboot boot river-audio-boot.img`.
+  - Network: USB Ethernet (`192.168.7.2`) came up in 12s, ping 0.0% loss (1.5-2.6ms), SSH operational.
+  - **CS35L41 Hardware Status**:
+    - `debug.river_audio_hw = ok=1 devid=0x00035a40 rev=0x000000b0 status=0x00000021`.
+    - Probed authentic Cirrus Logic CS35L41 at I2C address `0x40` on BLSP1 QUP2.
+    - Hardware reset released via TLMM GPIO 94.
+    - Digital audio pinmuxed via TLMM GPIO 91, 92, 93 (Primary MI2S) and GPIO 66 (MCLK2).
+    - CS35L41 unmuted with internal boost enabled (`status=0x00000021`).
+  - **Audio Output Verification**:
+    - Direct HAL playback: `/usr/local/bin/river-audio-test play 440 2.0 0.8` successfully wrote 96,000 frames (48 kHz stereo 16-bit PCM) to `/dev/hakios-audio`.
+    - iOS Userland CoreAudio playback: `/usr/local/bin/river-play-sound /System/Library/Audio/UISounds/connect_power.caf` loaded and played via `AVAudioPlayer` (`play returned: 1`).
+  - **Audio Input Verification**:
+    - Microphone recording: `/usr/local/bin/river-record-sound 2` successfully recorded 2.0s via `AVAudioRecorder`.
+  - **UI & Touch Responsiveness**:
+    - SpringBoard (PID 26) and backboardd (PID 60) active and running smoothly at 60 fps.
+    - Lockscreen swipe-up touch dispatch verified.
