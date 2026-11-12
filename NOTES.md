@@ -4226,3 +4226,53 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   - CoreAudio UI sound playback: `/System/Library/Audio/UISounds/connect_power.caf` played via `mediaserverd` (`play returned: 1`, total 319,232 frames).
   - Microphone recording: `river-record-sound` recorded 2.0s via `AVAudioRecorder` to `/tmp/record_test.caf` (4096 bytes).
   - SpringBoard / UI 60 fps verified.
+
+## Status 2026-11-12: r156 Audio Hub Reset Release (GPIO68), CS35L41 Self-Clocking Master Mode, +17dB Gain, & Physical Speaker Test (Patch 0271)
+- **Problem Statement**:
+  - In r155, audio pipeline and volume ioctl were fully functional, but no physical sound was emitted from the loudspeaker.
+  - Device tree investigation revealed that on Motorola Moto G7 (`river`), the CS35L41 smart amplifier ASP digital audio lines are connected directly to Audio Interface 1 (`AIF1`) of the Cirrus CS47L35 (Madera) audio hub codec (GPIO 9 = BCLK, GPIO 10 = TXDAT/DIN, GPIO 11 = LRCLK).
+  - CS47L35 was held in hardware reset by TLMM GPIO 68 (`0x01044000`), preventing clock generation on AIF1 and leaving the CS35L41 PLL unlocked (`PLL_UNLOCK = 1`).
+- **Implementation Details (Patch 0271)**:
+  - **CS47L35 Hardware Reset**:
+    - Released reset on TLMM GPIO 68 (`0x01044000`): drove `OUT=1`, `OE=1, PULL_UP=3` (`0x203`), verified state via readback (`g68=0x3`).
+    - Configured TLMM GPIO 46 (CS47L35 IRQ) and TLMM GPIO 63 (CS35L41 IRQ) with pull-up (`0x203`).
+  - **CS35L41 Clocking & Bus Master**:
+    - Configured `CS35L41_SP_FORMAT` (`0x00004808`) to `0x20200233` (`SCLK_MSTR = 1`, `LRCLK_MSTR = 1`, `SCLK_FRC = 1`, `LRCLK_FRC = 1`).
+    - Configured `CS35L41_PLL_CLK_CTRL` (`0x00002c04`) to `0x00000833` (`PLL_OPENLOOP = 1`, `PLL_CLK_EN = 1`, `PLLSRC_SELF = 3`).
+  - **Amplifier Gain & Acoustic Tone Test**:
+    - Increased analog amplifier gain `CS35L41_AMP_GAIN_CTRL` (`0x00006c04`) to `0x00000220` (+17 dB power gain).
+    - Added acoustic square-wave tone test sysctl `debug.river_speaker_test`: modulates output stage at 500 Hz for specified duration in ms.
+    - Updated `river_audio_hw_write()` with peak sample detection.
+  - **Status & Fault Readback**:
+    - Enhanced `debug.river_audio_hw` to read actual hardware status registers (`0x00010090..9c`), GPIO 68/94 states, and volume.
+  - **Patch & Tooling**:
+    - Fixed patch 0271 hunk line counts and verified clean application via `git apply --check`.
+    - Compiled and codesigned `/usr/local/bin/river-speaker-test` (49,952 bytes) on live device via `/usr/local/bin/rput`.
+- **Build and Packaging**:
+  - Source Commit: `33c83557cd9f6ecd5a33bcfdad7f3dead9b4f40a`
+  - Kernel Binary: `kernel.development.sweet` (SHA256: `58ec2e55dd1fc050f8f68f45d814272d40ddb5328a1b6e9026fef8633378d743`)
+  - Image: `river-audio-boot.img` (26,435,584 bytes < 38 MB)
+  - Cmdline: 562 bytes (< 608 bytes)
+- **Live Device Verification (XT1962-1 River)**:
+  - Booted cleanly via `fastboot boot`, ping active within 2 seconds at `192.168.7.2`.
+  - `debug.river_audio_hw` readback:
+    `ok=1 devid=0x00035a40 rev=0x000000b0 pwr=0x00000021 vol=0000000000 mute=0000000000 fmt=0x20200233 pll=0x00000833 gain=0x00000220 irq=0x40406000,0xa000000,0x20000010,0x2000002 g68=0x3 g94=0x3 frames=0`
+  - Verified:
+    - CS35L41 detected (`devid=0x00035a40`, `rev=0x000000b0`).
+    - Boost converter active at 8.5V, 4500mA (`pwr=0x00000021`).
+    - CS47L35 reset released (`g68=0x3`).
+    - CS35L41 reset released (`g94=0x3`).
+    - OTP boot sequence completed (`irq4` bit 1 = `0x02` `CS35L41_OTP_BOOT_DONE`).
+    - Analog gain configured to +17 dB (`gain=0x00000220`).
+    - Tone test `/usr/local/bin/river-speaker-test 500` executed and returned 0.
+- **Root Cause Analysis of Loudspeaker Silence**:
+  - Register `0x00010098` (`CS35L41_IRQ1_RAW_STATUS3`) readback shows bit 4 set: `irq3 = 0x20000010` (`CS35L41_PLL_UNLOCK = 0x10`).
+  - CS35L41 hardware safety logic enforces an automatic Hi-Z protective shutdown of the Class-D PWM H-bridge output stage whenever the PLL is unlocked, preventing coil/boost damage.
+  - While `PLLSRC_SELF = 3` selects the self-oscillator, open-loop mode leaves the PLL unlocked in hardware status; the chip requires external synchronous BCLK/MCLK or complete self-oscillator trim/lock calibration.
+  - Additionally, QUP2 (`0x078b6000`) is shared between CS35L41 and AW8697 haptics/input worker, so concurrent non-serialized transfers can destabilize the QUP FIFO.
+- **Next Steps for Physical Sound Output**:
+  1. Add `lck_mtx_t ri_qup2_lock` to serialize all QUP2 bus transfers across audio, sysctls, and the input worker thread.
+  2. Provide external locked BCLK to CS35L41 ASP:
+     - Initialize CS47L35 over SPI7 (`0x078b8000`) to enable AIF1 BCLK generation, OR
+     - Clock LPASS/LPAIF speaker mux (`0x0c051004` / `csr_gp_io_mux_spkr_ctl`) and route external MCLK2 (GPIO 66).
+
