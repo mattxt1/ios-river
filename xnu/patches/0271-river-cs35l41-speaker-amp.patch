@@ -29,7 +29,7 @@
   uint32_t wcnss = 0;
   if (PE_parse_boot_argn("riverwcnssprobe", &wcnss, sizeof(wcnss)) && wcnss) {
    thread_t wt;
-@@ -4160,6 +4175,175 @@
+@@ -4160,6 +4175,178 @@
  }
  SYSCTL_PROC(_debug, OID_AUTO, river_vibrate, CTLTYPE_INT | CTLFLAG_RW | CTLFLAG_LOCKED,
              NULL, 0, river_vibrate_sysctl, "I", "River haptic vibrate");
