@@ -4047,3 +4047,12 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
     - Probes I2C `0x40` for `CS35L41_DEVID` and reads `CS35L41_REVID`.
     - Programs power and audio registers: activates `GLOBAL_EN`, enables Class-D amplifier core and internal DC-DC boost converter, unmasks `ASPRX1`, routes `ASPRX1` directly to DAC PCM1, and sets output gain.
     - Updates sysctl `debug.river_audio_hw` to report `ok=%d devid=%#010x rev=%#010x status=%#010x`.
+
+- **Local Kernel Build & Packaging**:
+  - Build directory: `/Users/matttyson/Documents/Codex/2026-11-05/d-2/work/local-build/river-a8eec8987556-t66Svh`.
+  - Kernel binary: `kernel.development.sweet` (SHA256: `fa37bd1881770025e3cd0a747de1ab596e77234ca11b12a1be311eca11341785`).
+  - CS35L41 driver strings verified inside kernel binary via `strings`.
+  - Packaged boot image: `/Users/matttyson/Documents/Codex/2026-11-05/river-battery-implementation/work/river-audio-boot.img`.
+  - Image size: 26,417,152 bytes (< 38 MB limit).
+  - Boot cmdline: 562 bytes (< 608 byte limit), containing `rivertouchlatch=0`, `riverfilessys=1`, `riverbl=1`, and `riverfs=1`.
+  - RiverFiles blob: Packed with updated test tools (`river-audio-test`, `river-play-sound`, `river-record-sound`, `river-media-capability`, `river-net`).
