@@ -1,24 +1,31 @@
 --- a/bsd/dev/sweet_keys.c
 +++ b/bsd/dev/sweet_keys.c
-@@ -55,6 +55,9 @@
+@@ -55,6 +55,10 @@
  static int ri_vib_request = -1; /* sysctl mailbox; only input worker touches QUP2 */
  void river_haptics_init(void);
  void river_vibrate(unsigned ms);
 +static bool ri_speaker_ok;
 +static uint32_t ri_cs35l41_devid, ri_cs35l41_revid, ri_cs35l41_status;
 +void river_speaker_init(void);
++static void river_speaker_thread(void *arg, wait_result_t result);
  static uint32_t ri_pon_started, ri_pon_finished, ri_pon_deferred;
  static int ri_pon_survey_gate;
  static int ri_chan;
-@@ -3192,6 +3195,7 @@
-  }
-  printf("RIVER INPUT: Novatek reports %s\n",ri_touch_ok?"enabled":"not validated; withheld");
-  river_haptics_init();
-+ river_speaker_init();
- }
- static void
- ri_thread(void *arg, wait_result_t result)
-@@ -4160,6 +4164,130 @@
+@@ -3198,6 +3202,13 @@
+ {
+  (void)arg; (void)result; ri_wait(3000); ri_probe();
+  river_flash_survey();
++ uint32_t speaker = 1;
++ (void)PE_parse_boot_argn("riverspeaker", &speaker, sizeof(speaker));
++ if (speaker) {
++  thread_t st;
++  if (kernel_thread_start(river_speaker_thread, NULL, &st) == KERN_SUCCESS)
++   thread_deallocate(st);
++ }
+  uint32_t wcnss = 0;
+  if (PE_parse_boot_argn("riverwcnssprobe", &wcnss, sizeof(wcnss)) && wcnss) {
+   thread_t wt;
+@@ -4160,6 +4171,135 @@
  }
  SYSCTL_PROC(_debug, OID_AUTO, river_vibrate, CTLTYPE_INT | CTLFLAG_RW | CTLFLAG_LOCKED,
              NULL, 0, river_vibrate_sysctl, "I", "River haptic vibrate");
@@ -32,7 +39,7 @@
 +		(uint8_t)(reg)
 +	};
 +	uint8_t rx[4] = { 0 };
-+	if (!ri_qup_xfer(ri_qup2, 0x40, tx, 4, rx, 4))
++	if (!ri_qup2 || !ri_qup_xfer(ri_qup2, 0x40, tx, 4, rx, 4))
 +		return false;
 +	if (val) {
 +		*val = ((uint32_t)rx[0] << 24) |
@@ -56,22 +63,19 @@
 +		(uint8_t)(val >> 8),
 +		(uint8_t)(val)
 +	};
++	if (!ri_qup2) return false;
 +	return ri_qup_xfer(ri_qup2, 0x40, tx, 8, NULL, 0);
 +}
 +
 +void
 +river_speaker_init(void)
 +{
-+	int enabled = 1;
-+	(void)PE_parse_boot_argn("riverspeaker", &enabled, sizeof(enabled));
-+	if (!enabled) return;
-+
-+	/* 1. Release hardware reset via TLMM GPIO 94 */
++	/* 1. Release hardware reset via TLMM GPIO 94 (0x0105e000) */
 +	vm_offset_t gpio94 = ri_map(0x0105e000);
 +	if (gpio94) {
 +		ri_wr(gpio94, 4, 2); /* OUT = 1 (drive high) */
 +		ri_wr(gpio94, 0, 0x203); /* OE=1, PULL_UP=3, DRV=2mA, FUNC=0 */
-+		delay(10000); /* 10 ms delay for power-on reset */
++		delay(1000); /* 1 ms delay for power-on reset */
 +		printf("RIVER AUDIO: CS35L41 reset released (GPIO94 cfg=%#x inout=%#x)\n",
 +		       ri_rd(gpio94, 0), ri_rd(gpio94, 4));
 +	}
@@ -81,16 +85,16 @@
 +		return;
 +	}
 +
-+	/* 2. Configure TLMM MI2S pins: GPIO 91 (pri_mi2s), 92 (pri_mi2s_ws), 93 (pri_mi2s) */
-+	vm_offset_t tlmm_mi2s = ri_map(0x01058000);
-+	if (tlmm_mi2s) {
-+		ri_wr(tlmm_mi2s, 0x3000, 0x0c4); /* GPIO 91: pri_mi2s, 8mA */
-+		ri_wr(tlmm_mi2s, 0x4000, 0x0c4); /* GPIO 92: pri_mi2s_ws, 8mA */
-+		ri_wr(tlmm_mi2s, 0x5000, 0x0c4); /* GPIO 93: pri_mi2s, 8mA */
-+		printf("RIVER AUDIO: TLMM MI2S pins configured (91, 92, 93)\n");
-+	}
++	/* 2. Configure TLMM MI2S pins: GPIO 91 (0x0105b000), GPIO 92 (0x0105c000), GPIO 93 (0x0105d000) */
++	vm_offset_t g91 = ri_map(0x0105b000);
++	if (g91) ri_wr(g91, 0, 0x0c4); /* GPIO 91: pri_mi2s, 8mA */
++	vm_offset_t g92 = ri_map(0x0105c000);
++	if (g92) ri_wr(g92, 0, 0x0c4); /* GPIO 92: pri_mi2s_ws, 8mA */
++	vm_offset_t g93 = ri_map(0x0105d000);
++	if (g93) ri_wr(g93, 0, 0x0c4); /* GPIO 93: pri_mi2s, 8mA */
++	printf("RIVER AUDIO: TLMM MI2S pins configured (91, 92, 93)\n");
 +
-+	/* 3. Configure TLMM GPIO 66 (MCLK2): pri_mi2s, 8mA */
++	/* 3. Configure TLMM GPIO 66 (MCLK2): 0x01042000 */
 +	vm_offset_t gpio66 = ri_map(0x01042000);
 +	if (gpio66) {
 +		ri_wr(gpio66, 0, 0x0c4);
@@ -99,14 +103,14 @@
 +
 +	/* 4. Probe CS35L41 at I2C address 0x40 on QUP2 */
 +	bool ok = false;
-+	for (int t = 0; t < 15; t++) {
++	for (int t = 0; t < 5; t++) {
 +		if (ri_cs35l41_rd(0x00000000, &ri_cs35l41_devid)) {
 +			if (ri_cs35l41_devid != 0 && ri_cs35l41_devid != 0xffffffff) {
 +				ok = true;
 +				break;
 +			}
 +		}
-+		delay(3000);
++		ri_wait(20);
 +	}
 +
 +	if (!ok) {
@@ -134,6 +138,14 @@
 +	(void)ri_cs35l41_rd(0x00002018, &ri_cs35l41_status);
 +	ri_speaker_ok = true;
 +	printf("RIVER AUDIO: CS35L41 amplifier configured and unmuted (status=%#010x)\n", ri_cs35l41_status);
++}
++
++static void
++river_speaker_thread(void *arg, wait_result_t result)
++{
++	(void)arg; (void)result;
++	ri_wait(1000);
++	river_speaker_init();
 +}
 +
 +static int

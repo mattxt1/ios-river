@@ -4056,3 +4056,12 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   - Image size: 26,417,152 bytes (< 38 MB limit).
   - Boot cmdline: 562 bytes (< 608 byte limit), containing `rivertouchlatch=0`, `riverfilessys=1`, `riverbl=1`, and `riverfs=1`.
   - RiverFiles blob: Packed with updated test tools (`river-audio-test`, `river-play-sound`, `river-record-sound`, `river-media-capability`, `river-net`).
+
+## Status 2026-11-12: r152 CS35L41 TLMM Page Mapping Fix & Async Speaker Thread (Patch 0271)
+- **Root Cause of Device Crash & Unresponsiveness**:
+  - In patch 0271 r151, TLMM MI2S pins were mapped as `ri_map(0x01058000)` with 16 KiB size (`0x01058000` to `0x0105bfff`).
+  - Accessing GPIO 92 (`0x01058000 + 0x4000 = 0x0105c000`) and GPIO 93 (`0x01058000 + 0x5000 = 0x0105d000`) wrote beyond the 16 KiB mapping, triggering a kernel Data Abort / page fault panic right during `ri_probe()` before userspace or USB networking could initialize.
+- **Fixes Applied**:
+  - **Individual TLMM Mapping**: Separated pinmux configuration to map each GPIO at its exact physical address via `ri_map(0x0105b000)` (GPIO 91), `ri_map(0x0105c000)` (GPIO 92), and `ri_map(0x0105d000)` (GPIO 93), completely preventing any out-of-bounds memory accesses.
+  - **Decoupled Asynchronous Thread**: Moved `river_speaker_init()` out of synchronous `ri_probe()` and into a dedicated `river_speaker_thread` via `kernel_thread_start()`. This guarantees the input/touch thread `ri_thread` runs unimpeded at 60 fps without any delay from I2C transfers.
+  - **Safe QUP2 Guard**: Added explicit NULL checks for `ri_qup2` in both `ri_cs35l41_rd` and `ri_cs35l41_wr`.
