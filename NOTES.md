@@ -28,6 +28,7 @@
 - Amplifier still reports PLL raw IRQ3 `0x20000010`; its ASP clock path was
   not enabled. PCM status remains `version=1 flags=0x3 output_frames=0
   input_frames=0`. No physical playback or real microphone capture achieved.
+- User confirmed iOS remained responsive after the successful 0277 route/FLL test.
 - Next: bounded codec AIF1 clock-only test after putting the amplifier into
   verified mute/slave mode. Current SP_FORMAT `0x20200233` sets master/force
   clock bits, conflicting with the pinned board's amplifier-slave DAI link;
