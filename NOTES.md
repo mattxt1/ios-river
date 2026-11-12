@@ -5,6 +5,34 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Audio continuation: phone boot and source audit (2026-11-12)
+
+- Booted temporary image `river-audio-a5b9d19.img` via `fastboot boot`: image
+  26,435,584 bytes, command line 562 bytes. User confirmed iOS home screen;
+  USB ping and SSH worked intermittently. No partition was flashed.
+- `debug.river_audio_hw` returned `ok=1`, device `0x00035a40`, PLL raw IRQ3
+  `0x20000010`. Muted playback test wrote 48,000 frames; immediately after,
+  hardware readback was `vol=0x4cf mute=1` (then restored volume to -10 dB).
+  This supports the mute fix, but does not test an audible path. Attempts to
+  run a concurrent haptic/status test timed out at SSH connection setup.
+- Audited pinned Motorola Android source `2dba45b8e247958d5a1b15b33c6064c15af4983e`.
+  `sdm632-moto-common-overlay.dtsi` places SPI7 on BLSP2 QUP3 at
+  `0x07af7000` (not `0x078b8000`), with interface and QUP3 SPI clocks;
+  `sdm632-moto-pinctrl-overlay.dtsi` specifies GPIO135 CLK, GPIO136 CS,
+  GPIO137 MOSI and GPIO138 MISO. These are source-derived, not live probed.
+  The CS47L35 SPI regmap uses 32-bit register addresses and 16 pad bits.
+- The River audio overlay enables a Madera SLIMbus codec and Qualcomm Q6
+  audio endpoints; the SLIMbus NGD driver waits for the ADSP subsystem.
+  Codec AIF pin labels alone do not prove amplifier wiring. No XNU ADSP/SLIMbus
+  PCM transport or real microphone capture implementation was found. SPI
+  codec control and clocking alone therefore cannot complete the milestone.
+- Next: establish the actual codec power rails, SPI clocks and pin ownership;
+  safely probe codec identity; determine ADSP firmware availability, secure
+  boot/ownership and IPC, then implement and validate duplex transport. Avoid
+  direct LPASS access before power/access ownership is established (r153
+  panicked). Prove real input with an identifiable external acoustic signal
+  and real output with an audible or measured signal.
+
 ## Audio continuation (2026-11-12, based on bd70458)
 
 - Patch 0272 serializes individual QUP2 transfers shared by the amplifier and

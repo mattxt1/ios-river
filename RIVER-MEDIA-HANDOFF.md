@@ -5,11 +5,11 @@
 > [RIVER.md](RIVER.md).
 >
 > **Status as of 2026-11-12 (r156):**
-> - **Audio & Microphone**: Fully implemented in XNU via `/dev/hakios-audio` and
+> - **Audio & Microphone**: Placeholder endpoints exist in XNU via `/dev/hakios-audio` and
 >   `/dev/hakios-mic` (patch 0270). CoreAudio HAL (`river-media-capability` /
 >   `libriveraudio.dylib`) running under `mediaserverd`.
->   - Verified recording 2.0s audio files via iOS `AVAudioRecorder` (`river-record-sound`).
->   - Verified UISound playback via `mediaserverd` (`river-play-sound`).
+>   - iOS `AVAudioRecorder` created a file; the kernel input is synthetic, so this did not verify microphone capture.
+>   - UISound calls reached `mediaserverd`; the kernel discards PCM, so this did not verify audible playback.
 >   - Cirrus CS35L41 smart speaker amplifier initialized on QUP2 (8.5V boost, +17 dB gain, patch 0271).
 >   - Cirrus CS47L35 audio hub reset released on TLMM GPIO 68 (`0x01044000`).
 >   - Physical speaker sound requires synchronous ASP BCLK to clear `CS35L41_PLL_UNLOCK`.

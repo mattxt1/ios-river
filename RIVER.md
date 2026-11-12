@@ -2249,6 +2249,12 @@ composition be changed. No kernel build, boot, or root write was done here.
   - Implemented TLMM PWM backlight driver under `riverbl=1`, interfaced directly with Apple's `CoreBrightness.framework`.
   - Verified smooth slider dimming in Control Center / Settings, proper blanking during display sleep, and instant restoration on wake.
 
+> **Audio correction (2026-11-12):** The historical tests below show API and
+> virtual-device activity only. Playback PCM is discarded and microphone data
+> is synthesized. Neither physical playback nor recording has been verified.
+> The source-derived codec control address is SPI7 `0x07af7000`, not
+> `0x078b8000`. See the current audio continuation in `NOTES.md`.
+
 ## Audio Subsystem Core Bring-up & Virtual Devices (2026-11-11 – 2026-11-12, r153–r155)
 
 - **Kernel Audio Infrastructure (patch 0270 `0270-river-audio-subsystem.patch`)**:
