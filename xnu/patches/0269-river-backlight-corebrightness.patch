@@ -20,7 +20,7 @@
  	}
  	if (level < 1) {
  		level = 1;
-@@ -1531,6 +1536,30 @@
+@@ -1531,6 +1536,31 @@
  		if (fDsi == NULL || fDsiBuf == NULL || !fDsiBufPhys || fBlLock == NULL) {
  			fDsi = NULL;
  		}
