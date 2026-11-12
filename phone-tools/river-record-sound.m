@@ -1,52 +1,79 @@
+/* iOS API capture test. Success means a decodable PCM file of the requested
+ * length. Physical microphone capture still requires an external sound test. */
 #import <Foundation/Foundation.h>
 #import <AVFoundation/AVFoundation.h>
+#include <math.h>
+#include <errno.h>
+
+@interface RiverRecordingResult : NSObject <AVAudioRecorderDelegate>
+@property BOOL finished;
+@property BOOL succeeded;
+@end
+@implementation RiverRecordingResult
+- (void)audioRecorderDidFinishRecording:(AVAudioRecorder *)recorder successfully:(BOOL)flag {
+    (void)recorder; self.succeeded = flag; self.finished = YES;
+}
+- (void)audioRecorderEncodeErrorDidOccur:(AVAudioRecorder *)recorder error:(NSError *)error {
+    (void)recorder; NSLog(@"Capture error: %@", error); self.succeeded = NO; self.finished = YES;
+}
+@end
 
 int main(int argc, char **argv) {
     @autoreleasepool {
-        float duration = argc > 1 ? atof(argv[1]) : 2.0f;
-        NSString *outPath = @"/tmp/record_test.caf";
-        NSURL *outURL = [NSURL fileURLWithPath:outPath];
-
-        [[NSFileManager defaultManager] removeItemAtPath:outPath error:nil];
-
-        NSLog(@"Setting up AVAudioSession for PlayAndRecord...");
+        char *end = NULL;
+        double duration = argc > 1 ? strtod(argv[1], &end) : 2;
+        if (argc > 3 || (argc > 1 && (!*argv[1] || *end)) || !isfinite(duration) || duration < 0.1 || duration > 60) {
+            fprintf(stderr, "Usage: %s [seconds 0.1..60] [new.caf]\n", argv[0]); return 2;
+        }
+        NSString *path = argc > 2 ? [NSString stringWithUTF8String:argv[2]] : @"/tmp/record_test.caf";
+        if ([[NSFileManager defaultManager] fileExistsAtPath:path]) {
+            NSLog(@"Refusing to overwrite %@; choose a new capture path", path); return 1;
+        }
         AVAudioSession *session = [AVAudioSession sharedInstance];
-        NSError *err = nil;
-        [session setCategory:AVAudioSessionCategoryPlayAndRecord error:&err];
-        if (err) NSLog(@"setCategory error: %@", err);
-        [session setActive:YES error:&err];
-        if (err) NSLog(@"setActive error: %@", err);
-
-        NSDictionary *settings = @{
-            AVFormatIDKey: @(kAudioFormatLinearPCM),
-            AVSampleRateKey: @(48000.0f),
-            AVNumberOfChannelsKey: @(1),
-            AVLinearPCMBitDepthKey: @(16),
-            AVLinearPCMIsBigEndianKey: @(NO),
-            AVLinearPCMIsFloatKey: @(NO)
-        };
-
-        NSLog(@"Initializing AVAudioRecorder...");
-        AVAudioRecorder *recorder = [[AVAudioRecorder alloc] initWithURL:outURL settings:settings error:&err];
-        if (err || !recorder) {
-            NSLog(@"Failed to init AVAudioRecorder: %@", err);
-            return 1;
+        NSError *error = nil;
+        if (![session setCategory:AVAudioSessionCategoryPlayAndRecord
+                     withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker error:&error] ||
+            ![session setPreferredSampleRate:48000 error:&error] ||
+            ![session setActive:YES error:&error]) {
+            NSLog(@"Audio session failed: %@", error); return 1;
         }
-
-        NSLog(@"Recording for %.1f s...", duration);
-        BOOL ok = [recorder recordForDuration:duration];
-        NSLog(@"recordForDuration returned: %d", ok);
-
-        [NSThread sleepForTimeInterval:duration + 0.5];
+        int result = 1;
+        AVAudioRecorder *recorder = nil;
+        if (!session.inputAvailable) { NSLog(@"No iOS audio input available"); goto cleanup; }
+        NSLog(@"iOS route: %@, rate %.0f Hz. Verify this capture against a changing external sound.",
+              session.currentRoute, session.sampleRate);
+        recorder = [[AVAudioRecorder alloc] initWithURL:[NSURL fileURLWithPath:path] settings:@{
+            AVFormatIDKey: @(kAudioFormatLinearPCM), AVSampleRateKey: @48000,
+            AVNumberOfChannelsKey: @1, AVLinearPCMBitDepthKey: @16,
+            AVLinearPCMIsBigEndianKey: @NO, AVLinearPCMIsFloatKey: @NO
+        } error:&error];
+        if (!recorder) { NSLog(@"Recorder creation failed: %@", error); goto cleanup; }
+        {
+            RiverRecordingResult *state = [RiverRecordingResult new];
+            recorder.delegate = state;
+            if (![recorder prepareToRecord] || ![recorder recordForDuration:duration]) {
+                NSLog(@"Recorder refused capture"); goto cleanup;
+            }
+            NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:duration + 3];
+            while (!state.finished && deadline.timeIntervalSinceNow > 0)
+                [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
+            if (!state.finished || !state.succeeded) { NSLog(@"Capture failed or timed out"); goto cleanup; }
+        }
+        {
+            AVAudioFile *file = [[AVAudioFile alloc] initForReading:[NSURL fileURLWithPath:path] error:&error];
+            if (!file) { NSLog(@"Captured file cannot be decoded: %@", error); goto cleanup; }
+            double actual = (double)file.length / file.processingFormat.sampleRate;
+            NSLog(@"Captured %lld PCM frames, %.3f s, %@", (long long)file.length, actual, file.fileFormat);
+            if (file.fileFormat.channelCount != 1 || fabs(file.fileFormat.sampleRate - 48000) > 1 ||
+                actual < duration - 0.1 || actual > duration + 0.25 || !file.length) {
+                NSLog(@"Capture length/format mismatch"); goto cleanup;
+            }
+            result = 0;
+        }
+cleanup:
         [recorder stop];
-        NSLog(@"Recording stopped.");
-
-        NSDictionary *attrs = [[NSFileManager defaultManager] attributesOfItemAtPath:outPath error:&err];
-        if (attrs) {
-            NSLog(@"Output file size: %llu bytes", [attrs fileSize]);
-        } else {
-            NSLog(@"Output file not found: %@", err);
-        }
+        if (result && recorder) [[NSFileManager defaultManager] removeItemAtPath:path error:NULL];
+        [session setActive:NO error:NULL];
+        return result;
     }
-    return 0;
 }

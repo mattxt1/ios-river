@@ -1,132 +1,171 @@
+/* Raw PCM diagnostic. Physical tests require a real backend; --plumbing opts
+ * into testing the historical discard/synthetic endpoints explicitly. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <math.h>
-#include <sys/ioctl.h>
+#include <errno.h>
 #include <stdint.h>
+#include "river-audio-abi.h"
 
-#define HAKIOS_AUDIO_DEVICE    "/dev/hakios-audio"
-#define HAKIOS_MIC_DEVICE      "/dev/hakios-mic"
-#define HAKIOS_AUDIO_RATE      48000
-#define HAKIOS_AUDIO_CHANNELS  2
-
-struct hakios_audio_volume {
-    uint32_t below; /* eighths of a dB */
-    uint32_t muted;
-};
-#define HAKIOS_AUDIO_SET_VOLUME _IOW('r', 1, struct hakios_audio_volume)
-
-static int play_tone(float freq, float duration, float amp) {
-    int fd = open(HAKIOS_AUDIO_DEVICE, O_WRONLY);
-    if (fd < 0) {
-        perror("open " HAKIOS_AUDIO_DEVICE);
-        return 1;
+static int backend(int fd, int recording, int plumbing) {
+    struct hakios_audio_status s = {0};
+    if (ioctl(fd, HAKIOS_AUDIO_GET_STATUS, &s) < 0) {
+        fprintf(stderr, "Audio backend status unavailable: %s. Physical audio is unverified.\n", strerror(errno));
+        return plumbing ? 0 : -1;
     }
-    printf("Playing %.1f Hz tone for %.1f s on %s (amp %.2f)...\n",
-           freq, duration, HAKIOS_AUDIO_DEVICE, amp);
-
-    int total_frames = (int)(duration * HAKIOS_AUDIO_RATE);
-    int chunk_frames = 1024;
-    int16_t *buf = malloc(chunk_frames * HAKIOS_AUDIO_CHANNELS * sizeof(int16_t));
-
-    int frames_left = total_frames;
-    int current_frame = 0;
-    while (frames_left > 0) {
-        int n = frames_left < chunk_frames ? frames_left : chunk_frames;
-        for (int i = 0; i < n; i++) {
-            double t = (double)(current_frame + i) / HAKIOS_AUDIO_RATE;
-            int16_t val = (int16_t)(sin(2.0 * M_PI * freq * t) * 32767.0 * amp);
-            buf[i * 2 + 0] = val; // Left
-            buf[i * 2 + 1] = val; // Right
-        }
-        ssize_t written = write(fd, buf, n * HAKIOS_AUDIO_CHANNELS * sizeof(int16_t));
-        if (written <= 0) {
-            perror("write");
-            break;
-        }
-        frames_left -= n;
-        current_frame += n;
+    if (s.version != HAKIOS_AUDIO_STATUS_VERSION) {
+        fprintf(stderr, "Unsupported audio status version %u\n", s.version);
+        return -1;
     }
-    free(buf);
-    close(fd);
-    printf("Playback complete: %d frames written.\n", current_frame);
+    uint32_t flag = recording ? HAKIOS_AUDIO_CAPTURE_SYNTHETIC : HAKIOS_AUDIO_PLAYBACK_DISCARD;
+    if (s.flags & flag) {
+        fprintf(stderr, "%s; this is not a physical audio test.\n",
+                recording ? "Microphone is synthetic" : "Playback PCM is discarded");
+        return plumbing ? 0 : -1;
+    }
     return 0;
 }
 
-static int set_vol(uint32_t db_eighths, int muted) {
-    int fd = open(HAKIOS_AUDIO_DEVICE, O_WRONLY);
-    if (fd < 0) {
-        perror("open " HAKIOS_AUDIO_DEVICE);
-        return 1;
+static int write_all(int fd, const void *data, size_t size) {
+    const unsigned char *p = data;
+    while (size) {
+        ssize_t n = write(fd, p, size);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) { if (!n) errno = EIO; perror("write"); return -1; }
+        p += n; size -= (size_t)n;
     }
-    struct hakios_audio_volume v = { .below = db_eighths, .muted = (uint32_t)muted };
-    if (ioctl(fd, HAKIOS_AUDIO_SET_VOLUME, &v) < 0) {
-        perror("ioctl HAKIOS_AUDIO_SET_VOLUME");
-        close(fd);
-        return 1;
-    }
-    printf("Volume set: %.2f dB below max, muted=%d\n", db_eighths / 8.0, muted);
-    close(fd);
     return 0;
 }
 
-static int record_mic(float duration) {
-    int fd = open(HAKIOS_MIC_DEVICE, O_RDONLY);
-    if (fd < 0) {
-        perror("open " HAKIOS_MIC_DEVICE);
-        return 1;
+static int number(const char *text, double min, double max, double *out) {
+    char *end;
+    errno = 0;
+    double n = strtod(text, &end);
+    if (errno || !*text || *end || !isfinite(n) || n < min || n > max) {
+        fprintf(stderr, "Invalid number '%s' (range %.3g..%.3g)\n", text, min, max);
+        return -1;
     }
-    printf("Recording from %s for %.1f s...\n", HAKIOS_MIC_DEVICE, duration);
+    *out = n; return 0;
+}
 
-    int total_samples = (int)(duration * HAKIOS_AUDIO_RATE);
-    int chunk_samples = 512;
+static int play_tone(double freq, double duration, double amp, int plumbing) {
+    int fd = open(HAKIOS_AUDIO_DEVICE, O_WRONLY);
+    if (fd < 0) { perror(HAKIOS_AUDIO_DEVICE); return 1; }
+    int result = 1;
+    if (backend(fd, 0, plumbing)) goto done;
+    uint32_t total = (uint32_t)(duration * HAKIOS_AUDIO_RATE), frames = 0;
+    int16_t buf[1024 * HAKIOS_AUDIO_CHANNELS];
+    while (frames < total) {
+        uint32_t n = total - frames;
+        if (n > 1024) n = 1024;
+        for (uint32_t i = 0; i < n; i++) {
+            int16_t v = (int16_t)(sin(2 * M_PI * freq * (frames + i) / HAKIOS_AUDIO_RATE) * 32767 * amp);
+            buf[i * 2] = buf[i * 2 + 1] = v;
+        }
+        if (write_all(fd, buf, n * HAKIOS_AUDIO_FRAME)) goto done;
+        frames += n;
+    }
+    printf("Transferred %u output frames (%.3f s). Verify sound acoustically.\n", frames, duration);
+    result = 0;
+done:
+    if (close(fd)) { perror("close audio"); result = 1; }
+    return result;
+}
+
+static void le16(unsigned char *p, uint16_t n) { p[0] = n; p[1] = n >> 8; }
+static void le32(unsigned char *p, uint32_t n) { le16(p, n); le16(p + 2, n >> 16); }
+static int wav_header(int fd, uint32_t bytes) {
+    unsigned char h[44] = {0};
+    memcpy(h, "RIFF", 4); le32(h + 4, 36 + bytes); memcpy(h + 8, "WAVEfmt ", 8);
+    le32(h + 16, 16); le16(h + 20, 1); le16(h + 22, 1);
+    le32(h + 24, HAKIOS_AUDIO_RATE); le32(h + 28, HAKIOS_AUDIO_RATE * 2);
+    le16(h + 32, 2); le16(h + 34, 16); memcpy(h + 36, "data", 4); le32(h + 40, bytes);
+    if (lseek(fd, 0, SEEK_SET) < 0) { perror("seek WAV"); return -1; }
+    return write_all(fd, h, sizeof(h));
+}
+
+static int record_mic(double duration, const char *path, int plumbing) {
+    int fd = open(HAKIOS_MIC_DEVICE, O_RDONLY), out = -1, result = 1;
+    if (fd < 0) { perror(HAKIOS_MIC_DEVICE); return 1; }
+    if (backend(fd, 1, plumbing)) goto done;
+    if (path) {
+        out = open(path, O_WRONLY | O_CREAT | O_EXCL, 0600);
+        if (out < 0) { perror(path); goto done; }
+        if (wav_header(out, 0)) goto done;
+    }
+    uint32_t total = (uint32_t)(duration * HAKIOS_AUDIO_RATE), samples = 0;
+    unsigned peak = 0;
     int16_t buf[512];
-
-    int samples_read = 0;
-    int max_amp = 0;
-    while (samples_read < total_samples) {
-        int to_read = (total_samples - samples_read < chunk_samples) ?
-                      (total_samples - samples_read) : chunk_samples;
-        ssize_t n = read(fd, buf, to_read * sizeof(int16_t));
-        if (n <= 0) {
-            perror("read");
-            break;
+    while (samples < total) {
+        uint32_t want = total - samples;
+        if (want > 512) want = 512;
+        ssize_t n = read(fd, buf, want * sizeof(*buf));
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0 || n % 2) {
+            if (n >= 0) errno = EIO;
+            perror("read microphone (incomplete capture)"); goto done;
         }
-        int num = n / sizeof(int16_t);
-        for (int i = 0; i < num; i++) {
-            int a = abs(buf[i]);
-            if (a > max_amp) max_amp = a;
+        if (out >= 0 && write_all(out, buf, (size_t)n)) goto done;
+        for (ssize_t i = 0; i < n / 2; i++) {
+            unsigned v = (unsigned)abs((int)buf[i]); if (v > peak) peak = v;
         }
-        samples_read += num;
+        samples += (uint32_t)n / 2;
     }
-    close(fd);
-    printf("Recording finished: %d samples (%.2f s), peak amplitude %d / 32768 (%.1f%% FS)\n",
-           samples_read, (float)samples_read / HAKIOS_AUDIO_RATE, max_amp, (max_amp * 100.0) / 32768.0);
-    return 0;
+    if (out >= 0 && wav_header(out, samples * 2)) goto done;
+    printf("Captured %u samples (%.3f s), peak %u/32768. Compare with an external acoustic signal.\n", samples, duration, peak);
+    result = 0;
+done:
+    if (out >= 0) {
+        if (close(out)) { perror("close WAV"); result = 1; }
+        if (result) unlink(path); /* Do not leave a truncated test artifact. */
+    }
+    if (close(fd)) { perror("close microphone"); result = 1; }
+    return result;
 }
 
 int main(int argc, char **argv) {
-    if (argc < 2) {
-        printf("Usage: %s play [freq] [duration_sec] [amp 0.0-1.0]\n", argv[0]);
-        printf("       %s record [duration_sec]\n", argv[0]);
-        printf("       %s vol [db_eighths] [muted 0/1]\n", argv[0]);
-        return 1;
+    int plumbing = argc > 1 && !strcmp(argv[argc - 1], "--plumbing");
+    if (plumbing) argc--;
+    if (argc < 2) goto usage;
+    if (!strcmp(argv[1], "status") && argc == 2) {
+        int fd = open(HAKIOS_AUDIO_DEVICE, O_RDONLY);
+        if (fd < 0) { perror(HAKIOS_AUDIO_DEVICE); return 1; }
+        struct hakios_audio_status s = {0};
+        int rc = ioctl(fd, HAKIOS_AUDIO_GET_STATUS, &s);
+        if (rc) perror("audio status");
+        else printf("version=%u flags=%#x output_frames=%llu input_frames=%llu\n", s.version, s.flags,
+                    (unsigned long long)s.output_frames, (unsigned long long)s.input_frames);
+        close(fd); return rc ? 1 : 0;
     }
-    if (!strcmp(argv[1], "play")) {
-        float freq = argc > 2 ? atof(argv[2]) : 440.0f;
-        float dur = argc > 3 ? atof(argv[3]) : 2.0f;
-        float amp = argc > 4 ? atof(argv[4]) : 0.8f;
-        return play_tone(freq, dur, amp);
-    } else if (!strcmp(argv[1], "record")) {
-        float dur = argc > 2 ? atof(argv[2]) : 3.0f;
-        return record_mic(dur);
-    } else if (!strcmp(argv[1], "vol")) {
-        uint32_t below = argc > 2 ? (uint32_t)atoi(argv[2]) : 0;
-        int muted = argc > 3 ? atoi(argv[3]) : 0;
-        return set_vol(below, muted);
+    if (!strcmp(argv[1], "play") && argc <= 5) {
+        double freq = 440, dur = 2, amp = 0.05;
+        if ((argc > 2 && number(argv[2], 20, 20000, &freq)) ||
+            (argc > 3 && number(argv[3], 0.001, 60, &dur)) ||
+            (argc > 4 && number(argv[4], 0, 1, &amp))) return 2;
+        return play_tone(freq, dur, amp, plumbing);
     }
-    fprintf(stderr, "Unknown subcommand: %s\n", argv[1]);
-    return 1;
+    if (!strcmp(argv[1], "record") && argc <= 4) {
+        double dur = 3;
+        if (argc > 2 && number(argv[2], 0.001, 60, &dur)) return 2;
+        return record_mic(dur, argc > 3 ? argv[3] : NULL, plumbing);
+    }
+    if (!strcmp(argv[1], "vol") && argc <= 4) {
+        double below = 0, muted = 0;
+        if ((argc > 2 && number(argv[2], 0, 720, &below)) ||
+            (argc > 3 && number(argv[3], 0, 1, &muted)) || below != floor(below) || muted != floor(muted)) return 2;
+        int fd = open(HAKIOS_AUDIO_DEVICE, O_WRONLY);
+        if (fd < 0) { perror(HAKIOS_AUDIO_DEVICE); return 1; }
+        struct hakios_audio_volume v = { (uint32_t)below, (uint32_t)muted };
+        int rc = ioctl(fd, HAKIOS_AUDIO_SET_VOLUME, &v);
+        if (rc) perror("volume ioctl");
+        close(fd); return rc ? 1 : 0;
+    }
+usage:
+    fprintf(stderr, "Usage: %s status | play [Hz] [seconds] [amplitude] [--plumbing]\n"
+                    "       %s record [seconds] [new.wav] [--plumbing]\n"
+                    "       %s vol [dB_eighths 0..720] [muted 0|1]\n", argv[0], argv[0], argv[0]);
+    return 2;
 }

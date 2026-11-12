@@ -11,10 +11,10 @@ int main(int argc, char **argv) {
         NSLog(@"Setting up audio session...");
         AVAudioSession *session = [AVAudioSession sharedInstance];
         NSError *err = nil;
-        [session setCategory:AVAudioSessionCategoryPlayback error:&err];
-        if (err) NSLog(@"setCategory error: %@", err);
-        [session setActive:YES error:&err];
-        if (err) NSLog(@"setActive error: %@", err);
+        if (![session setCategory:AVAudioSessionCategoryPlayback error:&err] ||
+            ![session setActive:YES error:&err]) {
+            NSLog(@"Audio session failed: %@", err); return 1;
+        }
 
         NSLog(@"Loading sound from %@...", filePath);
         AVAudioPlayer *player = [[AVAudioPlayer alloc] initWithContentsOfURL:fileURL error:&err];
@@ -23,15 +23,17 @@ int main(int argc, char **argv) {
             return 1;
         }
 
-        player.volume = 1.0f;
+        player.volume = 0.1f;
         NSLog(@"Playing sound (duration %.2f s)...", player.duration);
         BOOL ok = [player play];
-        NSLog(@"play returned: %d", ok);
+        NSLog(@"play returned: %d; physical sound must be checked acoustically", ok);
+        if (!ok) { [session setActive:NO error:NULL]; return 1; }
 
         // Sleep while playing
         NSTimeInterval dur = player.duration > 0 ? player.duration + 0.5 : 2.0;
         [NSThread sleepForTimeInterval:dur];
         NSLog(@"Done.");
+        [session setActive:NO error:NULL];
     }
     return 0;
 }

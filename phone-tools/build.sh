@@ -18,7 +18,7 @@ sign() {
 	if [ -f "$1-ents.plist" ]; then codesign -f -s - --entitlements "$1-ents.plist" "$out/$1"
 	else codesign -f -s - "$out/$1"; fi
 }
-for c in rput rget psx pstack vibrate fops river-flash-survey river-qg-log river-torch-test; do cc -o "$out/$c" "$c.c"; sign "$c"; done
+for c in rput rget psx pstack vibrate fops river-flash-survey river-qg-log river-torch-test river-audio-survey; do cc -o "$out/$c" "$c.c"; sign "$c"; done
 for m in oslog exq dumpcls; do cc -fobjc-arc -framework Foundation -o "$out/$m" "$m.m"; sign "$m"; done
 cc -Wno-deprecated-declarations -dynamiclib -install_name /usr/local/lib/libcgprobe.dylib \
 	-framework UIKit -framework CoreGraphics -framework CoreFoundation -o "$out/libcgprobe.dylib" cgprobe.c
@@ -33,4 +33,10 @@ cc -framework IOKit -o "$out/netprobe" netprobe.c
 sign netprobe
 cc -framework Foundation -framework AVFoundation -o "$out/river-media-capability" river-media-capability.m
 sign river-media-capability
+cc -o "$out/river-audio-test" river-audio-test.c
+sign river-audio-test
+for m in river-play-sound river-record-sound; do
+ cc -fobjc-arc -framework Foundation -framework AVFoundation -framework AudioToolbox -o "$out/$m" "$m.m"
+ sign "$m"
+done
 ls -l "$out"
