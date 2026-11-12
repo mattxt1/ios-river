@@ -3995,4 +3995,13 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   - Kernel compiled locally (`479c35dc5a76377d40996bf1588bb807bce35e17cdb8aed88e09c5a1239e202b`) and verified with `strings`: includes both `RIVER FB: AppleARMBacklight published (riverarmbl=1)` and `RIVER AUDIO: /dev/hakios-audio`.
   - Staged `river-audio-boot.img` (26,279,936 bytes < 38 MB) with boot cmdline (562 bytes < 608 bytes).
 
+## Status 2026-11-11: r150 TFA9874 Smart Audio Amplifier Driver (Patch 0271)
+- **Patch 0271 (`0271-river-tfa9874-speaker-amp.patch`)**:
+  - Implemented `river_tfa9874_init()` in `bsd/dev/sweet_keys.c`, invoked automatically during input/haptic bringup in `ri_probe()`.
+  - **Amplifier Reset Release**: Maps TLMM GPIO 94 (`0x0105e000`) and drives it output-high (`0x0105e004` OUT=1, `0x0105e000` OE=1, DRV=6mA, FUNC=0) to wake the TFA9874 from shutdown.
+  - **MI2S Digital Audio Pinmux**: Maps TLMM GPIOs 88 (CLK), 91 (WS), 92 (DOUT), and 93 (DIN) and configures them to Function 1 (`pri_mi2s`) with 6mA drive.
+  - **I2C Hardware Probe & Configuration**: Uses the QUP2 I2C engine (`ri_qup_xfer`) to query TFA9874 revision register `0x03` at address `0x34` (with fallback to `0x35`), checks status register `0x00`, powers on the analog core (`0x04` = 0x0000), configures the 8.5V boost converter (`0x09` = 0x025d), and unmutes digital volume (`0x10` = 0x0000).
+  - **Kernel Diagnostics**: Added BSD sysctl `debug.river_audio_hw` (`ok=%d rev=%#06x status=%#06x`) for runtime hardware inspection.
+
+
 
