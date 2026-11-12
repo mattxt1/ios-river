@@ -1,0 +1,143 @@
+diff --git a/bsd/dev/river_codec_clock.h b/bsd/dev/river_codec_clock.h
+--- a/bsd/dev/river_codec_clock.h
++++ b/bsd/dev/river_codec_clock.h
+@@ -11,6 +11,8 @@
+        RC_RATIO, RC_REF, RC_GAIN, RC_PHASE, RC_SYNC1, RC_SYNC7, RC_MASK1, RC_MASK2,
+        RC_COUNT };
+ static int ri_clock_surveyed, ri_clock_attempted;
++static uint16_t ri_clock_bad_reg, ri_clock_bad_want, ri_clock_bad_got;
++static vm_offset_t ri_clock_mclk_obs;
+ static char ri_clock_note[1024] = "not requested";
+ 
+ static bool
+@@ -24,7 +26,7 @@
+ ri_clock_write_allowed(uint16_t reg)
+ {
+  /* Restrict writes to the FLL controls actually used by this experiment. */
+- return reg == 0x171 || reg == 0x172 || reg == 0x173 || reg == 0x174 ||
++ return reg == 0x100 || reg == 0x171 || reg == 0x172 || reg == 0x173 || reg == 0x174 ||
+         reg == 0x175 || reg == 0x176 || reg == 0x179 || reg == 0x17a || reg == 0x185;
+ }
+ static uint16_t
+@@ -50,9 +52,15 @@
+  (void)ri_codec_byte(0); (void)ri_codec_byte(0);
+  (void)ri_codec_byte((uint8_t)(value >> 8)); (void)ri_codec_byte((uint8_t)value);
+  ri_wr(ri_codec_pin[1], 4, 2); delay(5);
+- /* CTRL_UPD is a self-clearing request, not part of the stable N value. */
++ /* CTRL_UPD is a command bit, excluded from immediate N validation.
++  * The caller explicitly rearms and clears it around each update strobe. */
+  uint16_t mask = reg == 0x172 ? 0x7fff : 0xffff;
+- return (ri_clock_read(reg) & mask) == (value & mask);
++ uint16_t got = ri_clock_read(reg);
++ bool ok = (got & mask) == (value & mask);
++ if (!ok && !ri_clock_bad_reg) {
++  ri_clock_bad_reg = reg; ri_clock_bad_want = value; ri_clock_bad_got = got;
++ }
++ return ok;
+ }
+ static bool
+ ri_clock_wait_lock(bool wanted, uint16_t *last)
+@@ -68,11 +76,14 @@
+ static int
+ ri_clock_run(bool test)
+ {
+- if ((test && ri_clock_attempted) || (!test && ri_clock_surveyed)) return EALREADY;
++ if (test && ri_clock_attempted) return EALREADY;
+  struct ri_codec_saved_pins pins;
+  int error = ri_codec_bus_take(&pins, ri_clock_note, sizeof(ri_clock_note));
+  if (error) return error;
+  uint16_t saved[RC_COUNT], raw = 0;
++ uint16_t restore_reg = 0, restore_want = 0, restore_got = 0;
++ uint32_t mclk[7] = {0}; bool mclk_ok = true;
++ ri_clock_bad_reg = ri_clock_bad_want = ri_clock_bad_got = 0;
+  bool stable = true, pins_restored, clock_restored = true, locked = false, off = true;
+  bool modified = false;
+  const char *phase = "snapshot";
+@@ -83,18 +94,25 @@
+  for (unsigned i = 0; i < RC_COUNT; i++)
+   if (ri_clock_read(ri_clock_regs[i]) != saved[i]) stable = false;
+  raw = ri_clock_read(0x1881);
++ /* PM8953 GPIO6 is the source-derived MCLK2 pin. Inspect its configuration
++  * through the observer only; this experiment never changes the PMIC mux. */
++ if (!ri_clock_mclk_obs) ri_clock_mclk_obs = ri_spmi_obs(ri_codec_core, 0x0c5);
++ const unsigned mclk_offsets[] = {4,5,0x40,0x41,0x42,0x44,0x46};
++ for (unsigned i = 0; i < 7; i++)
++  if (!ri_clock_mclk_obs || !ri_spmi_read(ri_clock_mclk_obs, mclk_offsets[i], 1, &mclk[i])) mclk_ok = false;
+  if (!stable || raw == 0xffff) { error = EIO; phase = "unstable_snapshot"; goto release; }
+  if (!test) {
+-  ri_clock_surveyed = 1;
++  ri_clock_surveyed++;
+   snprintf(ri_clock_note, sizeof(ri_clock_note),
+-      "snapshot=1 clk32=%#x sys=%#x async=%#x dsp=%#x ctl1=%#x n=%#x theta=%#x lambda=%#x ratio=%#x ref=%#x gain=%#x phase=%#x sync1=%#x sync7=%#x mask1=%#x mask2=%#x raw=%#x",
++      "snapshot=1 clk32=%#x sys=%#x async=%#x dsp=%#x ctl1=%#x n=%#x theta=%#x lambda=%#x ratio=%#x ref=%#x gain=%#x phase=%#x sync1=%#x sync7=%#x mask1=%#x mask2=%#x raw=%#x mclk_ok=%u mclk_type=%#x mclk_sub=%#x mclk_mode=%#x mclk_vin=%#x mclk_pull=%#x mclk_source=%#x mclk_en=%#x",
+       saved[0],saved[1],saved[2],saved[3],saved[4],saved[5],saved[6],saved[7],
+-      saved[8],saved[9],saved[10],saved[11],saved[12],saved[13],saved[14],saved[15],raw);
++      saved[8],saved[9],saved[10],saved[11],saved[12],saved[13],saved[14],saved[15],raw,mclk_ok,mclk[0],mclk[1],mclk[2],mclk[3],mclk[4],mclk[5],mclk[6]);
+   goto release;
+  }
+  /* Never retune a clock already used by another codec client. Require FLL
+   * lock events masked on both interrupt outputs; pending latches are left alone. */
+- if ((saved[RC_SYS] & 0x40) || (saved[RC_ASYNC] & 0x40) || (saved[RC_DSP] & 0x40) ||
++ if (((saved[RC_32K] & 0x40) && (saved[RC_32K] & 3) != 1) ||
++     (saved[RC_SYS] & 0x40) || (saved[RC_ASYNC] & 0x40) || (saved[RC_DSP] & 0x40) ||
+      (saved[RC_CTL1] & 1) || (saved[RC_SYNC1] & 1) || (raw & 0x100) ||
+      !(saved[RC_MASK1] & 0x100) || !(saved[RC_MASK2] & 0x100) || (saved[RC_N] & 0x8000)) {
+   error = EBUSY; phase = "active_clock_or_unmasked_irq"; goto release;
+@@ -102,13 +120,16 @@
+  ri_clock_attempted = 1; modified = true; phase = "configure";
+  /* 98,304,000 / (32,768 * 3) = N=1000; FRATIO=3-1; no fraction,
+   * REFCLK_DIV=1, MCLK2 source=1. Cirrus integer-mode gain=2, phase gain=2. */
+- if (!ri_clock_write(0x171, saved[RC_CTL1] & ~3u) ||
++ if (!ri_clock_write(0x100, (saved[RC_32K] & ~0x43u) | 0x41) ||
++     !ri_clock_write(0x171, saved[RC_CTL1] & ~3u) ||
+      !ri_clock_write(0x17a, (saved[RC_PHASE] & ~0xf800u) | 0x2800) ||
+      !ri_clock_write(0x173, 0) || !ri_clock_write(0x174, 0) ||
+      !ri_clock_write(0x175, (saved[RC_RATIO] & ~0x0f00u) | 0x0200) ||
+      !ri_clock_write(0x176, (saved[RC_REF] & ~0x00cfu) | 1) ||
+      !ri_clock_write(0x179, (saved[RC_GAIN] & ~0x003cu) | 8) ||
++     !ri_clock_write(0x172, (saved[RC_N] & ~0x83ffu) | 1000) ||
+      !ri_clock_write(0x172, (saved[RC_N] & ~0x83ffu) | 0x83e8) ||
++     !ri_clock_write(0x172, (saved[RC_N] & ~0x83ffu) | 1000) ||
+      !ri_clock_write(0x185, saved[RC_SYNC7] | 1) ||
+      !ri_clock_write(0x171, (saved[RC_CTL1] & ~3u) | 1)) {
+   error = EIO; goto restore;
+@@ -126,14 +147,23 @@
+  off = ri_clock_wait_lock(false, &stop_raw) && off;
+  if (off) {
+   const unsigned order[] = { RC_THETA, RC_LAMBDA, RC_RATIO, RC_REF, RC_GAIN,
+-                             RC_PHASE, RC_SYNC7, RC_N, RC_CTL1 };
++                             RC_PHASE, RC_SYNC7, RC_N, RC_CTL1, RC_32K };
+   for (unsigned i = 0; i < sizeof(order) / sizeof(order[0]); i++) {
+    unsigned n = order[i];
+-   uint16_t value = saved[n] | (n == RC_N ? 0x8000 : 0);
+-   if (!ri_clock_write(ri_clock_regs[n], value)) clock_restored = false;
++   if (n == RC_N) {
++    // Rearm, strobe the original N, then restore the command field low.
++    if (!ri_clock_write(0x172, saved[n] & ~0x8000u)) clock_restored = false;
++    if (!ri_clock_write(0x172, saved[n] | 0x8000)) clock_restored = false;
++   }
++   if (!ri_clock_write(ri_clock_regs[n], saved[n])) clock_restored = false;
+   }
+-  for (unsigned i = 0; i < RC_COUNT; i++)
+-   if (ri_clock_read(ri_clock_regs[i]) != saved[i]) clock_restored = false;
++  for (unsigned i = 0; i < RC_COUNT; i++) {
++   uint16_t got = ri_clock_read(ri_clock_regs[i]);
++   if (got != saved[i]) {
++    clock_restored = false;
++    if (!restore_reg) { restore_reg = ri_clock_regs[i]; restore_want = saved[i]; restore_got = got; }
++   }
++  }
+  } else clock_restored = false;
+  if (!clock_restored) error = EIO;
+ release:
+@@ -141,8 +171,8 @@
+  if (!pins_restored) error = EIO;
+  if (test || error) {
+   snprintf(ri_clock_note, sizeof(ri_clock_note),
+-      "test=%u attempted=%u phase=%s locked=%u raw=%#x fll_off=%u clock_restored=%u pins_restored=%u error=%d pcm_transport=0",
+-      test, modified, phase, locked, raw, off, clock_restored, pins_restored, error);
++      "test=%u attempted=%u phase=%s locked=%u raw=%#x fll_off=%u clock_restored=%u pins_restored=%u error=%d write_reg=%#x write_want=%#x write_got=%#x restore_reg=%#x restore_want=%#x restore_got=%#x pcm_transport=0",
++      test, modified, phase, locked, raw, off, clock_restored, pins_restored, error, ri_clock_bad_reg, ri_clock_bad_want, ri_clock_bad_got, restore_reg, restore_want, restore_got);
+  } else {
+   size_t n = strlen(ri_clock_note);
+   snprintf(ri_clock_note + n, sizeof(ri_clock_note) - n, " pins_restored=%u", pins_restored);
