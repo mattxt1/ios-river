@@ -5,6 +5,26 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+##0296 link-event image built/verified; awaiting fastboot (2026-11-13)
+
+- Fulldbf26b6f8150c8a0b9c3a27f5871e3b11611546a buildpassedthrough0296in
+  work/build/river-dbf26b6f8150-YPSlnL. KernelSHA256
+ 90a16e44ccf798308a8b881fb22dc3ce9ba807600f18861792405e03775d7124.
+- Packagedoutputs/river-wifi-link-dbf26b6.imgfromverifiedbb395d6basewith
+  unchangedaudiohelpersandmsgbuf1048576. Image26,697,728bytes,cmdline577,
+  kernelpayloadsegmentsverified. SHA256
+ b5c2969f3e1f2d1f5cd010dcaead265e9f9150d4b2fdc2857b155c8933d851a3.
+  Manifestoutputs/wifi-link-build-manifest.json. Notbooted/pendingdevicechecks.
+- Asyncphysical-actionquestionasksuserreturnRivertofastboot. Nextverify
+  product/hash,temporarybootandresponsiveUI,inspectretainedlogs,state/result,
+  Settingscompletion,en0-boundnumericHTTPandnormalDNS,NWIranks/assertions.
+ 0296fixesnativeDLnotificationcontract; noclaimitclearsconfigdNeveruntiltested.
+- Currentphonebb395d6hasconfirmedSettingscheckmark/result1, Wi-Fi-bound
+  HTTP200withnumericAppleaddress;generaldnsfailsbecauseonlyscopedresolver
+  andconfigdNeverassertionremain. ExistingobserverDHCPhelperrunningwithsame
+  entitlements/configoperations;originalbinarybackedup. Noforcedranks,DNS
+  flags/routeschanges. PhysicalPCM/audioinput/outputstillpending.
+
 ## Read-only primary-rank mapping and diagnostic builds (2026-11-13)
 
 - selected-service-map-bb395d6 maps threeScopedUUIDs toIPv6utun0/utun1/utun2,

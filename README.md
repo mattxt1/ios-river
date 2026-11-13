@@ -209,7 +209,7 @@ Latest bb395d6 validation: Settings checkmark and public association result1
 verified. Wi-Fi-bound numeric Apple HTTP returned200 with expected content.
 Ordinary DNS still fails: only a scoped Wi-Fi resolver is available and the
 native general IPv4 list is empty.0296 adds missing standard link transition
-events with passing host coverage; full build and device validation pending.
+events with passing host coverage; full build and packaging pass; device validation pending.
 The diagnostic-only DHCP observer retains existing configuration operations;
 its original on-phone binary is backed up. This is partial networking success,
 not a DNS/TLS or long-term reliability milestone.

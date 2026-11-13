@@ -140,3 +140,9 @@ Primary Apple IPMonitor source accepts `PrimaryRank=First` but combines service 
 The live assertion snapshot identifies one restrictive en0 assertion: rank3 (Never), owned by configd. The helper's service State/First does not override this interface assertion. This directly explains why bound Wi-Fi packet traffic can work while primary election and default DNS remain unavailable. The assertion's reason is not exposed by the rank-info SPI.
 
 A complete search of the downloaded public Apple configd and bootp/IPConfiguration source found no production policy call site that sets interface rank Never: the public framework exposes the setter and IPMonitor consumes assertions, but the observed iOS policy owner is not identified by that source. A closed iOS configd plugin is a possibility, not an established diagnosis. No attempt was made to kill configd, clear another owner's assertion, or repeatedly overwrite its global output. Patch0296's standard link events may cause the owner to reevaluate state, but that effect cannot be claimed before device testing. Mapping service UUIDs to interface entities and inspecting bounded owner logs is the remaining evidence path.
+
+Full kernel dbf26b6 through0296 built successfully. Its temporary image is
+packaged and verified (26,697,728 bytes,577-byte command line,1MiB retained
+log). Device event/rank/DNS validation is pending. The latest phone result
+remains Settings checkmark and Wi-Fi-bound numeric HTTP success on bb395d6,
+with ordinary DNS unresolved; no rank assertion has been forcibly cleared.
