@@ -5,6 +5,42 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Muted codec-to-amplifier I2S clock test passed (2026-11-12)
+
+- User returned River to fastboot. Verified productriver, temporary boot of
+  `outputs/river-muted-i2s-amp-fa7283f.img` succeeded; no partition flashed.
+  Source `fa7283fcd76723e6d51b9ec15798f5ed26ead35b` (patches through0281).
+  Image SHA256 `9b1fbdc094a44cb650d3cb49634e41de10c067b87b6c3f85fff32b248e1cb4ed`,
+  kernel SHA256 `19af1a6db646ac16ecd08e8fcc5c99ce91be72b397e2de02cec2d3460c8651d7`.
+- Waited for user confirmation of responsive iOS home screen before testing.
+  Passive result was `not requested`; codec/FLL/PMIC and I2S baselines passed.
+- Explicit `river-codec-clock --i2s-test` exited0:
+  `test=1 route=1 route_touched=1 route_restored=1 attempted=1
+  phase=i2s_clock locked=1 raw=0x100 fll_off=1 clock_restored=1
+  pins_restored=1 error=0 write_reg=0 write_want=0 write_got=0
+  restore_reg=0 restore_want=0 restore_got=0 pcm_transport=0
+  amp_locked=1 amp_irq_before=0x20000010 amp_irq_live=0x2000000a
+  aif_restored=1 amp_restored=1 amp_error=none amp_reg=0 amp_want=0 amp_got=0`.
+- Amplifier PLL-unlock bit0x10 cleared on two consecutive raw-status reads
+  while codec FLL remained locked and amp mute, Class-D disable and slave
+  mode were repeatedly verified. This establishes a usable codec AIF1 clock
+  path to the amplifier's SCLK/PLL input with source-derived I2S settings.
+  BCLK was requested at1.536MHz, LRCLK48kHz; neither frequency nor LRCLK
+  waveform/timing was measured. No PCM channels/data or analog codec outputs
+  were enabled; physical playback and microphone transport remain absent.
+- Follow-up I2S snapshot matched pre-test config: sys0x404 sr0x11 bclk0xc,
+  TX/RX pin/rate/fmt0, BCPF0x40, word lengths0x1818, channel enables0,
+  GPIO9/11 CTRL1 config0x2001 (live GP_LVL varies), CTRL2=0xf000;
+  amp power0x21 mute0 fmt0x20200233 PLL0x833, rawIRQ3 back0x20000010.
+  FLL/clock snapshot matched prior baseline; PMGPIO6 mode0 VIN0 pull4
+  source0 enable0x80, and all SPI input pin configurations restored.
+- Endpoint status version1 flags3, output_frames155648 input_frames0.
+  This is still discarded playback and synthetic capture, not physical PCM.
+  Device log stays outside Git at `work/i2s-amp-fix/live-test.txt`.
+- Awaiting user's post-test iOS responsiveness confirmation. Next work is
+  real PCM transport and a controlled data-path test, then physical capture;
+  do not treat this clock result as acoustic playback or microphone proof.
+
 ## Muted I2S attempt stopped in amplifier preparation (2026-11-12)
 
 - Verified productriver and temporary boot of pinmux image de1aa7f succeeded.

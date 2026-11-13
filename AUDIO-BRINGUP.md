@@ -4,6 +4,15 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+**Latest live result, 2026-11-12:** the muted codec-to-amplifier I2S clock test
+passed on source `fa7283f` (through patch0281). Codec FLL locked (`raw=0x100`)
+and amplifier raw PLL-unlock cleared twice (`0x20000010`→`0x2000000a`) with
+mute, Class-D disable and slave mode verified. Codec/AIF, amplifier, PMIC
+reference route and SPI restoration all passed. A usable clock path to the
+amplifier is verified; clock frequencies/LRCLK waveform were not measured.
+No PCM channels or analog outputs were enabled. Next is real PCM transport
+and controlled data-path validation, followed by physical microphone capture.
+
 **Verified on the phone, 2026-11-12:** CS47L35 identity `0x6360` on two SPI
 reads, revision `0x1`, and restoration of all four SPI pin states. The explicit
 probe returned success on the temporarily booted 0274 kernel. No codec register
@@ -52,7 +61,7 @@ stage/register/values without relaxing guards; on hardware it captured GPIO CTRL
 GP_LVL bit15). Patch0280 excludes that live bit from configuration comparisons
 and explicitly selects native AIF1 mux from the observed GPIO-input defaults.
 It still rejects active interfaces, GPIO outputs and other pin functions.
-Muted clock-test hardware result is pending.
+That comparison/mux correction is included in the later successful0281 run.
 
 **0280 live attempt:** baseline succeeded and the one-shot test ran, but stopped
 with `phase=amp_prepare error=5` before PMIC reference routing or I2S clocks.
@@ -60,7 +69,8 @@ Codec/AIF, amplifier, PMIC and SPI restoration all verified. iOS home screen
 became responsive afterward. Patch0281 corrects SP_TX_WL to0x4830, uses the
 PCM attenuation field correctly, and reports the first failed amplifier
 write/readback/quiet check. Next attempt must wait for responsive iOS before
-running the one-shot test; exact cause of the amplifier failure is unproven.
+running the one-shot test. The corrected0281 run subsequently passed; the earlier
+failed register was not captured, so its exact cause remains unproven.
 
 ## Current continuation
 
