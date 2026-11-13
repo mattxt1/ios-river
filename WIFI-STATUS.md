@@ -1,6 +1,13 @@
 # River Wi-Fi implementation audit and handoff
 
-Updated 2026-11-12. Source baseline: applied `b90f2d1` kernel tree through patch0288. Patch0289 is prepared for integration; the audit did not access the phone or establish hardware reliability. Host regressions pass. A full kernel build and device testing remain required.
+Updated 2026-11-12. Source baseline: applied `b90f2d1` kernel tree through patch0288. Patch0289 is integrated in236a880; the source audit did not access the phone or establish hardware reliability. Host regressions and the full kernel build pass. Device testing remains required.
+
+**Build/boot update, 2026-11-13:** full XNU build through0289–0291 passed
+from source236a880. The verified26,697,728-byte temporary image (cmdline562)
+was accepted by `fastboot boot` on productriver. Home-screen confirmation and
+device validation are pending; bootloader success does not establish hardware
+reliability or correct battery behavior. See NOTES.md and the local
+`outputs/audit-fixes-build-manifest.json` for hashes and exact artifact paths.
 
 ## Source-proven failures
 
@@ -38,7 +45,7 @@ Coverage includes stale completion and stale link-loss rejection; exact BSSID se
 
 ## Still unresolved
 
-- Full kernel compilation and device verification of patch0289, including reconnect under AP loss, wrong credentials, repeated Settings joins, radio toggles and UI error reporting.
+- Device verification of patch0289, including reconnect under AP loss, wrong credentials, repeated Settings joins, radio toggles and UI error reporting.
 - The fixed-size 32-entry BSS cache has no expiry/replacement policy. Target lookup/recovery uses cached records; fresh scan scheduling and channel changes are not solved by this patch.
 - The UI target path synthesizes a WPA2 RSN choice and marks rates/security accepted. It needs capability validation comparable to the strict beacon-selection path. Current support remains narrow WPA2 PSK/CCMP; this is not WPA3/enterprise/roaming support.
 - A stuck TX DMA ring still needs explicit, verified recovery. Clearing its stalled flag during a new join is insufficient.

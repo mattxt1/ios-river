@@ -30,14 +30,15 @@ discarded and input is synthetic; endpoint counters and successful iOS API
 calls establish only the existing software plumbing.
 
 The Wi-Fi/battery audit fixes through patch0291 are committed in `236a880`.
-Their host regressions passed, but the full build is waiting for macOS to
-make the offloaded KDK directory available. They have not been deployed.
+Their host regressions and full kernel build passed. The packaged image
+was accepted by temporary fastboot boot; responsive iOS and device validation
+are pending.
 See [WIFI-STATUS.md](WIFI-STATUS.md), [BATTERY-STATUS.md](BATTERY-STATUS.md)
 and [NOTES.md](NOTES.md) for results and artifact hashes. Audio milestones
 above were verified on earlier temporary images; they do not establish a
 physical playback or capture milestone.
 
-## Current continuation
+## Diagnostic implementation history
 
 Patch 0273 adds `debug.river_audio_prereq`, a read-only, on-demand survey:
 

@@ -5,6 +5,30 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Integrated audit build and temporary boot (2026-11-13)
+
+- Keep Downloaded made the required KDK library available. Full isolated
+  build of236a88093fe4c0792afc424086e0603ae0ea90c6 passed in
+  work/build/river-236a88093fe4-8W7gnU. No numbered project patch skipped.
+  Kernel SHA256934bd7171c61aecb4b8d901262f84f90f26b415a56ed10c663117d114761f631.
+- Packaged outputs/river-audit-fixes-236a880.img using verified b90 base and
+  unchanged audio helpers. Image26,697,728bytes, cmdline562; all payload kernel
+  segments verified. SHA256a71c3b65fbd037d7310478db980b6a928bd4e64d1a48afd28689fa6465c9f99b.
+  Local manifest outputs/audit-fixes-build-manifest.json. Physical PCM absent.
+- Connected device was already fastboot; productriver verified. Temporary
+  fastboot boot succeeded. No partition flashed. Async question asks for
+  responsive home screen before device tests. UI and audit behavior pending.
+- Existing read-only battcheck.m compiled/signed into
+  work/audit-device-validation/bin/battcheck for published IOKit/IOPS state.
+  Pre-boot SSH baseline timed out because the device was in fastboot; no
+  battery baseline was collected. USB-only bounded boot log capture started
+  with private output work/audit-device-validation/boot-236a880-usb.log.
+- Bundle creation/verification now works; outputs/ios-audio-bringup.bundle
+  was refreshed throughd754d43 (later doc-only updates need another refresh).
+- Next after responsive iOS: inspect retained/valid battery properties and
+  Wi-Fi association/reconnect state, record observed limitations, then continue
+  acknowledged RPM votes and authenticated ADSP startup/readiness.
+
 ## Local build recovery and current continuation (2026-11-13)
 
 - Kernel source commit236a88093fe4c0792afc424086e0603ae0ea90c6 contains

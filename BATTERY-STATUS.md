@@ -2,6 +2,13 @@
 
 Updated 2026-11-12. Source audit baseline: applied kernel in build `river-b90f2d1a5c76-Dw0M2o`, with battery implementation introduced by [patch0267](xnu/patches/0267-river-battery-jg30-power-source.patch). This audit did not access the phone. Host reproductions establish code defects; they do not establish which defect caused each percentage jump seen on the device.
 
+**Build/boot update, 2026-11-13:** full XNU build through0289–0291 passed
+from source236a880. The verified26,697,728-byte temporary image (cmdline562)
+was accepted by `fastboot boot` on productriver. Home-screen confirmation and
+device validation are pending; bootloader success does not establish hardware
+reliability or correct battery behavior. See NOTES.md and the local
+`outputs/audit-fixes-build-manifest.json` for hashes and exact artifact paths.
+
 ## Confirmed defects and prepared fixes
 
 [Patch0290](xnu/patches/0290-river-battery-valid-samples.patch) preserves valid samples instead of inventing a replacement on failure. In baseline `SweetBattery::pollRiver`, any failed sample—including normal observer contention—publishes 85%, 4100 mV, external power and fully charged. A host reproduction changed a valid 53% sample to that fabricated state. The sampler also accepted current sentinel `0x8000` as a successful zero-current reading, changing the estimator input while reporting current valid. Patch0290 rejects incomplete voltage/current frames and retains the last complete published sample.
@@ -58,4 +65,4 @@ python3 tools/test-river-battery.py
 
 The [test runner](tools/test-river-battery.py) extracts the actual baseline functions/LUT from patch0267, applies the actual proposed patch hunks, and compiles baseline,0290-only and0290+0291 host variants. The [host harness](tools/tests/river-battery-host.cpp) mocks SPMI/IOKit boundaries and exercises the actual sampler, polling method and diagnostic handler. It reproduces the old defects and verifies first-sample unavailability, retained values during contention and each read failure, VI sentinel rejection, plausible voltage bounds, valid zero current, recovery flags and zero charger-control writes for external power plus `DISABLE_CHARGE`. Both baseline paths demonstrably write before0291; both issue zero writes after it. The patched disabled/not-charging state is preserved.
 
-Result: PASS. Sequential `git apply` checks against copies of the b90 applied source also passed and produced files identical to the tested snapshots. No phone deployment, full XNU build or hardware validation was performed in this audit. Next checks are a full build, on-device failure/recovery and cable-state observations, and a timestamped voltage/current/status/percentage trace across controlled load changes before changing the SOC estimator.
+Result: PASS. Sequential `git apply` checks against copies of the b90 applied source also passed and produced files identical to the tested snapshots. The source audit did not perform device tests. Root subsequently completed the full XNU build and temporary bootloader handoff described above. Next checks are on-device failure/recovery and cable-state observations, and a timestamped voltage/current/status/percentage trace across controlled load changes before changing the SOC estimator.
