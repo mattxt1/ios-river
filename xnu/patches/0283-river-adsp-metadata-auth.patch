@@ -1,0 +1,132 @@
+diff --git a/bsd/dev/river_adsp_probe.h b/bsd/dev/river_adsp_probe.h
+--- a/bsd/dev/river_adsp_probe.h
++++ b/bsd/dev/river_adsp_probe.h
+@@ -1,7 +1,12 @@
++#include <corecrypto/ccdigest.h>
++#include <corecrypto/ccsha2.h>
++#include <kern/kalloc.h>
+ /* Explicit read-only ADSP prerequisites. No LPASS, reset, firmware-memory,
+  * regulator, clock, SMEM state or channel writes. Uses retained SMEM map. */
+ static LCK_GRP_DECLARE(ri_adsp_grp, "river-adsp-probe");
+ static LCK_MTX_DECLARE(ri_adsp_lock, &ri_adsp_grp);
++static bool ri_adsp_caps_ok,ri_adsp_smem_ok;
++static unsigned ri_adsp_channels;
+ static char ri_adsp_note[8192] = "not requested";
+ 
+ static bool
+@@ -22,6 +27,7 @@
+ static int
+ ri_adsp_probe_impl(void)
+ {
++ ri_adsp_caps_ok=ri_adsp_smem_ok=false;ri_adsp_channels=0;
+  uint64_t available[3]={0}, supported=0;
+  int64_t status[3];
+  const unsigned commands[]={1,2,5};
+@@ -35,6 +41,7 @@
+      (long long)status[1],(unsigned long long)available[1],
+      (long long)status[2],(unsigned long long)available[2]);
+  int error=(support_status || status[0] || status[1] || status[2])?EIO:0;
++ ri_adsp_caps_ok=!error&&supported==1&&available[0]==1&&available[1]==1&&available[2]==1;
+  vm_offset_t smem=river_smd_smem;
+  size_t n=strlen(ri_adsp_note);
+  if(!smem) {
+@@ -47,6 +54,7 @@
+  snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n,
+      " smem_valid=%u smem_init=%#x smem_free=%#x smem_available=%#x",valid,init,freeoff,avail);
+  if(!valid) return EIO;
++ ri_adsp_smem_ok=true;
+  unsigned channels=0, apr=0, tables=0, malformed=0;
+  const unsigned ids[]={13,266};
+  for(unsigned t=0;t<2;t++) {
+@@ -66,7 +74,7 @@
+    name[20]=0;
+    if(cid>=64 || !terminated || !name[0] || ri_rd(smem,e+28)!=refs ||
+       ri_rd(smem,e+24)!=flags || ri_rd(smem,e+20)!=cid) {malformed++;continue;}
+-   channels++;
++   channels++;ri_adsp_channels++;
+    if(!strncmp(name,"apr",3) || !strncmp(name,"APR",3)) apr++;
+    uint32_t info=0, ilen=0, tx=0, rx=0;
+    bool state=ids[t]==13 && ri_adsp_item(smem,14+cid,freeoff,&info,&ilen) && (ilen==40||ilen==88);
+@@ -86,6 +94,8 @@
+      "\nlegacy_tables=%u adsp_channels=%u apr_channels=%u malformed=%u no_channels_does_not_prove_dsp_off=1",tables,channels,apr,malformed);
+  return error;
+ }
++#include "river_adsp_metadata.h"
++
+ static int
+ river_adsp_probe_sysctl SYSCTL_HANDLER_ARGS
+ {
+diff --git a/bsd/dev/river_adsp_metadata.h b/bsd/dev/river_adsp_metadata.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/river_adsp_metadata.h
+@@ -0,0 +1,69 @@
++/* One isolated PAS1 INIT_IMAGE attempt for the exact recovered stock MDT.
++ * Reuses the already established GPU/crypto PAS prerequisite, as WCNSS did.
++ * No DSP start, executable carveout copy, memory setup, power or clock vote. */
++static const uint8_t ri_adsp_expected_sha256[32]={
++ 0x3a,0xae,0x7a,0x57,0xe5,0xa4,0x17,0x46,0x5c,0xd4,0x35,0xd2,0x5c,0xb3,0x34,0x3d,
++ 0xd8,0x1b,0x70,0x88,0xf2,0xf7,0x74,0x34,0xc6,0x00,0x2f,0x88,0xde,0x1f,0xcd,0x00
++};
++static bool ri_adsp_metadata_attempted;
++static vm_offset_t ri_adsp_metadata_page;
++static int
++ri_adsp_metadata_auth(const uint8_t *metadata,size_t length)
++{
++ if(ri_adsp_metadata_attempted) return EALREADY;
++ if(length!=7516 || !metadata) return EINVAL;
++ uint8_t digest[32];
++ ccdigest(ccsha256_di(),length,metadata,digest);
++ if(memcmp(digest,ri_adsp_expected_sha256,sizeof(digest))) {
++  strlcpy(ri_adsp_note,"phase=metadata_digest error=invalid_stock_metadata firmware_start_requested=0 pcm_transport=0",sizeof(ri_adsp_note));
++  return EINVAL;
++ }
++ if(!river_gpu_pas_ready()) {
++  strlcpy(ri_adsp_note,"phase=metadata_prerequisites gpu_crypto_pas_ready=0 firmware_start_requested=0 pcm_transport=0",sizeof(ri_adsp_note));
++  return EBUSY;
++ }
++ int error=ri_adsp_probe_impl();
++ if(error || !ri_adsp_caps_ok || !ri_adsp_smem_ok || ri_adsp_channels) {
++  size_t n=strlen(ri_adsp_note);
++  snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n," metadata_refused=prerequisites_or_channel_ownership");
++  return error?error:EBUSY;
++ }
++ if(PAGE_SIZE<length) return EINVAL;
++ if(!ri_adsp_metadata_page && kmem_alloc_contig(kernel_map,&ri_adsp_metadata_page,
++     PAGE_SIZE,PAGE_MASK,0,0,KMA_DATA|KMA_ZERO|KMA_PERMANENT,VM_KERN_MEMORY_IOKIT)!=KERN_SUCCESS)
++  return ENOMEM;
++ ppnum_t pn=pmap_find_phys(kernel_pmap,(addr64_t)ri_adsp_metadata_page);
++ uint64_t pa=pn?ptoa_64(pn):0;
++ if(!pa || (pa&PAGE_MASK) || pa<0x18000000ULL || pa>0x81800000ULL-PAGE_SIZE) {
++  strlcpy(ri_adsp_note,"phase=metadata_physical_range error=invalid_kernel_ram firmware_start_requested=0 pcm_transport=0",sizeof(ri_adsp_note));
++  return EIO;
++ }
++ memcpy((void *)ri_adsp_metadata_page,metadata,length);
++ sweet_dcache_clean(ri_adsp_metadata_page,PAGE_SIZE);
++ /* TrustZone may retain/protect this page. Never free, reuse or copy to it
++  * after the secure attempt, even when SCM reports failure. */
++ ri_adsp_metadata_attempted=true;
++ uint64_t result=0;
++ int64_t status=river_scm(2,1,2|(2<<6),1,pa,0,&result);
++ snprintf(ri_adsp_note,sizeof(ri_adsp_note),
++     "phase=metadata_init pas_id=1 attempted=1 stock_sha256_verified=1 init_status=%lld init_result=%llu metadata_accepted=%u pages_retained=1 firmware_start_requested=0 firmware_memory_written=0 pcm_transport=0",
++     (long long)status,(unsigned long long)result,(!status&&!result));
++ return (status||result)?EIO:0;
++}
++static int
++river_adsp_metadata_sysctl SYSCTL_HANDLER_ARGS
++{
++ if(!req->newptr || req->newlen!=7516) return EINVAL;
++ uint8_t *metadata=kalloc_data(7516,Z_WAITOK|Z_ZERO);
++ if(!metadata) return ENOMEM;
++ int error=SYSCTL_IN(req,metadata,7516);
++ if(!error) {
++  lck_mtx_lock(&ri_adsp_lock);
++  error=ri_adsp_metadata_auth(metadata,7516);
++  lck_mtx_unlock(&ri_adsp_lock);
++ }
++ kfree_data(metadata,7516);
++ return error;
++}
++SYSCTL_PROC(_debug, OID_AUTO, river_adsp_metadata, CTLTYPE_OPAQUE | CTLFLAG_WR | CTLFLAG_LOCKED,
++    NULL, 0, river_adsp_metadata_sysctl, "S", "Explicit stock ADSP metadata authentication only");

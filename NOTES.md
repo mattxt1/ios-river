@@ -5,6 +5,37 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## ADSP PAS prerequisites verified; metadata-only test prepared (2026-11-12)
+
+- User confirmed responsive iOS on retry boot; explicit ADSP read-only probe
+  exited0: `pas_id=1 support_status=0 supported=1 init_query=0,1
+  mem_query=0,1 auth_query=0,1 firmware_started=unverified pcm_transport=0
+  smem_valid=1 smem_init=0x1 smem_free=0x10b48 smem_available=0x1d4b8
+  legacy_tables=1 adsp_channels=0 apr_channels=0 malformed=0`.
+  No channels in these tables alone does not prove DSP is off. Endpoint
+  version1 flags3 output155648 input0; physical PCM remains unimplemented.
+  Private log: work/pcm-transport/adsp-probe-live-complete.txt.
+- Next patch0283 prepares one isolated PAS_INIT_IMAGE(ID1) test for the exact
+  recovered 7516-byte MDT, SHA256 whitelist3aae7a57...de1fcd00. Uses existing
+  GPU/crypto PAS-ready gate (matching proven WCNSS metadata path), rechecks
+  PAS capabilities and valid retained SMEM with no observed ADSP channels.
+  No ADSP executable carveout writes, MEM_SETUP, AUTH_AND_RESET, LPASS MMIO,
+  clock/power votes or PCM. ADSP CX/XO proxy startup still remains future work.
+- SYSCTL input is length-bounded, copied to temporary kernel heap and checked
+  with corecrypto SHA256. Only then allocates a contiguous zeroed metadata
+  page within normal XNU-owned RAM0x18000000..0x81800000, copies and cleans it.
+  Keeps that page permanently after the first secure attempt, including SCM
+  errors; further attempts fail before touching it. Unknown or active channel
+  state, wrong digest, missing crypto, allocation/range failures refuse init.
+- New helper option `river-adsp-status --metadata PATH` reads only a regular,
+  non-symlink 7516-byte file. Kernel write sysctl remains root-only by default.
+- Host tests passed for exact stock-hash gate (reproducible test digest
+  substitutes private stock bytes), unavailable crypto/PAS/SMEM, existing
+  channels, failed allocation, forbidden physical memory, cache-clean order,
+  only INIT_IMAGE allowed, and retained one-shot state on secure error.
+  Probe, firmware validation and repacker tests also passed. Helper compiled
+  iOS arm64 with warnings-as-errors and ad-hoc signed. Build/boot pending.
+
 ## Physical PCM transport: stock ADSP firmware recovered (2026-11-12)
 
 - User authorized real PCM playback next, then microphone capture, continuing

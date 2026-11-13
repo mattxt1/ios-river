@@ -12,10 +12,30 @@ with tempfile.TemporaryDirectory() as d:
     root=Path(d)
     patch=(r/'xnu/patches/0282-river-adsp-prerequisites.patch').read_text().split('diff --git a/bsd/dev/river_adsp_probe.h',1)[1]
     code='\n'.join(x[1:] for x in patch.splitlines() if x.startswith('+') and not x.startswith('+++'))
-    code=code.split('static int\nriver_adsp_probe_sysctl',1)[0]
+    dev=root/'bsd/dev';dev.mkdir(parents=True)
+    (dev/'river_adsp_probe.h').write_text(code+'\n')
+    subprocess.run(['git','apply','--include=bsd/dev/river_adsp_probe.h',
+                    str(r/'xnu/patches/0283-river-adsp-metadata-auth.patch')],cwd=root,check=True)
+    code=(dev/'river_adsp_probe.h').read_text()
+    code='\n'.join(x for x in code.splitlines() if not x.startswith('#include <'))
+    code=code.split('#include "river_adsp_metadata.h"',1)[0]
     (root/'river-adsp-added.h').write_text(code)
     binary=root/'probe'
     subprocess.run(['cc','-O2','-Wall','-Wextra','-Werror','-Wno-unused-function','-I',d,str(r/'tools/tests/river-adsp-probe-host.c'),'-o',str(binary)],check=True)
+    subprocess.run([str(binary)],check=True)
+    patch=(r/'xnu/patches/0283-river-adsp-metadata-auth.patch').read_text().split('diff --git a/bsd/dev/river_adsp_metadata.h',1)[1]
+    metadata='\n'.join(x[1:] for x in patch.splitlines() if x.startswith('+') and not x.startswith('+++'))
+    metadata=metadata.split('static int\nriver_adsp_metadata_sysctl',1)[0]
+    # The private stock MDT is deliberately absent from the source tree.
+    # Substitute only its expected digest with a reproducible fixture digest.
+    import re
+    digest=hashlib.sha256(bytes(i*7&255 for i in range(7516))).digest()
+    metadata=re.sub(r'(ri_adsp_expected_sha256\[32\]=\{).*?(\};)',
+                    lambda m:m[1]+','.join(hex(x) for x in digest)+m[2],metadata,flags=re.S)
+    (root/'river-adsp-metadata-added.h').write_text(metadata)
+    binary=root/'metadata'
+    subprocess.run(['cc','-O2','-Wall','-Wextra','-Werror','-Wno-unused-function',
+                    '-Wno-deprecated-declarations','-I',d,str(r/'tools/tests/river-adsp-metadata-host.c'),'-o',str(binary)],check=True)
     subprocess.run([str(binary)],check=True)
     def fixture(overlap=False,extent=None):
         head=bytearray(180);head[:7]=b'\x7fELF\x01\x01\x01'

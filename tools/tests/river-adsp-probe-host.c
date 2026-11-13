@@ -12,6 +12,9 @@ static uint32_t smem[0x100000/4];
 static vm_offset_t river_smd_smem;
 static unsigned scm_calls,scenario;
 static int64_t river_scm(uint32_t svc,uint32_t cmd,uint64_t ai,uint64_t a0,uint64_t a1,uint64_t a2,uint64_t *r) {
+#ifdef RI_ADSP_METADATA_HOST
+ if(svc==2&&cmd==1) return metadata_scm(ai,a0,a1,a2,r);
+#endif
  assert(ai==1&&!a1&&!a2);scm_calls++;
  if(svc==6&&cmd==1) assert(a0==0x42000201||a0==0x42000202||a0==0x42000205);
  else assert(svc==2&&cmd==7&&a0==1);
@@ -56,4 +59,5 @@ int main(void) {
  assert(strstr(ri_adsp_note,"adsp_channels=2"));
  assert(strlen(ri_adsp_note)<sizeof(ri_adsp_note));
  puts("PASS: ADSP read-only SCM allowlist, retained SMEM bounds, foreign/invalid descriptors and channel states");
+ return 0;
 }
