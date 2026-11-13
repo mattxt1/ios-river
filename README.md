@@ -9,16 +9,18 @@ includes work for other devices, but `river` is the target of this branch.
 are historical observations, not a guarantee about a freshly built image or the
 phone's present state. Apple security services are substituted or relaxed in
 parts of the port. Do not rely on the device to protect personal data or use it
-for sensitive accounts. The battery and charging icon is synthetic.
+for sensitive accounts. Battery capacity remains a voltage/current estimate;
+charging-policy validation is incomplete.
 
-The summary is reconciled against this branch's records through November 12,
-2026 (build r156). Source changes may be newer than the last phone test; see [NOTES.md](NOTES.md)
+Updated November 13, 2026. Kernel236a880 is the latest device-validated build.
+The follow-up4d238b8 kernel through0294 built and packaged successfully;
+its temporary device test is pending. Source changes can be newer than the last phone test; see [NOTES.md](NOTES.md)
 for dated evidence, build IDs, hashes, limitations, and later observations.
 [RIVER.md](RIVER.md) contains the detailed chronological bring-up narrative.
 
 ## Status and evidence
 
-| Area | Recorded evidence | Current limits (2026-11-12) |
+| Area | Recorded evidence | Current limits (2026-11-13) |
 | --- | --- | --- |
 | Boot and storage | Stock Motorola bootloader loads a temporary image via `fastboot boot`; XNU mounts an HFS+ iOS root on eMMC `userdata` (`rd=emmc0s64 rootrw=1`). | Preparing that root overwrites Android user data. Temporary fastboot boot only; physical partitions are never flashed. |
 | CPU and memory | Four Cortex-A53 Gold cores (`cpus=4`) and ~3.38 GiB usable RAM on the full-RAM configuration. | Firmware carveouts stay excluded. Silver cores remain parked. |
@@ -26,11 +28,11 @@ for dated evidence, build IDs, hashes, limitations, and later observations.
 | Backlight & Sleep/Wake | Hardware TLMM PWM backlight driver integrated with CoreBrightness (`0269-river-backlight-corebrightness.patch`, `riverbl=1`). Tested smooth dimming, display sleep blanking, and instant wake. | Native iOS brightness slider and display wake/sleep operational. |
 | Touch & UI Interaction | Synaptics touch controller operational (`riverinput=1`, `rivertouchlatch=0`). Lockscreen unlocks cleanly at 60 fps without touch regressions. | Canvas is cropped iPhone X geometry; UI elements are fully interactive. |
 | Home & SpringBoard | SpringBoard lockscreen, home screen, settings navigation, and app launch operational. App switcher functional with replica layer. | PosterBoard background load requires initial settle time on boot. |
-| Battery & Power | Hardware battery monitoring via Qualcomm PM8953 FG/QG and JG30 battery curve (`0267-river-battery-jg30-power-source.patch`). Publishes genuine capacity, voltage, current, and charging status to IOKit `IOPMPowerSource`. | Prepared patches0290/0291 preserve last-valid samples, reject invalid current and remove charger-enable writes from sampling/diagnostics; host regressions pass. Full kernel/device validation pending. Percentage remains a load-sensitive voltage/current estimate. See [BATTERY-STATUS.md](BATTERY-STATUS.md). |
-| Wi-Fi & Networking | Full WCNSS Wi-Fi stack (`0268-river-apple80211-wlan-stack.patch`): WPA2 4-way handshake, unscoped routing, system DNS via `mDNSResponder`, and live HTTPS Safari browsing verified (`apple.com`). Background networking managed by `org.river.net` launchd daemon. | Prepared patch0289 fixes RX cleanup reentrancy, stale join results, bounded reconnect and cancellation while preserving boot-profile behavior; actual-code host tests pass. Full kernel/device validation and exact Settings warning mapping remain pending. See [WIFI-STATUS.md](WIFI-STATUS.md). |
+| Battery & Power | Hardware battery monitoring via Qualcomm PM8953 FG/QG and JG30 battery curve (`0267-river-battery-jg30-power-source.patch`). Publishes observed voltage/current/status and estimated capacity to IOKit `IOPMPowerSource`. | Integrated0290/0291 preserve last-valid samples, reject invalid current and remove charger-enable writes from sampling/diagnostics. Host checks and full build pass; live SweetBattery/IOPMPowerSource/IOPS publication agrees at85%,4194–4195mV, external/notcharging/notfull with valid/nonfallback flags. Failure recovery, load/cable/charging validation remains pending; percentage is a load-sensitive estimate. See [BATTERY-STATUS.md](BATTERY-STATUS.md). |
+| Wi-Fi & Networking | Full WCNSS Wi-Fi stack (`0268-river-apple80211-wlan-stack.patch`): WPA2 4-way handshake, unscoped routing, system DNS via `mDNSResponder`, and live HTTPS Safari browsing verified (`apple.com`). Background networking managed by `org.river.net` launchd daemon. | Integrated0289 fixes demonstrated RX cleanup/state/cancellation defects and passes host/full-build checks, but the live Settings join still failed with a nearby-channel warning and no checkmark. Captured logs have no association request20;0292 adds bounded GET/SET preflight diagnostics. Root cause and exact warning mapping remain unresolved. See [WIFI-STATUS.md](WIFI-STATUS.md). |
 | USB & Connectivity | USB CDC-ECM Ethernet and Dropbear root SSH (`192.168.7.2`). Driver implements bus disconnect/reconnect auto-recovery (`0244-river-usb-reconnect.patch`). | SSH and diagnostic transfer work, with intermittent USB connection/handshake timeouts observed during audio bring-up; a fresh temporary boot sometimes restored access. |
-| Audio Subsystem | Virtual audio endpoints `/dev/hakios-audio` and `/dev/hakios-mic` (`0270-river-audio-subsystem.patch`). CoreAudio HAL and `mediaserverd` integration verified (`river-media-capability`). Dynamic volume ioctl wired to hardware amplifier. iOS recorder and playback calls complete, but microphone data is synthetic and output PCM is discarded. | Codec/amplifier clock lock, stock ADSP metadata acceptance and17MiB no-start firmware staging verified. Physical microphone capture and speaker playback remain unimplemented; locked outbound handshake creation and readback now verified. DSP startup and physical PCM remain pending. |
-| Speaker Amplifier HW | Cirrus CS35L41 smart amplifier probed at I2C `0x40` on QUP2 (`0271-river-cs35l41-speaker-amp.patch`). Internal boost converter energized to 8.5V (`0x00002018 = 0x21`), 4500 mA peak, +17 dB analog power gain (`0x00006c04 = 0x220`). Reset lines released for CS35L41 (GPIO 94) and CS47L35 audio hub (GPIO 68). Tone test sysctl `debug.river_speaker_test` implemented. | Muted clock-only test verified codec FLL and amplifier PLL lock on source `fa7283f`, with complete state restoration. Physical PCM transport remains unimplemented. **Hardware Safety Interlock:** Idle raw status register `0x00010098` readback shows `irq3 = 0x20000010` (`CS35L41_PLL_UNLOCK = 0x10`). The CS35L41 Class-D output stage is held in protective shutdown by silicon logic until an external locked clock is supplied to ASP from CS47L35 AIF1 or LPASS. Concurrent QUP2 access requires serialization. |
+| Audio Subsystem | Virtual audio endpoints `/dev/hakios-audio` and `/dev/hakios-mic` (`0270-river-audio-subsystem.patch`). CoreAudio HAL and `mediaserverd` integration verified (`river-media-capability`). Dynamic volume ioctl wired to hardware amplifier;0293 corrects signed attenuation and verifies the level before unmuting (host/full-build checks pass, device check pending). iOS recorder and playback calls complete, but microphone data is synthetic and output PCM is discarded. | Codec/amplifier clock lock, stock ADSP metadata acceptance and17MiB no-start firmware staging verified. Physical microphone capture and speaker playback remain unimplemented; locked outbound handshake creation and readback now verified. DSP startup and physical PCM remain pending.0294 validates exact RPM response IDs/frames before future audio power votes (host sanitizer checks and full build pass; device ACK validation pending). |
+| Speaker Amplifier HW | Cirrus CS35L41 smart amplifier probed at I2C `0x40` on QUP2 (`0271-river-cs35l41-speaker-amp.patch`). Driver configures the boost converter for 8.5V (`0x00002018 = 0x21`), 4500 mA peak, +17 dB analog power gain (`0x00006c04 = 0x220`). Reset lines released for CS35L41 (GPIO 94) and CS47L35 audio hub (GPIO 68). Tone test sysctl `debug.river_speaker_test` implemented. | Muted clock-only test verified codec FLL and amplifier PLL lock on source `fa7283f`, with complete state restoration. Physical PCM transport remains unimplemented. **Hardware Safety Interlock:** Idle raw status register `0x00010098` readback shows `irq3 = 0x20000010` (`CS35L41_PLL_UNLOCK = 0x10`). The CS35L41 Class-D output stage is held in protective shutdown by silicon logic until an external locked clock is supplied to ASP from CS47L35 AIF1 or LPASS. Concurrent QUP2 access requires serialization. |
 | Haptics & Buttons | Awinic AW8697 haptic driver on QUP2 (`0x5a`). Verified on-device vibration pulses (`/usr/local/bin/vibrate 50`). Physical volume and power keys mapped via SPMI / TLMM. | Touch feedback and sysctl vibration work. Core Haptics subsystem reports synthetic profile. |
 | Camera & Torch | Hardware mapping established from device tree (PMI632 flash/torch, OV12A10 rear, S5K4H7 front). Experimental torch pulse interlocked for safety. | Camera pipeline (CCI, VFE, CSI-PHY) not yet brought up in XNU. |
 | Local Toolchain | Fully native offline XNU kernel compilation on macOS via `tools/river-local-build.sh` using pinned `darwin-xnu-build` and macOS 13.5 KDK. Packaging via `mkpayload` / `package-river-audio.py`. | Removes reliance on remote GitHub Actions runners for kernel builds. |
@@ -38,7 +40,7 @@ for dated evidence, build IDs, hashes, limitations, and later observations.
 ## Architecture
 
 ```text
-Motorola ABL -> fastboot boot -> shim-river -> patched XNU (r156) -> iOS 16 userland
+Motorola ABL -> fastboot boot -> shim-river -> patched XNU        -> iOS 16 userland
                                                 |
       +------------------+----------------------+--------------------+
       |                  |                      |                    |
@@ -197,11 +199,6 @@ validation remain pending. Settings Wi-Fi joining still failed with the
 nearby-channel warning and no checkmark. Patch0292 adds bounded request
 completion diagnostics to investigate preflight; it makes no speculative
 ABI or error-mapping change. Patch0293 corrects signed amplifier attenuation
-and verifies the level before unmuting. Both pass host checks and await a
-full build/device run. Physical audio playback/capture remain unimplemented.
+and verifies the level before unmuting. Both pass host checks and the a6de705 full build; their device checks are pending.
+Exact RPM reply validation0294 also built successfully; the combined temporary image is ready. Physical audio playback/capture remain unimplemented.
 
-The follow-up0292/0293 full kernel build passed. Patch0294 additionally fixes
-RPM response matching after logs demonstrated a duplicate ACK acknowledged
-the wrong request. Its actual receiver passes sanitizer-backed host tests;
-combined full build and device verification are next. This supports future
-ADSP startup but does not yet implement power-vote ownership or PCM transport.

@@ -48,7 +48,8 @@ no ADSP vote, IPC-to-ADSP, DSP startup or PCM path. Before another client uses
 it, shared-channel serialization, TX capacity/ownership, unique request IDs
 and an explicit CX/XO vote policy remain required. It does not make WCNSS
 startup contingent on ACK success; that existing startup policy is separate.
-Full0294 kernel build and hardware ACK validation are pending.
+The combined4d238b8 full kernel build passed and its temporary image is packaged
+and verified. Hardware ACK and volume-register validation are pending.
 
 ## Verified progress and remaining work (2026-11-13)
 

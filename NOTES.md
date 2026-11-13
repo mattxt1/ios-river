@@ -5,6 +5,25 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Combined0294 image built and packaged (2026-11-13)
+
+- Full4d238b8db81667199ddaea8d0cb57d3ae5b37b72 build passed in
+  work/build/river-4d238b8db816-Ew5whP. Compiler errors0, numbered patches all
+  applied. Kernel SHA256f7ac29a0f87f518726e079eb46e217b2437d8d2e6008452bb7b0f96c4d0a5e7f.
+- Packaged outputs/river-preflight-volume-rpm-4d238b8.img from verified236a880
+  base with unchanged clock/ADSP helpers.26,697,728bytes; cmdline562; kernel
+  payload segments verified. SHA2560a4e87042618ae6da77ba9e268f88494dfa110b827319450427f46b2d08ea79e.
+  Manifest outputs/preflight-volume-rpm-build-manifest.json.
+- Async physical-action question asks user to return River to fastboot. No
+  additional permission needed for approved SSH identity or temporary boot.
+  Latest running image236a880 had responsive UI and read-only battery/ADSP
+  checks passed; Wi-Fi join failed. New image has not yet booted.
+- Next: verify fastboot productriver, boot temporarily, wait for responsive
+  home screen, start USB capture for bounded GET/SET preflight and exact RPM
+  ACK logs; read amplifier volume registers under controlled non-PCM checks.
+  Physical PCM/DSP startup remain unimplemented. README status table reconciled
+  with current live results rather than older r156/synthetic-battery claims.
+
 ## Diagnostics/volume build passed; exact RPM replies prepared (2026-11-13)
 
 - Full a6de705dbbac2e77ce7d73faa99db20c6325f63e build through0293 passed
