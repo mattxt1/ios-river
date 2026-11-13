@@ -85,7 +85,45 @@ static void river_wpa_run(vm_offset_t smem,uint32_t info,uint32_t fifo,vm_offset
  if(river_wpa.associated&&wpa_success){river_wpa.stage=2;river_wpa.keys_installed=true;}
 }
 #include "river-wifi-rx.h"
+#ifdef HOST_LINK_EVENTS
+/* kern_event_msg deliberately has a trailing word: payload must begin at
+ * offsetof(event_data), rather than sizeof(header), on this host ABI. */
+typedef bool ifnet_t;
+struct kern_event_msg {uint32_t total_size,vendor_code,kev_class,kev_subclass,id,event_code,event_data[1];};
+struct net_event_data {uint32_t if_family,if_unit;char if_name[16];};
+#define KEV_MSG_HEADER_SIZE offsetof(struct kern_event_msg,event_data)
+#define KEV_NETWORK_CLASS 1
+#define KEV_DL_SUBCLASS 2
+#define KEV_DL_LINK_OFF 12
+#define KEV_DL_LINK_ON 13
+static unsigned link_on,link_off,ifnet_refs;
+static bool event_cancel;
+static int ifnet_reference(ifnet_t ifp) {assert(ifp);ifnet_refs++;return 0;}
+static int ifnet_release(ifnet_t ifp) {assert(ifp&&ifnet_refs);ifnet_refs--;return 0;}
+static unsigned ifnet_family(ifnet_t ifp) {assert(ifp);return 1;}
+static unsigned ifnet_unit(ifnet_t ifp) {assert(ifp);return 0;}
+static const char *ifnet_name(ifnet_t ifp) {assert(ifp);return "en";}
+static int ifnet_event(ifnet_t ifp,struct kern_event_msg *event) {
+ assert(ifp&&ifnet_refs==1&&!engine_lock_depth&&!net_lock_depth&&!in_rx);
+ assert(event->vendor_code==KEV_VENDOR_APPLE&&event->kev_class==KEV_NETWORK_CLASS&&event->kev_subclass==KEV_DL_SUBCLASS);
+ assert(event->total_size==KEV_MSG_HEADER_SIZE+sizeof(struct net_event_data));
+ struct net_event_data payload;memcpy(&payload,(uint8_t*)event+KEV_MSG_HEADER_SIZE,sizeof(payload));
+ assert(payload.if_family==1&&payload.if_unit==0&&!strcmp(payload.if_name,"en"));
+ struct apple80211req query={.req_type=13};assert(!get(&query)); /* Reenter engine. */
+ if(event->event_code==KEV_DL_LINK_ON){
+  link_on++;
+  if(event_cancel){event_cancel=false;struct apple80211req stop={.req_type=22};assert(!set(&stop));}
+ }else{assert(event->event_code==KEV_DL_LINK_OFF);link_off++;}
+ return 0;
+}
+#endif
 #include "river-wifi-worker.h"
+static void service(void) {
+ river_connection_service();
+#ifdef HOST_LINK_EVENTS
+ river_network_link_events();assert(!ifnet_refs);
+#endif
+}
 static const uint8_t ap_a[6]={2,1,1,1,1,1},ap_b[6]={2,2,2,2,2,2};
 static void queue_join(const char *ssid,const uint8_t *bssid) {
  struct apple80211_assoc asked={0};asked.ssid_length=(uint32_t)strlen(ssid);memcpy(asked.ssid,ssid,asked.ssid_length);
@@ -100,6 +138,9 @@ static void setup(void) {
  river_target_bss=255;river_connection_generation=river_cleanup_generation=0;
  memset(&river_connection_req,0,sizeof(river_connection_req));memset(&river_connection_info,0,sizeof(river_connection_info));
  river_connection_saved=river_cleanup_pending=river_net_live=false;river_reconnect_wait=river_reconnect_attempts=0;
+#ifdef HOST_LINK_EVENTS
+ river_link_notified=false;river_link_notified_generation=0;link_on=link_off=ifnet_refs=0;event_cancel=false;
+#endif
  cleanup_calls=link_calls=assoc_calls=network_drops=flags_set=queued_packets=0;in_rx=false;assoc_success=wpa_success=true;inject_new_join=inject_stop=false;
  river_apple80211_add_bss(ap_a,(const uint8_t*)"one",3,2412,-40,100,0,NULL,0);
  river_apple80211_add_bss(ap_b,(const uint8_t*)"two",3,2437,-45,100,0,NULL,0);
@@ -112,11 +153,14 @@ int main(void) {
  setup();memcpy(river_target.ssid,"one",3);river_target.ssid_len=3;memcpy(river_target.bssid,ap_a,6);
  river_target.enabled=river_target.found=true;river_wpa.pmk_ready=true;memset(river_wpa.pmk,5,32);
  river_connection_boot();assert(river_net_live&&river_connection_saved&&active_phase==PHASE_JOINED&&assoc_calls==1&&join_result==HOST_JOIN_SUCCESS);
- deauth();river_connection_service();river_reconnect_wait=0;river_connection_service();assert(river_net_live&&assoc_calls==2);
+#ifdef HOST_LINK_EVENTS
+ river_network_link_events();assert(link_on==1&&!link_off&&!ifnet_refs);
+#endif
+ deauth();service();river_reconnect_wait=0;service();assert(river_net_live&&assoc_calls==2);
  setup();memcpy(river_target.ssid,"one",3);river_target.ssid_len=3;memcpy(river_target.bssid,ap_a,6);
  river_target.enabled=river_target.found=true;river_wpa.pmk_ready=true;
  struct apple80211req boot_off={.req_type=19,.req_val=0};assert(!set(&boot_off));river_connection_boot();
- assert(!assoc_calls&&!river_net_live&&active_phase==PHASE_IDLE);river_connection_service();assert(!river_target.enabled);
+ assert(!assoc_calls&&!river_net_live&&active_phase==PHASE_IDLE);service();assert(!river_target.enabled);
  setup();memcpy(river_target.ssid,"one",3);river_target.ssid_len=3;memcpy(river_target.bssid,ap_a,6);
  river_target.enabled=river_target.found=true;river_wpa.pmk_ready=true;queue_join("two",ap_b);river_connection_boot();
  assert(!assoc_calls&&join_pending_flag&&active_phase==PHASE_JOINING);
@@ -125,17 +169,40 @@ int main(void) {
   * through the ioctl boundary, independently of internal status arguments. */
  setup();struct apple80211req result={.req_type=21};
  queue_join("one",ap_a);assert(!river_apple80211_ioctl(SIOCGA80211,&result)&&result.req_val==0);
- river_connection_service();assert(river_net_live&&active_phase==PHASE_JOINED);
+ service();assert(river_net_live&&active_phase==PHASE_JOINED);
  assert(!river_apple80211_ioctl(SIOCGA80211,&result)&&result.req_val==1);
  queue_join("two",ap_b);assert(!river_apple80211_ioctl(SIOCGA80211,&result)&&result.req_val==0);
- assoc_success=false;river_connection_service();assert(!river_net_live&&active_phase==PHASE_IDLE);
+ assoc_success=false;service();assert(!river_net_live&&active_phase==PHASE_IDLE);
  assert(!river_apple80211_ioctl(SIOCGA80211,&result)&&result.req_val==2);
- queue_join("one",ap_a);assoc_success=true;river_connection_service();
+ queue_join("one",ap_a);assoc_success=true;service();
  assert(!river_apple80211_ioctl(SIOCGA80211,&result)&&result.req_val==1);
  /* Legacy completion also translates the public enum, never its errno. */
  river_apple80211_assoc_done(0);assert(!river_apple80211_ioctl(SIOCGA80211,&result)&&result.req_val==1);
  river_apple80211_assoc_done(1);assert(!river_apple80211_ioctl(SIOCGA80211,&result)&&result.req_val==2);
  river_apple80211_assoc_done(16);assert(!river_apple80211_ioctl(SIOCGA80211,&result)&&result.req_val==2);
+#endif
+#ifdef HOST_LINK_EVENTS
+ setup();queue_join("one",ap_a);service();assert(link_on==1&&!link_off);
+ service();service();assert(link_on==1&&!link_off);
+ deauth();assert(!link_off);service();assert(link_off==1&&link_on==1);
+ service();assert(link_off==1);river_reconnect_wait=0;service();assert(link_on==2&&link_off==1);
+ struct apple80211req event_stop={.req_type=22};assert(!set(&event_stop));service();assert(link_off==2&&link_on==2);
+ service();assert(link_off==2);
+ setup();queue_join("one",ap_a);service();struct apple80211req event_power={.req_type=19,.req_val=0};
+ assert(!set(&event_power));service();assert(link_on==1&&link_off==1);
+ setup();assoc_success=false;queue_join("one",ap_a);service();assert(!link_on&&!link_off);
+ setup();queue_join("one",ap_a);inject_new_join=true;service();assert(!link_on&&!link_off);
+ service();assert(link_on==1&&!link_off);
+ setup();queue_join("one",ap_a);inject_stop=true;service();assert(!link_on&&!link_off);
+ /* Cancellation after keyed activation but before the worker drains events. */
+ setup();queue_join("one",ap_a);river_connection_service();assert(river_net_live);
+ assert(!set(&event_stop));river_network_link_events();assert(!link_on&&!link_off&&!ifnet_refs);
+ /* An observer cancels from the delivered ON callback: unlocked reentry is
+  * valid, and the same drain reconciles it with one OFF. */
+ setup();queue_join("one",ap_a);event_cancel=true;service();assert(link_on==1&&link_off==1&&!ifnet_refs);
+ service();assert(link_on==1&&link_off==1);
+ /* New generation while already up closes the old link before the new ON. */
+ setup();queue_join("one",ap_a);service();queue_join("two",ap_b);service();assert(link_on==2&&link_off==1);
 #endif
  setup();queue_join("one",ap_a);struct river_apple80211_join_req old,current;
  assert(river_apple80211_join_pending(&old));queue_join("two",ap_b);unsigned before=events;
@@ -152,36 +219,36 @@ int main(void) {
  assert(!river_apple80211_data_allowed(current.generation)&&river_apple80211_take_stop()&&!river_apple80211_take_stop());
  assert(!river_apple80211_join_complete(&current,&info,0)&&active_phase==PHASE_IDLE);
  setup();queue_join("one",ap_b);assert(river_apple80211_join_pending(&current));assert(!river_apple80211_find_target(&current,&info));
- setup();queue_join("one",ap_a);river_connection_service();assert(river_net_live&&active_phase==PHASE_JOINED&&river_wpa.stage==2);
+ setup();queue_join("one",ap_a);service();assert(river_net_live&&active_phase==PHASE_JOINED&&river_wpa.stage==2);
  queued_packets=3;deauth();assert(!river_net_live&&!queued_packets&&river_wpa.stage==3&&river_cleanup_pending);
- assert(!cleanup_calls&&!link_calls);river_connection_service();assert(cleanup_calls==1&&link_calls==1&&!river_cleanup_pending);
- river_connection_service();assert(cleanup_calls==1);river_target.found=true;river_reconnect_wait=0;
- river_connection_service();assert(river_net_live&&river_wpa.stage==2&&active_phase==PHASE_JOINED&&join_result==HOST_JOIN_SUCCESS&&assoc_calls==2);
- setup();queue_join("one",ap_a);river_connection_service();deauth();assert(!set(&stop));river_connection_service();
+ assert(!cleanup_calls&&!link_calls);service();assert(cleanup_calls==1&&link_calls==1&&!river_cleanup_pending);
+ service();assert(cleanup_calls==1);river_target.found=true;river_reconnect_wait=0;
+ service();assert(river_net_live&&river_wpa.stage==2&&active_phase==PHASE_JOINED&&join_result==HOST_JOIN_SUCCESS&&assoc_calls==2);
+ setup();queue_join("one",ap_a);service();deauth();assert(!set(&stop));service();
  assert(!river_connection_saved&&!river_target.enabled&&!river_net_live&&river_wpa.stage==0&&assoc_calls==1);
- setup();queue_join("one",ap_a);river_connection_service();deauth();struct apple80211req power={.req_type=19,.req_val=0};assert(!set(&power));
- river_connection_service();assert(!river_connection_saved&&!river_target.enabled&&!river_net_live&&active_phase==PHASE_IDLE);
+ setup();queue_join("one",ap_a);service();deauth();struct apple80211req power={.req_type=19,.req_val=0};assert(!set(&power));
+ service();assert(!river_connection_saved&&!river_target.enabled&&!river_net_live&&active_phase==PHASE_IDLE);
  setup();river_target_bss=11;river_connection_generation=2;river_cleanup_generation=1;river_cleanup_pending=true;river_connection_cleanup();
  assert(!cleanup_calls&&river_target_bss==11&&!river_cleanup_pending);
- setup();queue_join("one",ap_a);inject_new_join=true;river_connection_service();assert(!river_net_live&&join_pending_flag&&active_phase==PHASE_JOINING);
- river_connection_service();assert(river_net_live&&active_phase==PHASE_JOINED&&!memcmp(active_bss.bssid,ap_b,6));
- setup();queue_join("one",ap_a);river_connection_service();deauth();river_connection_cleanup();
- river_target.found=true;river_reconnect_wait=0;river_reconnect_attempts=5;river_connection_service();
+ setup();queue_join("one",ap_a);inject_new_join=true;service();assert(!river_net_live&&join_pending_flag&&active_phase==PHASE_JOINING);
+ service();assert(river_net_live&&active_phase==PHASE_JOINED&&!memcmp(active_bss.bssid,ap_b,6));
+ setup();queue_join("one",ap_a);service();deauth();river_connection_cleanup();
+ river_target.found=true;river_reconnect_wait=0;river_reconnect_attempts=5;service();
  assert(!river_connection_saved&&!river_net_live&&join_result==HOST_JOIN_FAILED&&assoc_calls==1);
- setup();queue_join("one",ap_a);river_connection_service();deauth();river_connection_cleanup();
- river_bss_count=0;river_reconnect_wait=0;river_connection_service();
+ setup();queue_join("one",ap_a);service();deauth();river_connection_cleanup();
+ river_bss_count=0;river_reconnect_wait=0;service();
  assert(river_reconnect_attempts==1&&river_wpa.stage==3&&!river_target.found&&assoc_calls==1);
  river_apple80211_add_bss(ap_a,(const uint8_t*)"one",3,2412,-40,100,0,NULL,0);
- river_reconnect_wait=0;river_connection_service();assert(assoc_calls==2&&river_net_live&&river_wpa.stage==2);
- setup();queue_join("one",ap_a);river_connection_service();deauth();river_connection_cleanup();
- assoc_success=false;river_reconnect_wait=0;river_connection_service();
+ river_reconnect_wait=0;service();assert(assoc_calls==2&&river_net_live&&river_wpa.stage==2);
+ setup();queue_join("one",ap_a);service();deauth();river_connection_cleanup();
+ assoc_success=false;river_reconnect_wait=0;service();
  assert(assoc_calls==2&&river_wpa.stage==3&&!river_net_live);
- assoc_success=true;river_reconnect_wait=0;river_connection_service();assert(assoc_calls==3&&river_net_live&&river_wpa.stage==2);
- setup();queue_join("one",ap_a);river_connection_service();deauth();river_connection_cleanup();
- wpa_success=false;river_reconnect_wait=0;river_connection_service();
+ assoc_success=true;river_reconnect_wait=0;service();assert(assoc_calls==3&&river_net_live&&river_wpa.stage==2);
+ setup();queue_join("one",ap_a);service();deauth();river_connection_cleanup();
+ wpa_success=false;river_reconnect_wait=0;service();
  assert(assoc_calls==2&&river_wpa.stage==3&&!river_net_live);
- wpa_success=true;river_reconnect_wait=0;river_connection_service();assert(assoc_calls==3&&river_net_live&&river_wpa.stage==2);
- setup();queue_join("one",ap_a);inject_stop=true;river_connection_service();
+ wpa_success=true;river_reconnect_wait=0;service();assert(assoc_calls==3&&river_net_live&&river_wpa.stage==2);
+ setup();queue_join("one",ap_a);inject_stop=true;service();
  assert(!river_net_live&&!river_connection_saved&&active_phase==PHASE_IDLE);
  puts("PASS: Wi-Fi generations, stale result rejection, exact BSSID, cancellation, no RX reentrancy, owned deferred cleanup and bounded reconnect");return 0;
 }

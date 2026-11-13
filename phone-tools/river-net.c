@@ -250,6 +250,29 @@ static void ask_ipconfiguration(const char *ifname) {
  mach_port_deallocate(mach_task_self(), server);
 }
 
+/* Observe the existing publication without adding/retrying any writes.
+ * Log keys and return codes only; do not dump values or credentials. */
+static unsigned sc_write_failures;
+static Boolean sc_set_observed(SCDynamicStoreSetValue_t set_value, int (*sc_error)(void),
+    SCDynamicStoreRef store, CFStringRef key, CFPropertyListRef value) {
+ Boolean ok=set_value(store,key,value);
+ int error=ok?0:(sc_error?sc_error():-1);
+ char name[256]="<unprintable key>";
+ (void)CFStringGetCString(key,name,sizeof(name),kCFStringEncodingUTF8);
+ printf("SC write key=%s accepted=%u error=%d\n",name,ok!=0,error);
+ if(!ok)sc_write_failures++;
+ return ok;
+}
+static void sc_readback_observed(SCDynamicStoreCopyValue_t copy_value,
+    SCDynamicStoreRef store, CFStringRef key, const char *phase) {
+ if(!copy_value)return;
+ CFPropertyListRef value=copy_value(store,key);
+ char name[256]="<unprintable key>";
+ (void)CFStringGetCString(key,name,sizeof(name),kCFStringEncodingUTF8);
+ printf("SC readback phase=%s key=%s present=%u\n",phase,name,value!=NULL);
+ if(value)CFRelease(value);
+}
+
 static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask, const uint8_t *gw, const uint8_t *dn) {
  void *h = dlopen("/System/Library/Frameworks/SystemConfiguration.framework/SystemConfiguration", RTLD_LAZY);
  if (!h) {
@@ -259,6 +282,8 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
  SCDynamicStoreCreate_t fn_Create = (SCDynamicStoreCreate_t)dlsym(h, "SCDynamicStoreCreate");
  SCDynamicStoreSetValue_t fn_SetValue = (SCDynamicStoreSetValue_t)dlsym(h, "SCDynamicStoreSetValue");
  SCDynamicStoreCopyValue_t fn_CopyValue = (SCDynamicStoreCopyValue_t)dlsym(h, "SCDynamicStoreCopyValue");
+ int (*fn_Error)(void)=(int (*)(void))dlsym(h,"SCError");
+ sc_write_failures=0;
  if (!fn_Create || !fn_SetValue) {
   fprintf(stderr, "SCDynamicStore symbols unavailable\n");
   dlclose(h);
@@ -302,20 +327,21 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
  const void *dns_k[4] = { CFSTR("ServerAddresses"), CFSTR("__CONFIGURATION_ID__"), CFSTR("__FLAGS__"), CFSTR("__ORDER__") };
  const void *dns_v[4] = { cf_dns_arr, cf_cfgid, cf_flags, cf_order };
  CFDictionaryRef cf_dns_dict = CFDictionaryCreate(NULL, dns_k, dns_v, 4, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
- fn_SetValue(ds, CFSTR("State:/Network/Global/DNS"), cf_dns_dict);
+ sc_set_observed(fn_SetValue,fn_Error,ds, CFSTR("State:/Network/Global/DNS"), cf_dns_dict);
 
  const void *order_v[1] = { cf_svcid };
  CFArrayRef order_arr = CFArrayCreate(NULL, order_v, 1, &kCFTypeArrayCallBacks);
  const void *setup_gipv4_k[1] = { CFSTR("ServiceOrder") };
  const void *setup_gipv4_v[1] = { order_arr };
  CFDictionaryRef cf_setup_gipv4_dict = CFDictionaryCreate(NULL, setup_gipv4_k, setup_gipv4_v, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
- fn_SetValue(ds, CFSTR("Setup:/Network/Global/IPv4"), cf_setup_gipv4_dict);
+ sc_set_observed(fn_SetValue,fn_Error,ds, CFSTR("Setup:/Network/Global/IPv4"), cf_setup_gipv4_dict);
  CFRelease(cf_setup_gipv4_dict); CFRelease(order_arr);
 
  const void *gipv4_k[3] = { CFSTR("PrimaryInterface"), CFSTR("PrimaryService"), CFSTR("Router") };
  const void *gipv4_v[3] = { cf_ifname, cf_svcid, cf_gw };
  CFDictionaryRef cf_gipv4_dict = CFDictionaryCreate(NULL, gipv4_k, gipv4_v, 3, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
- fn_SetValue(ds, CFSTR("State:/Network/Global/IPv4"), cf_gipv4_dict);
+ sc_set_observed(fn_SetValue,fn_Error,ds, CFSTR("State:/Network/Global/IPv4"), cf_gipv4_dict);
+ sc_readback_observed(fn_CopyValue,ds,CFSTR("State:/Network/Global/IPv4"),"immediate");
 
  const void *addrs_v[1] = { cf_ip };
  CFArrayRef cf_addrs_arr = CFArrayCreate(NULL, addrs_v, 1, &kCFTypeArrayCallBacks);
@@ -327,15 +353,17 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
  CFDictionaryRef cf_sipv4_dict = CFDictionaryCreate(NULL, sipv4_k, sipv4_v, 6, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 
  CFStringRef cf_svc_ipv4 = CFStringCreateWithFormat(NULL, NULL, CFSTR("State:/Network/Service/%s/IPv4"), svc_id);
- fn_SetValue(ds, cf_svc_ipv4, cf_sipv4_dict);
+ sc_set_observed(fn_SetValue,fn_Error,ds, cf_svc_ipv4, cf_sipv4_dict);
+ sc_readback_observed(fn_CopyValue,ds,cf_svc_ipv4,"immediate");
 
  const void *sdns_k[1] = { CFSTR("ServerAddresses") };
  const void *sdns_v[1] = { cf_dns_arr };
  CFDictionaryRef cf_sdns_dict = CFDictionaryCreate(NULL, sdns_k, sdns_v, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
  CFStringRef cf_svc_dns = CFStringCreateWithFormat(NULL, NULL, CFSTR("State:/Network/Service/%s/DNS"), svc_id);
- fn_SetValue(ds, cf_svc_dns, cf_sdns_dict);
+ sc_set_observed(fn_SetValue,fn_Error,ds, cf_svc_dns, cf_sdns_dict);
+ sc_readback_observed(fn_CopyValue,ds,cf_svc_dns,"immediate");
  CFStringRef cf_setup_svc_dns = CFStringCreateWithFormat(NULL, NULL, CFSTR("Setup:/Network/Service/%s/DNS"), svc_id);
- fn_SetValue(ds, cf_setup_svc_dns, cf_sdns_dict);
+ sc_set_observed(fn_SetValue,fn_Error,ds, cf_setup_svc_dns, cf_sdns_dict);
  CFRelease(cf_setup_svc_dns); CFRelease(cf_svc_dns); CFRelease(cf_sdns_dict);
 
  pid_t sp_pid;
@@ -350,14 +378,14 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
  const void *rank_v[1] = { CFSTR("First") };
  CFDictionaryRef cf_rank_dict = CFDictionaryCreate(NULL, rank_k, rank_v, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
  CFStringRef cf_svc_rank = CFStringCreateWithFormat(NULL, NULL, CFSTR("State:/Network/Service/%s"), svc_id);
- fn_SetValue(ds, cf_svc_rank, cf_rank_dict);
+ sc_set_observed(fn_SetValue,fn_Error,ds, cf_svc_rank, cf_rank_dict);
  CFRelease(cf_svc_rank); CFRelease(cf_rank_dict);
 
  const void *if_ipv4_k[2] = { CFSTR("Addresses"), CFSTR("SubnetMasks") };
  const void *if_ipv4_v[2] = { cf_addrs_arr, cf_masks_arr };
  CFDictionaryRef cf_if_ipv4_dict = CFDictionaryCreate(NULL, if_ipv4_k, if_ipv4_v, 2, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
  CFStringRef cf_if_ipv4 = CFStringCreateWithFormat(NULL, NULL, CFSTR("State:/Network/Interface/%s/IPv4"), name);
- fn_SetValue(ds, cf_if_ipv4, cf_if_ipv4_dict);
+ sc_set_observed(fn_SetValue,fn_Error,ds, cf_if_ipv4, cf_if_ipv4_dict);
 
  int lq_val = 100;
  CFNumberRef cf_lq = CFNumberCreate(NULL, kCFNumberIntType, &lq_val);
@@ -365,7 +393,7 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
  const void *lq_v[1] = { cf_lq };
  CFDictionaryRef cf_lq_dict = CFDictionaryCreate(NULL, lq_k, lq_v, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
  CFStringRef cf_if_lq = CFStringCreateWithFormat(NULL, NULL, CFSTR("State:/Network/Interface/%s/LinkQuality"), name);
- fn_SetValue(ds, cf_if_lq, cf_lq_dict);
+ sc_set_observed(fn_SetValue,fn_Error,ds, cf_if_lq, cf_lq_dict);
 
  CFRelease(cf_if_lq); CFRelease(cf_lq_dict); CFRelease(cf_lq);
 
@@ -392,13 +420,17 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
  CFDictionarySetValue(cf_link, CFSTR("Active"), kCFBooleanTrue);
 
  CFStringRef cf_if_link = CFStringCreateWithFormat(NULL, NULL, CFSTR("State:/Network/Interface/%s/Link"), name);
- fn_SetValue(ds, cf_if_ap, cf_ap);
- fn_SetValue(ds, cf_if_link, cf_link);
- fn_SetValue(ds, CFSTR("State:/Network/Interface/en0/AirPort"), cf_ap);
- fn_SetValue(ds, CFSTR("State:/Network/Interface/en0/Link"), cf_link);
+ sc_set_observed(fn_SetValue,fn_Error,ds, cf_if_ap, cf_ap);
+ sc_set_observed(fn_SetValue,fn_Error,ds, cf_if_link, cf_link);
+ sc_set_observed(fn_SetValue,fn_Error,ds, CFSTR("State:/Network/Interface/en0/AirPort"), cf_ap);
+ sc_set_observed(fn_SetValue,fn_Error,ds, CFSTR("State:/Network/Interface/en0/Link"), cf_link);
  CFRelease(cf_if_ap); CFRelease(cf_if_link);
  CFRelease(cf_ap); CFRelease(cf_link);
 
+ sc_readback_observed(fn_CopyValue,ds,CFSTR("State:/Network/Global/IPv4"),"end");
+ sc_readback_observed(fn_CopyValue,ds,cf_svc_ipv4,"end");
+ CFStringRef check_dns=CFStringCreateWithFormat(NULL,NULL,CFSTR("State:/Network/Service/%s/DNS"),svc_id);
+ sc_readback_observed(fn_CopyValue,ds,check_dns,"end");CFRelease(check_dns);
  (void)notify_post("com.apple.system.config.network_change");
  (void)notify_post("com.apple.system.SystemConfiguration.dns_configuration");
  (void)notify_post("com.apple.system.SystemConfiguration.network_change");
@@ -412,7 +444,7 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
  CFRelease(cf_gipv4_dict); CFRelease(cf_dns_dict); CFRelease(cf_dns_arr);
  CFRelease(cf_dns); CFRelease(cf_gw); CFRelease(cf_mask); CFRelease(cf_ip); CFRelease(cf_svcid); CFRelease(cf_ifname);
  dlclose(h);
- puts("SCDynamicStore system DNS and primary IPv4 service published");
+ printf("SCDynamicStore publication attempted; rejected writes=%u (no retries added)\n",sc_write_failures);
  return 1;
 }
 

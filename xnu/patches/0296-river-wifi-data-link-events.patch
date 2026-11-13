@@ -1,0 +1,77 @@
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -10,6 +10,9 @@
+ #include <sys/kpi_mbuf.h>
+ #include <sys/sockio.h>
+ #include <net/if.h>
++#include <net/if_var.h>
++#include <sys/kern_event.h>
++#include <net/net_kev.h>
+ #include <net/bpf.h>
+ #include <net/if_types.h>
+ #include <net/ethernet.h>
+@@ -3007,6 +3010,55 @@
+   (void)river_target_link(river_smd_smem,river_smd_wlan_info,river_smd_wlan_fifo,river_smd_ipc,0);
+  }
+ }
++/* Only the WCNSS worker drains physical link transitions. Apple80211 events
++ * serve wifid; configd/protocols also need standard data-link notifications.
++ * Never call ifnet_event while holding Apple generation or net-queue locks. */
++static bool river_link_notified;
++static uint64_t river_link_notified_generation;
++static void
++river_network_link_event(ifnet_t ifp, bool up)
++{
++ union {
++  struct kern_event_msg alignment;
++  uint8_t bytes[KEV_MSG_HEADER_SIZE+sizeof(struct net_event_data)];
++ } storage={0};
++ struct kern_event_msg *event=(void *)storage.bytes;
++ struct net_event_data *about=(void *)(storage.bytes+KEV_MSG_HEADER_SIZE);
++ event->total_size=sizeof(storage.bytes);
++ event->vendor_code=KEV_VENDOR_APPLE;event->kev_class=KEV_NETWORK_CLASS;
++ event->kev_subclass=KEV_DL_SUBCLASS;event->event_code=up?KEV_DL_LINK_ON:KEV_DL_LINK_OFF;
++ about->if_family=ifnet_family(ifp);about->if_unit=ifnet_unit(ifp);
++ strlcpy(about->if_name,ifnet_name(ifp),sizeof(about->if_name));
++ errno_t error=ifnet_event(ifp,event);
++ if(error)printf("RIVER NET: data-link event %s error=%d\n",up?"ON":"OFF",error);
++}
++static void
++river_network_link_events(void)
++{
++ ifnet_t ifp=river_wifi_ifp;
++ /* The driver retains its allocation reference; hold another across callbacks. */
++ if(!ifp || ifnet_reference(ifp))return;
++ /* Reentrant observers may cancel a join. Re-read after each delivered event;
++  * bounded draining leaves any further changes for the next worker tick. */
++ for(unsigned pass=0;pass<4;pass++) {
++  uint64_t generation=__atomic_load_n(&river_connection_generation,__ATOMIC_ACQUIRE);
++  bool allowed=river_apple80211_data_allowed(generation);
++  lck_mtx_lock(river_net_lock);bool live=river_net_live;lck_mtx_unlock(river_net_lock);
++  bool up=allowed && live;
++  if(river_link_notified && (!up || generation!=river_link_notified_generation)) {
++   river_link_notified=false;
++   river_network_link_event(ifp,false);
++  } else if(!river_link_notified && up) {
++   /* Linearize this notification at a final generation check. Cancellation
++    * racing unlocked delivery is reconciled by OFF on the next pass. */
++   if(!river_apple80211_data_allowed(generation) ||
++      generation!=__atomic_load_n(&river_connection_generation,__ATOMIC_ACQUIRE))continue;
++   river_link_notified_generation=generation;river_link_notified=true;
++   river_network_link_event(ifp,true);
++  } else break;
++ }
++ (void)ifnet_release(ifp);
++}
+ static void
+ river_connection_abandon(void)
+ {
+@@ -3155,6 +3207,7 @@
+     river_apple80211_scan_done(0);
+    }
+    river_connection_service();
++   river_network_link_events();
+    river_network_poll();
+    if (river_wpa.pending_len && river_smd_smem && river_smd_wlan_info)
+     river_wpa_step(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc);

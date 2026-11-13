@@ -28,6 +28,8 @@ with tempfile.TemporaryDirectory(prefix='river-wifi-state-') as tmp:
     has_result_abi='RIVER_ASSOC_SUCCESS' in engine
     if has_result_abi:
         engine='#define HOST_RESULT_ABI 1\n'+engine
+    if 'river_network_link_events(' in (d/'bsd/dev/sweet_keys.c').read_text():
+        engine='#define HOST_LINK_EVENTS 1\n'+engine
     (d/'river-wifi-engine.h').write_text(engine)
     driver=(d/'bsd/dev/sweet_keys.c').read_text()
     start=driver.index('static void\nriver_target_rx(');end=driver.index('static uint32_t\nriver_bd_word',start)
@@ -38,6 +40,9 @@ with tempfile.TemporaryDirectory(prefix='river-wifi-state-') as tmp:
     (d/'river-wifi-worker.h').write_text(driver[start:end])
     poll=driver[driver.index('static void\nriver_wcnss_thread('):driver.index('static void\nriver_gpu_probe(')]
     assert poll.index('river_connection_service();')<poll.index('river_network_poll();')
+    if 'river_network_link_events();' in poll:
+        assert poll.index('river_connection_service();')<poll.index('river_network_link_events();')<poll.index('river_network_poll();')
+        assert 'ifnet_event(' not in rx
     binary=d/'wifi-state'
     subprocess.run(['cc','-O2','-Wall','-Wextra','-Werror','-Wno-unused-function','-Wno-unused-variable','-I',tmp,
                     str(r/'tools/tests/river-wifi-state-host.c'),'-o',str(binary)],check=True)

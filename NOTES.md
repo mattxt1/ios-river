@@ -5,6 +5,47 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Wi-Fi Settings completion and bound HTTP verified; DNS unresolved (2026-11-13)
+
+- bb395d6 temporary boot product/hash verified; iOS responsive, USB enumerated
+  without reconnect. Early UDP logs verify exact RPMACK1, staleACK1ignored for
+  request2, then exactACK2. Retained buffer1MiB verified in kernel log.
+- User joined: initially spinner/noerror, later confirmed Settings checkmark.
+  Direct scalar query state4/result1 verifies0295 completion ABI correction.
+  en0 has IPv4 and running state. Basic UI joining is now observed successful;
+  repeat/reconnect/endurance remain pending.
+- Read-only route/SC inspection initially found only one en0default route,
+  missing connected/local routes and absent State serviceIPv4/DNS/globalIPv4.
+  Actual preferences ConfigMethodDHCP and monitored river-net --default job
+  disprove previous Manual-origin hypothesis. Log claimsDHCPACK/route/SCsuccess
+  but oldhelper ignores SCwrite return values. No private addresses in docs.
+- Backed up installed river-net to work/network-config/river-net-before-observer,
+ 71728bytes,SHA256807a0190cac9c3dbb3ce685418f0235af95dc025b9192ba0275fa93dbb7b44ba.
+  Prepared diagnostic-only observer signed using unchanged installed identifier
+  and exactentitlements. Atomic staged replacement and restart ofonlyexisting
+  KeepAlivePID48. NoextraSCwrites/retries/routes/preferences edits introduced.
+  Observer allwritesaccepted1/error0,serviceIPv4/DNSpresentimmediate/end,
+  globalIPv4absentimmediate/end. Later routeinspect has11en0records inclonlink.
+  Noindependentcausalclaimthatobserver/restartcausedSettingscheckmark.
+- Wi-Fi-bound numeric AppleHTTPprobe passed: verifieden0index8,HTTP200,
+ 453bytes,expectedAppleSuccess marker. ActualWi-Fipacket/HTTPpath works now.
+  getaddrinfo stillEAI_NONAME. DNS/NWIreadonlySPIinspection: en0IPv4+DNSflags,
+  generalIPv4ranklistEMPTY/globalreach0; defaultresolverscontainnonameservers;
+  scopedWi-FiresolverhasAqueryflag/nameservers. Noend-to-endDNS/TLSclaim.
+  ExistingDNSflag2meansAqueries,notScoped; don'tremovebasedonguess.
+- Newreadonly river-network-config-state and river-dns-state sources compiled,
+  signed and deployed. Privateevidence work/network-config/selected-state*,
+  dns-state-bb395d6.txt,numeric-http-after-observer.json,river-net-after-observer.log.
+-0296 adds actualtransition-only standard KEV_DL_LINK_ON/OFF afterworker
+  connectionservice,beforeTX; noAppleengine/netlocksheldoverifnet_event.
+  Correctpayloadsize/offsetandactualinterfaceidentity,ifnetrefsacrosscallbacks,
+  boundedreentrantcancellationreconciliation. Rootactualregressionspassed
+ 0289+0292→0296inclnewGET21/events,reentrantcallbacks,balancedrefs.
+  This fixesnativephysical-linknotificationcontract,notyetverifiedDNSfix.
+- Nextfull0296buildwhileagentinspectsprimaryservice/rankeligibility. Keep
+  approvedSSHaccesswithoutnewpermissionprompts. Audio nextmilestone remains
+  realPCMthroughADSPthenmicrophone; exactRPMreplyprerequisite nowliveverified.
+
 ##0295 full build/image ready; awaiting fastboot (2026-11-13)
 
 - Source bb395d6967125c06e9f16064fde2176de65c90ff (through0295) built

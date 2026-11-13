@@ -53,7 +53,8 @@ startup contingent on ACK success; that existing startup policy is separate.
 The combined4d238b8 full kernel build passed and its temporary image is packaged
 and verified. Volume-register validation passed on the phone. Early RPM ACK messages were
 missed during USB enumeration and had rotated out of the128KiB retained log;
-exact-ID runtime ACK validation remains pending. The next temporary image
+exact-ID runtime ACK validation subsequently passed on bb395d6: ACK1,
+staleACK1 ignored while awaiting2, then ACK2. The next temporary image
 uses the supported msgbuf argument to retain1MiB for those diagnostics.
 
 ## Verified progress and remaining work (2026-11-13)

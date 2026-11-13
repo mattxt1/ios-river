@@ -204,3 +204,12 @@ ABI or error-mapping change. Patch0293 corrects signed amplifier attenuation
 and verifies the level before unmuting. Both pass host checks and the a6de705 full build; their device checks are pending.
 Exact RPM reply validation0294 also built successfully; the combined temporary image is ready. Physical audio playback/capture remain unimplemented.
 
+
+Latest bb395d6 validation: Settings checkmark and public association result1
+verified. Wi-Fi-bound numeric Apple HTTP returned200 with expected content.
+Ordinary DNS still fails: only a scoped Wi-Fi resolver is available and the
+native general IPv4 list is empty.0296 adds missing standard link transition
+events with passing host coverage; full build and device validation pending.
+The diagnostic-only DHCP observer retains existing configuration operations;
+its original on-phone binary is backed up. This is partial networking success,
+not a DNS/TLS or long-term reliability milestone.
