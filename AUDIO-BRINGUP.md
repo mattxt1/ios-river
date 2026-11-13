@@ -48,7 +48,11 @@ Run the snapshot before the test, and do not consume the shared one-shot with
 repeatedly returned `phase=i2s_snapshot error=5 attempted=0` with SPI pins
 restored. The amplifier survey retained expected ID and idle register values.
 No clock test was triggered. Patch0279 reports the precise failing snapshot
-stage/register/values without relaxing guards; its hardware result is pending.
+stage/register/values without relaxing guards; on hardware it captured GPIO CTRL1 changing0xa001→0x2001 (only live
+GP_LVL bit15). Patch0280 excludes that live bit from configuration comparisons
+and explicitly selects native AIF1 mux from the observed GPIO-input defaults.
+It still rejects active interfaces, GPIO outputs and other pin functions.
+Muted clock-test hardware result is pending.
 
 ## Current continuation
 

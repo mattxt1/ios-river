@@ -10,11 +10,16 @@
 - Verified fastboot productriver and temporarily booted diagnostic image
   `river-muted-i2s-diag-7d8cfc6.img` successfully. No partition flashed.
 - Both codec/FLL and combined I2S snapshot succeeded on this boot; the earlier
-  snapshot failure has not reproduced and its original cause remains unknown.
+  snapshot initially succeeded; later repeated reads identified the failure below.
 - Exact AIF baseline: sys0x404 sr0x11 bclk0xc txpin0 rxpin0 rate0 fmt0
   bcpf0x40 txwl/rxwl0x1818 txen/rxen0; GP9=0x2001,0xf000 and
   GP11=0xa001,0xf000. Amp power0x21 mute0 fmt0x20200233 PLL0x833
   rawIRQ3=0x20000010. Endpoint flags3. No I2S test triggered.
+- Three further read-only snapshots reproduced the failure with precise
+  diagnostics: GPIO9 CTRL1(0x1710) or GPIO11 CTRL1(0x1714) changed from
+  0xa001 to0x2001: only GP_LVL bit15 changed, configuration stayed identical.
+  This directly establishes a live-status comparison failure in0278/0279.
+  All runs reported attempted0, route_touched0 and pins_restored1.
 - Existing guard requires FN0; observed pins are FN1 GPIO inputs. Cirrus
   CS47L35 datasheet DS1085F2 sections4.14.1–4.14.3, tables4-83/4-85 confirm
   FN0 selects native AIF1 BCLK(GPIO9)/LRCLK(GPIO11), FN1 ordinary GPIO.
@@ -27,6 +32,16 @@
   disabled. Cleanup selects ordinary GPIO input before restoring AIF state
   and amplifier. Ignores only volatile GP_LVL in configuration comparisons;
   all function/direction/pull and other register checks remain exact.
+- Committed source `de1aa7f9be6c98c215ac2fdea4bf222271fd3007`; host tests
+  passed (volatile GP_LVL, native pin mux before lock, unexpected functions
+  and output rejection with zero codec/amp/PMIC writes, all prior rollback
+  fault cases). Local build succeeded, kernel SHA256
+  `2ed8c056a7d1fd36b09ed3cd1778bc7b7ea4918b2f3e1fc49e436f3466948d86`.
+- Packaged `outputs/river-muted-i2s-pinmux-de1aa7f.img`: 26,626,048 bytes,
+  cmdline562, SHA256
+  `8ae09c9a7e3256d96b68007a7dfa4ac2729be16c2b6537455812b0121bcf7d02`.
+  Payload checks passed. Waiting for user fastboot coordination; muted I2S
+  clock-lock test has not yet run.
 
 ## Muted I2S baseline blocked before clock writes (2026-11-12)
 
