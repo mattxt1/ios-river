@@ -12,10 +12,11 @@ parts of the port. Do not rely on the device to protect personal data or use it
 for sensitive accounts. Battery capacity remains a voltage/current estimate;
 charging-policy validation is incomplete.
 
-Updated November 13, 2026. Kernel4d238b8 is the latest device-tested build.
+Updated November 13, 2026. `4d238b8` is the latest device-tested kernel.
 The follow-up4d238b8 kernel through0294 built and packaged successfully;
 its amplifier register checks passed, while Wi-Fi completed WPA but still
-reported pending to iOS.0295 corrects that result code; device validation is pending. Source changes can be newer than the last phone test; see [NOTES.md](NOTES.md)
+reported pending to iOS.0295 corrects that result code; its full build and diagnostic image packaging
+passed. Device validation is pending. Source changes can be newer than the last phone test; see [NOTES.md](NOTES.md)
 for dated evidence, build IDs, hashes, limitations, and later observations.
 [RIVER.md](RIVER.md) contains the detailed chronological bring-up narrative.
 

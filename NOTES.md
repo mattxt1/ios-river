@@ -5,6 +5,37 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+##0295 full build/image ready; awaiting fastboot (2026-11-13)
+
+- Source bb395d6967125c06e9f16064fde2176de65c90ff (through0295) built
+  successfully in work/build/river-bb395d696712-G4xC1y. Numbered patches all
+  applied. Kernel SHA256 f2bb6ef50d9be9c59ba47b0e143bcb6b2349dd39a34a887c50e5e697580cf38b.
+- Packaged outputs/river-wifi-result-bb395d6.img from verified4d238b8 base,
+  unchanged audio helpers, and supported msgbuf=1048576. All payload kernel
+  segments verified. Image26,697,728bytes, command line577; SHA256
+ 80c8107de334a303cadb6060ed8480b0551c617ecc2a7e7f7a575bed8aec4c4d.
+  Manifest outputs/wifi-result-build-manifest.json. No boot yet.
+- Async physical-action question asks user to return River to fastboot.
+  The next runtime checks are direct scalar association result1, Settings
+  completion/checkmark, DHCP/configuration and default-route/DNS/en0-bound
+  connectivity. No manually configured route/DNS workaround has been used.
+- Read-only river-wifi-state already independently proved old joined4 /
+  pending0 mismatch. HTTP probes failed DNS and then Network is unreachable
+  on both numeric Apple targets bound to en0; no Internet success claimed.
+- Updated river-kmsg also reports actual kern.msgbuf capacity on stderr,
+  while stdout remains a raw bounded read. Wi-Fi probe now exits124 with a
+  clear diagnostic if its global20s deadline expires. These helper-only changes
+  compile with warnings-as-errors and are signed; deploy updated binaries on
+  the next boot before interpreting new diagnostic metadata.
+- After fastboot: verify product/hash, temporary boot, begin USB log receiver
+  and obtain a retained log as soon as SSH is available. Read-only logging
+  is safe before UI confirmation; device controls still wait for responsive
+  home screen. If USB fails to enumerate, a cable reconnect restored this boot.
+  Do not repeat permission requests for the specifically approved SSH key.
+- Audio volume register checks passed and baseline restored on4d238b8; exact
+  RPM runtime ACK validation still pending early-log recovery. ADSP startup
+  and physical playback/capture remain the outstanding audio milestone.
+
 ##0294 live checks passed; Wi-Fi completion ABI fix prepared (2026-11-13)
 
 - User confirmed responsive iOS after4d238b8 temporary boot. Mac initially

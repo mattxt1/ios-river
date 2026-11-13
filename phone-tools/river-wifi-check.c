@@ -12,6 +12,14 @@
 #include <string.h>
 #include <errno.h>
 
+static void expired(int signo)
+{
+ (void)signo;
+ const char message[]="Wi-Fi probe exceeded 20 seconds\n";
+ (void)write(STDERR_FILENO,message,sizeof(message)-1);
+ _exit(124);
+}
+
 int main(int argc, char **argv)
 {
  if (argc > 2) { fputs("usage: river-wifi-check [resolved-Apple-IPv4]\n",stderr); return 2; }
@@ -19,6 +27,7 @@ int main(int argc, char **argv)
  if (argc == 2 && inet_pton(AF_INET,argv[1],&numeric) != 1) {
   fputs("Expected numeric IPv4 address\n",stderr); return 2;
  }
+ signal(SIGALRM, expired);
  alarm(20); /* Bounds DNS, connect and all I/O together. */
  signal(SIGPIPE, SIG_IGN);
  unsigned index = if_nametoindex("en0");

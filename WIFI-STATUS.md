@@ -64,7 +64,7 @@ Coverage includes stale completion and stale link-loss rejection; exact BSSID se
 
 ## Still unresolved
 
-- Build and temporarily boot patch0295; confirm successful GET21 result1, Settings checkmark and a real configured DHCP lease. Patch0292 device validation already proved WPA/protected-packet success. Reconnect under AP loss, wrong credentials, repeated Settings joins, radio toggles and UI error reporting remain unverified.
+- Full bb395d6 build through0295 passed. Temporarily boot the prepared image; confirm successful GET21 result1, Settings checkmark and a real configured DHCP lease. Patch0292 device validation already proved WPA/protected-packet success. Reconnect under AP loss, wrong credentials, repeated Settings joins, radio toggles and UI error reporting remain unverified.
 - The fixed-size 32-entry BSS cache has no expiry/replacement policy. Target lookup/recovery uses cached records; fresh scan scheduling and channel changes are not solved by this patch.
 - The UI target path synthesizes a WPA2 RSN choice and marks rates/security accepted. It needs capability validation comparable to the strict beacon-selection path. Current support remains narrow WPA2 PSK/CCMP; this is not WPA3/enterprise/roaming support.
 - A stuck TX DMA ring still needs explicit, verified recovery. Clearing its stalled flag during a new join is insufficient.
@@ -90,3 +90,5 @@ and verified to en0. No route/DNS override was applied. Internet connectivity
 is therefore not verified.0295 must be checked for result1, a Settings
 checkmark and actual Wi-Fi-bound connectivity, rather than only packet-probe
 or address presence. Helper captures remain private under workspace work/.
+
+The bb395d6 image is packaged and verified with a 1 MiB retained kernel log (577-byte command line). UI/result-code, route/DNS and Internet validation remain pending.

@@ -5,12 +5,16 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/sysctl.h>
 
 extern int proc_kmsgbuf(void *, uint32_t);
 
 int main(void)
 {
  static char buffer[1024 * 1024];
+ int capacity=0; size_t size=sizeof(capacity);
+ if (!sysctlbyname("kern.msgbuf",&capacity,&size,NULL,0))
+  fprintf(stderr,"kernel_message_buffer_capacity=%d\n",capacity);
  int count = proc_kmsgbuf(buffer, sizeof(buffer));
  if (count < 0) { perror("proc_kmsgbuf"); return 1; }
  if ((unsigned)count > sizeof(buffer)) {
