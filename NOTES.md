@@ -5,6 +5,44 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Physical PCM transport: stock ADSP firmware recovered (2026-11-12)
+
+- User authorized real PCM playback next, then microphone capture, continuing
+  toward physical iOS audio in/out. Current clock path is verified; kernel
+  output remains discarded and input synthetic. No acoustic result claimed.
+- Android source pin2dba45b8 uses Madera SLIMbus with Q6AFE/Q6ASM/ADSP;
+  `slim-msm-ngd.c` waits for ADSP/QMI. No River ADSP bootstrap or audio APR
+  transport currently exists. Existing Wi-Fi supplies reusable SCM and SMD
+  machinery. No direct LPASS MMIO access was attempted (prior r153 abort).
+- Read `/image/adsp.mdt` and fifteen nonempty split files using existing
+  read-only rget/ext4 reader on `/dev/remmc0s20` (preserved modem_b); no device
+  partition/root data was modified. Private files remain outside Git under
+  `work/pcm-transport/private-adsp`. Helper shell has no ls/cat; use installed
+  rget/rput and purpose-built tools rather than assuming desktop utilities.
+- New `tools/river-adsp-fw.py` validates ELF32 Hexagon headers, split sizes,
+  packed MDT/header/hash identity, embedded per-file SHA256, relocatable
+  non-overlapping ranges and exact 17MiB extent. All stock nonempty file
+  hashes match. This checks extraction integrity, not secure authentication.
+- Pinned DT (`msm8953.dtsi`) ADSP PAS1, carveout0x8d600000+0x1100000.
+  Firmware linked0x8a200000..0x8b300000, relocate+0x3400000. Metadata SHA256
+  3aae7a57e5a417465cd435d25cb3343dd81b7088f2f77434c6002f88de1fcd00.
+  Offline image/metadata staging only; no PAS init/mem/reset call occurred.
+- Patch0282 adds explicit `river-adsp-status --probe`, passive default result,
+  and a mutex. Only queries PAS1 support and availability of init/mem/auth
+  calls. Reads only the already-retained Wi-Fi SMEM mapping; bounds/stability
+  checks legacy table13/266 APPS↔ADSP edge1 descriptors and primary-table
+  channel states. No fresh MMIO mappings, LPASS, firmware-memory, channel,
+  clock, supply or reset writes. Absent channels do not prove DSP is off.
+- Host checks passed for SCM allowlist, unchanged SMEM contents, missing map,
+  failed queries, invalid heap/descriptor/aux ranges, malformed channel names,
+  foreign edges and state layout; firmware corruption, wrong architecture,
+  overlap and incorrect carveout extent are rejected. iOS status helper
+  compiled with warnings-as-errors and ad-hoc signed. Build/boot pending.
+- Remaining prerequisites before physical PCM: ADSP secure loading with its
+  source-derived CX/XO/crypto proxy requirements, SMP2P readiness, APR/QMI,
+  Q6AFE/Q6ASM + SLIMbus channel configuration, paced buffer lifecycle, codec
+  data routing, and low-level acoustic playback. Then microphone path/capture.
+
 ## Muted codec-to-amplifier I2S clock test passed (2026-11-12)
 
 - User returned River to fastboot. Verified productriver, temporary boot of

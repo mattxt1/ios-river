@@ -1,0 +1,127 @@
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -4540,6 +4540,7 @@
+ SYSCTL_PROC(_debug, OID_AUTO, river_audio_prereq, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
+             NULL, 0, river_audio_prereq_sysctl, "A", "River read-only codec prerequisites");
+ #include "river_codec_probe.h"
++#include "river_adsp_probe.h"
+ static uint64_t
+ ri_ns_since(uint64_t t0)
+ {
+diff --git a/bsd/dev/river_adsp_probe.h b/bsd/dev/river_adsp_probe.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/river_adsp_probe.h
+@@ -0,0 +1,111 @@
++/* Explicit read-only ADSP prerequisites. No LPASS, reset, firmware-memory,
++ * regulator, clock, SMEM state or channel writes. Uses retained SMEM map. */
++static LCK_GRP_DECLARE(ri_adsp_grp, "river-adsp-probe");
++static LCK_MTX_DECLARE(ri_adsp_lock, &ri_adsp_grp);
++static char ri_adsp_note[8192] = "not requested";
++
++static bool
++ri_adsp_item(vm_offset_t smem, unsigned id, uint32_t freeoff,
++    uint32_t *offset, uint32_t *length)
++{
++ const unsigned size=0x100000, ent=0xd0+id*16;
++ if(id>=512 || ent+16>size) return false;
++ uint32_t allocated=ri_rd(smem,ent), off=ri_rd(smem,ent+4);
++ uint32_t len=ri_rd(smem,ent+8), aux=ri_rd(smem,ent+12);
++ if(allocated!=1 || aux || (off&3) || off<ent+16 || off>=freeoff ||
++     !len || len>freeoff-off || freeoff>size) return false;
++ /* Refuse descriptors changing during observation. Never follow aux memory. */
++ if(ri_rd(smem,ent)!=allocated || ri_rd(smem,ent+4)!=off ||
++    ri_rd(smem,ent+8)!=len || ri_rd(smem,ent+12)!=aux) return false;
++ *offset=off;*length=len;return true;
++}
++static int
++ri_adsp_probe_impl(void)
++{
++ uint64_t available[3]={0}, supported=0;
++ int64_t status[3];
++ const unsigned commands[]={1,2,5};
++ for(unsigned i=0;i<3;i++)
++  status[i]=river_scm(6,1,1,0x42000200u|commands[i],0,0,&available[i]);
++ int64_t support_status=river_scm(2,7,1,1,0,0,&supported);
++ snprintf(ri_adsp_note,sizeof(ri_adsp_note),
++     "probe=1 pas_id=1 support_status=%lld supported=%llu init_query=%lld,%llu mem_query=%lld,%llu auth_query=%lld,%llu firmware_started=unverified pcm_transport=0",
++     (long long)support_status,(unsigned long long)supported,
++     (long long)status[0],(unsigned long long)available[0],
++     (long long)status[1],(unsigned long long)available[1],
++     (long long)status[2],(unsigned long long)available[2]);
++ int error=(support_status || status[0] || status[1] || status[2])?EIO:0;
++ vm_offset_t smem=river_smd_smem;
++ size_t n=strlen(ri_adsp_note);
++ if(!smem) {
++  snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n," smem=unavailable retained_map_only=1");
++  return error;
++ }
++ const unsigned size=0x100000;
++ uint32_t init=ri_rd(smem,0xc0), freeoff=ri_rd(smem,0xc4), avail=ri_rd(smem,0xc8);
++ bool valid=init==1 && freeoff>=0x2000 && freeoff<=size && avail<=size-freeoff;
++ snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n,
++     " smem_valid=%u smem_init=%#x smem_free=%#x smem_available=%#x",valid,init,freeoff,avail);
++ if(!valid) return EIO;
++ unsigned channels=0, apr=0, tables=0, malformed=0;
++ const unsigned ids[]={13,266};
++ for(unsigned t=0;t<2;t++) {
++  uint32_t off=0,len=0;
++  if(!ri_adsp_item(smem,ids[t],freeoff,&off,&len) || len<64*32) continue;
++  tables++;
++  for(unsigned i=0;i<64;i++) {
++   unsigned e=off+i*32;
++   uint32_t cid=ri_rd(smem,e+20), flags=ri_rd(smem,e+24), refs=ri_rd(smem,e+28);
++   if(!refs || (flags&255)!=1) continue; /* APPS<->ADSP edge only */
++   char name[21];bool terminated=false;
++   for(unsigned j=0;j<20;j++) {
++    unsigned char c=*(volatile unsigned char *)(smem+e+j);
++    if(!c) terminated=true;
++    name[j]=terminated?0:(c>=0x20&&c<=0x7e?(char)c:'?');
++   }
++   name[20]=0;
++   if(cid>=64 || !terminated || !name[0] || ri_rd(smem,e+28)!=refs ||
++      ri_rd(smem,e+24)!=flags || ri_rd(smem,e+20)!=cid) {malformed++;continue;}
++   channels++;
++   if(!strncmp(name,"apr",3) || !strncmp(name,"APR",3)) apr++;
++   uint32_t info=0, ilen=0, tx=0, rx=0;
++   bool state=ids[t]==13 && ri_adsp_item(smem,14+cid,freeoff,&info,&ilen) && (ilen==40||ilen==88);
++   if(state) {tx=ri_rd(smem,info);rx=ri_rd(smem,info+ilen/2);}
++   n=strlen(ri_adsp_note);
++   if(sizeof(ri_adsp_note)-n<192) {
++    snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n," channels_truncated=1");
++    continue;
++   }
++   snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n,
++       "\nchannel table=%u slot=%u cid=%u name=%s refs=%u states_read=%u tx=%u rx=%u",
++       ids[t],i,cid,name,refs,state,tx,rx);
++  }
++ }
++ n=strlen(ri_adsp_note);
++ snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n,
++     "\nlegacy_tables=%u adsp_channels=%u apr_channels=%u malformed=%u no_channels_does_not_prove_dsp_off=1",tables,channels,apr,malformed);
++ return error;
++}
++static int
++river_adsp_probe_sysctl SYSCTL_HANDLER_ARGS
++{
++ int request=0,error=sysctl_handle_int(oidp,&request,0,req);
++ if(error||!req->newptr) return error;
++ if(request!=1) return EINVAL;
++ lck_mtx_lock(&ri_adsp_lock);
++ error=ri_adsp_probe_impl();
++ lck_mtx_unlock(&ri_adsp_lock);
++ return error;
++}
++static int
++river_adsp_status_sysctl SYSCTL_HANDLER_ARGS
++{
++ lck_mtx_lock(&ri_adsp_lock);
++ int error=sysctl_handle_string(oidp,ri_adsp_note,sizeof(ri_adsp_note),req);
++ lck_mtx_unlock(&ri_adsp_lock);
++ return error;
++}
++SYSCTL_PROC(_debug, OID_AUTO, river_adsp_probe, CTLTYPE_INT | CTLFLAG_RW | CTLFLAG_LOCKED,
++    NULL, 0, river_adsp_probe_sysctl, "I", "Explicit read-only River ADSP PAS and SMEM probe");
++SYSCTL_PROC(_debug, OID_AUTO, river_adsp_status, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
++    NULL, 0, river_adsp_status_sysctl, "A", "Last River ADSP prerequisite result");

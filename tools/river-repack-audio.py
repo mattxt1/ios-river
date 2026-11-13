@@ -28,12 +28,13 @@ def require(condition, message):
         raise ValueError(message)
 
 
-def replace_helper(blob, replacement):
+def replace_helper(blob, replacement, adsp=None):
     require(blob[:8] == b'RIVFILES', 'Invalid RiverFiles magic')
     count, = struct.unpack_from('<I', blob, 8)
     require(count <= 64 and 12 + count * 128 <= len(blob), 'Invalid file table')
     entries = []
     found = 0
+    adsp_found = 0
     for i in range(count):
         name, mode, off, size, reserved = struct.unpack_from('<112sIIII', blob, 12 + 128 * i)
         require(off + size <= len(blob), 'File outside container')
@@ -41,8 +42,17 @@ def replace_helper(blob, replacement):
         if name.split(b'\0')[0] == b'/usr/local/bin/river-codec-clock':
             found += 1
             data = replacement
+        if name.split(b'\0')[0] == b'/usr/local/bin/river-adsp-status':
+            adsp_found += 1
+            if adsp is not None:
+                data = adsp
         entries.append((name, mode, data, reserved))
     require(found == 1, 'Expected exactly one existing clock helper')
+    require(adsp_found <= 1, 'Duplicate ADSP helper')
+    if adsp is not None and not adsp_found:
+        entries.append((b'/usr/local/bin/river-adsp-status', 0o755, adsp, 0))
+    count = len(entries)
+    require(count <= 64, 'Too many RiverFiles entries')
     offset = (12 + count * 128 + 15) & ~15
     table, data = bytearray(), bytearray()
     for name, mode, content, reserved in entries:
@@ -57,6 +67,7 @@ def main():
     ap.add_argument('--base-sha256', required=True)
     ap.add_argument('--kernel', type=Path, required=True)
     ap.add_argument('--clock-helper', type=Path, required=True)
+    ap.add_argument('--adsp-helper', type=Path)
     ap.add_argument('--output', type=Path, required=True)
     args = ap.parse_args()
     require(not args.output.exists(), 'Refusing to overwrite output')
@@ -101,7 +112,10 @@ def main():
     require(set(blobs) == set(NAMES), 'Missing required firmware/files')
     replacement = args.clock_helper.read_bytes()
     require(replacement[:4] == b'\xcf\xfa\xed\xfe', 'Expected Mach-O clock helper')
-    blobs['RiverFiles'] = replace_helper(blobs['RiverFiles'], replacement)
+    adsp_helper = args.adsp_helper.read_bytes() if args.adsp_helper else None
+    if adsp_helper is not None:
+        require(adsp_helper[:4] == b'\xcf\xfa\xed\xfe', 'Expected Mach-O ADSP helper')
+    blobs['RiverFiles'] = replace_helper(blobs['RiverFiles'], replacement, adsp_helper)
     mmap.props = [prop for prop in mmap.props if prop[0] not in NAMES]
     with tempfile.TemporaryDirectory(prefix='river-repack-') as tmp:
         folder = Path(tmp)
