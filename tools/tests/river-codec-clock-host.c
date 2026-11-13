@@ -30,7 +30,7 @@ static bool ri_cs35l41_rd(uint32_t reg,uint32_t *value) {
   bool driving=(regs[0x101]&0x40) && (regs[0x500]&0x60)==0x60 &&
       !(regs[0x1710]&0x1ff) && !(regs[0x1714]&0x1ff);
   if(driving) {
-   assert(amp_quiet());assert((amp[0x2c04]&0xff7)==0x370);
+   assert(amp_quiet());assert((amp[0x6000]&0x3ff8)==0x2000);assert((amp[0x2c04]&0xff7)==0x370);
    assert((regs[0x500]&0x1f)==11 && (regs[0x506]&0x1fff)==32);
    assert(regs[0x507]==0x1010 && regs[0x508]==0x1010 && (regs[0x504]&7)==2);
    assert((regs[0x501]&0x20) && !regs[0x519] && !regs[0x51a]);
@@ -41,7 +41,7 @@ static bool ri_cs35l41_rd(uint32_t reg,uint32_t *value) {
 }
 static bool ri_cs35l41_wr(uint32_t reg,uint32_t value) {
  assert(reg==0x2018||reg==0x2024||reg==0x6000||reg==0x4800||reg==0x4808||
-        reg==0x2c04||reg==0x2c0c||reg==0x4840||reg==0x4838);
+        reg==0x2c04||reg==0x2c0c||reg==0x4840||reg==0x4830);
  amp_writes++;if(amp_writes==amp_ignore)return false;
  if((reg==0x4808&&(value&0x33))||(reg==0x2024&&!(value&0x10))||(reg==0x2018&&(value&1)))
   assert(codec_outputs_off());
@@ -158,7 +158,7 @@ static void reset(unsigned scenario) {
  pmic_mode = 0; pmic_pull = 4; pmic_writes = pmic_ignore = cmd_missing = pmic_reads = 0; ri_clock_mclk_cmd = 0;
  for (unsigned i = 0; i < 4; i++) { cfg[i] = 1; out[i] = 0; }
  memset(amp,0,sizeof(amp));amp[0]=0x35a40; amp[0x2018]=0x21; amp[0x2024]=0x100;
- amp[0x4808]=0x20200233;amp[0x2c04]=0x833;amp[0x4800]=0x10001;amp[0x4840]=24;amp[0x4838]=24;
+ amp[0x4808]=0x20200233;amp[0x2c04]=0x833;amp[0x4800]=0x10001;amp[0x4840]=24;amp[0x4830]=24;
  memcpy(amp_initial,amp,sizeof(amp));amp_writes=amp_ignore=amp_no_lock=gpio_reads=0;
  memset(regs, 0, sizeof(regs)); regs[0] = 0x6360; regs[1] = 1;
  regs[0x1710]=0x2001;regs[0x1714]=0xa001;
@@ -178,6 +178,10 @@ static void check_restore(void) {
  assert(strstr(ri_clock_note, "clock_restored=1")); assert(active_n == 8);
 }
 int main(void) {
+ reset(0);amp_ignore=1;
+ assert(ri_clock_run_impl(true,true,true)==EIO);
+ assert(strstr(ri_clock_note,"amp_error=write_failed amp_reg=0x2024"));
+ assert(ri_i2s_amp_restored&&ri_i2s_codec_restored);check_restore();
  reset(41);assert(!ri_clock_run_impl(false,false,true));
  assert(!writes&&!amp_writes&&!pmic_writes);check_pins();
  reset(41);assert(!ri_clock_run_impl(true,true,true));check_restore();

@@ -1,0 +1,106 @@
+diff --git a/bsd/dev/river_codec_i2s.h b/bsd/dev/river_codec_i2s.h
+--- a/bsd/dev/river_codec_i2s.h
++++ b/bsd/dev/river_codec_i2s.h
+@@ -7,12 +7,23 @@
+  0x519,0x51a,0x1710,0x1711,0x1714,0x1715
+ };
+ static const uint32_t ri_i2s_amp_regs[] = {
+- 0x2018,0x2024,0x6000,0x4800,0x4808,0x2c04,0x2c0c,0x4840,0x4838
++ 0x2018,0x2024,0x6000,0x4800,0x4808,0x2c04,0x2c0c,0x4840,0x4830
+ };
+ static uint16_t ri_i2s_codec_saved[16];
+ static uint32_t ri_i2s_amp_saved[9], ri_i2s_irq_before, ri_i2s_irq_live;
+ static bool ri_i2s_touched, ri_i2s_codec_restored, ri_i2s_amp_restored, ri_i2s_amp_locked;
+ static char ri_i2s_note[512];
++static const char *ri_i2s_amp_error="none";
++static uint32_t ri_i2s_amp_bad_reg,ri_i2s_amp_bad_want,ri_i2s_amp_bad_got;
++static bool
++ri_i2s_amp_fail(const char *stage,uint32_t reg,uint32_t want,uint32_t got)
++{
++ if(!strcmp(ri_i2s_amp_error,"none")) {
++  ri_i2s_amp_error=stage;ri_i2s_amp_bad_reg=reg;
++  ri_i2s_amp_bad_want=want;ri_i2s_amp_bad_got=got;
++ }
++ return false;
++}
+ 
+ static bool
+ ri_i2s_amp_write(uint32_t reg, uint32_t val)
+@@ -20,15 +31,23 @@
+  bool allowed = false;
+  for (unsigned i=0;i<9;i++) if (ri_i2s_amp_regs[i]==reg) allowed=true;
+  uint32_t got=0;
+- return allowed && ri_cs35l41_wr(reg,val) && ri_cs35l41_rd(reg,&got) && got==val;
++ if(!allowed) return ri_i2s_amp_fail("register_rejected",reg,val,0);
++ if(!ri_cs35l41_wr(reg,val)) return ri_i2s_amp_fail("write_failed",reg,val,0);
++ if(!ri_cs35l41_rd(reg,&got)) return ri_i2s_amp_fail("readback_failed",reg,val,0);
++ if(got!=val) return ri_i2s_amp_fail("readback_mismatch",reg,val,got);
++ return true;
+ }
+ static bool
+ ri_i2s_quiet(void)
+ {
+  uint32_t mute=0,power=0,format=0;
+- return ri_cs35l41_rd(0x2024,&mute) && (mute&0x10) &&
+-     ri_cs35l41_rd(0x2018,&power) && !(power&1) &&
+-     ri_cs35l41_rd(0x4808,&format) && !(format&0x33);
++ if(!ri_cs35l41_rd(0x2024,&mute)) return ri_i2s_amp_fail("quiet_mute_read",0x2024,0x10,0);
++ if(!(mute&0x10)) return ri_i2s_amp_fail("quiet_mute_state",0x2024,0x10,mute);
++ if(!ri_cs35l41_rd(0x2018,&power)) return ri_i2s_amp_fail("quiet_power_read",0x2018,0,0);
++ if(power&1) return ri_i2s_amp_fail("quiet_power_state",0x2018,0,power);
++ if(!ri_cs35l41_rd(0x4808,&format)) return ri_i2s_amp_fail("quiet_format_read",0x4808,0,0);
++ if(format&0x33) return ri_i2s_amp_fail("quiet_format_state",0x4808,0,format);
++ return true;
+ }
+ static bool
+ ri_i2s_snapshot_fail(const char *stage, uint32_t reg, uint32_t want, uint32_t got)
+@@ -43,6 +62,8 @@
+ {
+  ri_i2s_touched=false;ri_i2s_codec_restored=true;ri_i2s_amp_restored=true;ri_i2s_amp_locked=false;
+  ri_i2s_irq_before=ri_i2s_irq_live=0;
++ ri_i2s_amp_error="none";
++ ri_i2s_amp_bad_reg=ri_i2s_amp_bad_want=ri_i2s_amp_bad_got=0;
+  uint32_t id=0;
+  if (!ri_cs35l41_rd(0,&id)) return ri_i2s_snapshot_fail("amp_id_read",0,0x35a40,id);
+  if (id!=0x35a40) return ri_i2s_snapshot_fail("amp_id",0,0x35a40,id);
+@@ -87,12 +108,12 @@
+  // Mute first, then disable the Class-D output stage. Both read back.
+  if(!ri_i2s_amp_write(0x2024,ri_i2s_amp_saved[1]|0x10) ||
+     !ri_i2s_amp_write(0x2018,ri_i2s_amp_saved[0]&~1u) ||
+-    !ri_i2s_amp_write(0x6000,0x4cf) || !ri_i2s_amp_write(0x4800,0)) return false;
++    !ri_i2s_amp_write(0x6000,(ri_i2s_amp_saved[2]&~0x3ff8u)|0x2000) || !ri_i2s_amp_write(0x4800,0)) return false;
+  // Stereo S16 I2S; both master and forced-clock bits cleared before the codec.
+  uint32_t format=(ri_i2s_amp_saved[4]&~0xffff0777u)|0x10100200;
+  if(!ri_i2s_amp_write(0x4808,format) || !ri_i2s_quiet()) return false;
+  if(!ri_i2s_amp_write(0x4840,(ri_i2s_amp_saved[7]&~0x3fu)|16) ||
+-    !ri_i2s_amp_write(0x4838,(ri_i2s_amp_saved[8]&~0x3fu)|16) ||
++    !ri_i2s_amp_write(0x4830,(ri_i2s_amp_saved[8]&~0x3fu)|16) ||
+     !ri_i2s_amp_write(0x2c0c,(ri_i2s_amp_saved[6]&~0x1fu)|3)) return false;
+  // Pinned codec_set_sysclk sequence: open loop, frequency 0x1b (1.536MHz),
+  // disable PLL, select SCLK(0), close loop, enable PLL.
+diff --git a/bsd/dev/river_codec_clock.h b/bsd/dev/river_codec_clock.h
+--- a/bsd/dev/river_codec_clock.h
++++ b/bsd/dev/river_codec_clock.h
+@@ -267,8 +267,8 @@
+  if(i2s && test) {
+   size_t n=strlen(ri_clock_note);
+   snprintf(ri_clock_note+n,sizeof(ri_clock_note)-n,
+-      " amp_locked=%u amp_irq_before=%#x amp_irq_live=%#x aif_restored=%u amp_restored=%u",
+-      ri_i2s_amp_locked,ri_i2s_irq_before,ri_i2s_irq_live,ri_i2s_codec_restored,ri_i2s_amp_restored);
++      " amp_locked=%u amp_irq_before=%#x amp_irq_live=%#x aif_restored=%u amp_restored=%u amp_error=%s amp_reg=%#x amp_want=%#x amp_got=%#x",
++      ri_i2s_amp_locked,ri_i2s_irq_before,ri_i2s_irq_live,ri_i2s_codec_restored,ri_i2s_amp_restored,ri_i2s_amp_error,ri_i2s_amp_bad_reg,ri_i2s_amp_bad_want,ri_i2s_amp_bad_got);
+  }
+  return error;
+ }
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -4396,7 +4396,7 @@
+ 	/* ASP RX frame slot: slots 0 and 1 (0x03) */
+ 	ri_cs35l41_wr(0x00004820, 0x00000003);
+ 	/* ASP TX word length: 24 cycles/slot (0x18) */
+-	ri_cs35l41_wr(0x00004838, 0x00000018);
++	ri_cs35l41_wr(0x00004830, 0x00000018);
+ 	/* ASP RX word length: 24 cycles/slot (0x18) */
+ 	ri_cs35l41_wr(0x00004840, 0x00000018);
+ 	/* PLL Clock Control: Open-loop self-oscillator enabled (0x00000833) */

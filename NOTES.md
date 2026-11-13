@@ -5,6 +5,33 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Muted I2S attempt stopped in amplifier preparation (2026-11-12)
+
+- Verified productriver and temporary boot of pinmux image de1aa7f succeeded.
+  Codec/FLL/PMIC and I2S snapshots passed with idle clocks, GPIO9/11 FN1
+  inputs, amp power0x21 mute0 format0x20200233 PLL0x833 IRQ3=0x20000010.
+- Explicit `--i2s-test` returned EIO with `phase=amp_prepare attempted=1
+  route_touched=0 locked=0 amp_locked=0 amp_irq_live=0 error=5`.
+  It did not reach reference routing, FLL lock or native I2S clock output.
+  Full cleanup verified `route_restored=1 fll_off=1 clock_restored=1
+  pins_restored=1 aif_restored=1 amp_restored=1`.
+- Follow-up snapshots matched saved configuration (GPIO live status excluded).
+  Endpoint flags3, no physical PCM transport. Live log stays outside Git in
+  `work/i2s-pinmux/live-test.txt`.
+- SSH became available before home screen finished loading. User initially
+  reported still booting, then confirmed responsive home screen. Require
+  home screen readiness before further one-shot hardware experiments.
+- Source audit found another inherited address error: SP_TX_WL is0x4830,
+  not0x4838 used in old init and0278 test. Verified pinned Motorola header
+  and upstream include/sound/cs35l41.h. Exact failed amp write was not
+  reported by this image, so the address error is confirmed in source but
+  is not yet proven as the cause of this hardware preparation failure.
+- Patch0281 corrects the register in init/test and reports the first failed
+  amplifier write/readback or quiet-state verification with stage, register,
+  requested and observed values. Test attenuation now uses the actual PCM
+  volume field(bits13:3), mute code0x400 shifted3, preserving other fields
+  (Cirrus MCU CS35L41 spec section7.12.1). No protection guards removed.
+
 ## I2S snapshot readable; native pinmux required (2026-11-12)
 
 - Verified fastboot productriver and temporarily booted diagnostic image
