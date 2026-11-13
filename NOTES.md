@@ -5,6 +5,51 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## ADSP startup layout survey prepared (2026-11-12)
+
+- Stock memory staging passed and iOS remains responsive. Startup is still
+  unavailable. Source audit: ADSP proxy wants CX TURBO level384 through
+  PM8953 S2 (`vlvl`, not raw microvolts) plus XO and crypto clocks.
+  XO is the shared RPM branch voter, not an LPASS MMIO bit. Existing GPU
+  handles crypto prerequisites; RPM active/sleep and consumer aggregation
+  need ownership tracking rather than unconditionally dropping shared votes.
+- Legacy SMP2P IDs from pinned smem.h: APPS→ADSP429 (427+remotePID2),
+  ADSP→APPS443 (audio-base443+APPS0), magic0x504d5324, version1,
+  local/remote PID halves, at most16 entries of16-byte name+32-bit state.
+  Board IPC0x0b011008 bit10; readiness master-kernel bit1, fatal bit0,
+  proxy-unvote bit2, stop-ack bit3. No IPC write or handshake allocation yet.
+- Patch0286 extends the existing read-only --probe with descriptor-only
+  RPM info18/FIFO342 and SMP2P429/443 plus ADSP SFR423 presence. It follows
+  only validated, stable, in-bounds global SMP2P records with matching PIDs,
+  magic/version/entry counts. RPM aux records are never dereferenced.
+  It does not imply ownership of any displayed channel or power vote.
+- Host tests against the full patch chain passed known SMP2P layout,
+  wrong remotePID, too many valid entries and out-of-bounds descriptor checks,
+  plus unchanged-SMEM assertion and all prior probe/metadata/staging cases.
+  Next hardware snapshot will establish whether startup can reuse an existing
+  block or needs an allocator/handshake. No AUTH_AND_RESET exists in0286.
+
+## ADSP memory setup and full firmware staging passed (2026-11-12)
+
+- User confirmed responsive home screen after temporary boot a247fb7.
+  Read-only baseline matched prior; passive notrequested. Repeated exact
+  stock MDT authentication succeeded(init_status0/init_result0) on this boot.
+- Explicit --stage-image /private/var/tmp/river-adsp-f325942f.img exited0:
+  `phase=image_staged error=0 mem_setup_attempted=1 stage_open=0
+  stage_failed=0 copied_bytes=17825792 expected_bytes=17825792
+  image_input_sha256_verified=1 firmware_start_requested=0
+  executable_readback=not_performed pcm_transport=0`.
+- All1088 bounded16KiB mapping/write/barrier/unmapping calls completed for
+  PAS1 carveout0x8d600000..0x8e700000. Input file and ordered-stream SHA256
+  match stock staged image; destination readback and full executable secure
+  authentication are still unverified. No AUTH_AND_RESET, power/clock votes
+  or LPASS MMIO. Physical PCM transport still absent(flags3 counters159744/0).
+- Private log work/adsp-stage/live-stage.txt and USB diagnostic capture
+  work/pcm-transport/adsp-stage-usb.log. User confirmed post-test UI responsive.
+- Next: source-derived CX level/XO/crypto proxy requirements and SMP2P
+  handshake/readiness, then bounded one-shot PAS1 AUTH_AND_RESET, then
+  APR/QMI/SLIMbus and Q6 PCM buffers. Do not claim working acoustic audio.
+
 ## ADSP memory staging prepared (2026-11-12)
 
 - Patch0285 adds a separately requested PAS1 MEM_SETUP for the exact DT

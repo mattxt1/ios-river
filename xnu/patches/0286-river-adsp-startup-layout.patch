@@ -1,0 +1,75 @@
+diff --git a/bsd/dev/river_adsp_probe.h b/bsd/dev/river_adsp_probe.h
+--- a/bsd/dev/river_adsp_probe.h
++++ b/bsd/dev/river_adsp_probe.h
+@@ -23,6 +23,8 @@
+     ri_rd(smem,ent+8)!=len || ri_rd(smem,ent+12)!=aux) return false;
+  *offset=off;*length=len;return true;
+ }
++#include "river_adsp_startup_survey.h"
++
+ static int
+ ri_adsp_probe_impl(void)
+ {
+@@ -91,6 +93,7 @@
+  n=strlen(ri_adsp_note);
+  snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n,
+      "\nlegacy_tables=%u adsp_channels=%u apr_channels=%u malformed=%u no_channels_does_not_prove_dsp_off=1",tables,channels,apr,malformed);
++ ri_adsp_startup_survey(smem,freeoff);
+  return error;
+ }
+ #include "river_adsp_metadata.h"
+diff --git a/bsd/dev/river_adsp_startup_survey.h b/bsd/dev/river_adsp_startup_survey.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/river_adsp_startup_survey.h
+@@ -0,0 +1,50 @@
++/* Read-only legacy SMEM startup ownership/layout survey. No new mapping. */
++static void
++ri_adsp_startup_survey(vm_offset_t smem,uint32_t freeoff)
++{
++ const unsigned ids[]={18,342,429,443,423};
++ for(unsigned i=0;i<sizeof(ids)/sizeof(ids[0]);i++) {
++  unsigned id=ids[i],ent=0xd0+id*16;
++  uint32_t allocated=ri_rd(smem,ent),off=ri_rd(smem,ent+4);
++  uint32_t len=ri_rd(smem,ent+8),aux=ri_rd(smem,ent+12);
++  size_t n=strlen(ri_adsp_note);
++  if(sizeof(ri_adsp_note)-n<400) return;
++  snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n,
++      "\nstartup_item=%u allocated=%u offset=%#x length=%#x aux=%#x",id,allocated,off,len,aux);
++  /* RPM aux descriptors are displayed only. Do not dereference or change
++   * their state/fifos, and never assume a saved channel means ownership. */
++  if(id!=429 && id!=443) continue;
++  uint32_t checked_off=0,checked_len=0;
++  bool stable=ri_adsp_item(smem,id,freeoff,&checked_off,&checked_len) &&
++      checked_off==off && checked_len==len && len>=20 && len<=344;
++  if(!stable) continue;
++  uint32_t magic=ri_rd(smem,off),version=ri_rd(smem,off+4),pids=ri_rd(smem,off+8);
++  uint32_t entries=ri_rd(smem,off+12),flags=ri_rd(smem,off+16);
++  unsigned total=entries&0xffff,valid=entries>>16;
++  uint32_t want=id==429?(2u<<16):2;
++  bool layout=magic==0x504d5324 && (version&255)==1 && pids==want &&
++      total<=16 && valid<=total && len>=20+20*total;
++  n=strlen(ri_adsp_note);
++  snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n,
++      " header_valid=%u magic=%#x version=%#x pids=%#x entries=%#x flags=%#x",
++      layout,magic,version,pids,entries,flags);
++  if(!layout) continue;
++  for(unsigned e=0;e<valid;e++) {
++   char name[17];bool term=false,printable=true;
++   for(unsigned j=0;j<16;j++) {
++    unsigned char c=*(volatile unsigned char *)(smem+off+20+e*20+j);
++    if(!c)term=true;
++    if(!term&&(c<0x20||c>0x7e))printable=false;
++    name[j]=term?0:(char)c;
++   }
++   name[16]=0;
++   uint32_t state=ri_rd(smem,off+36+e*20);
++   n=strlen(ri_adsp_note);
++   if(sizeof(ri_adsp_note)-n<160)return;
++   if(!term||!printable||!name[0]) {
++    snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n," entry%u=invalid_name",e);continue;
++   }
++   snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n," entry%u=%s:%#x",e,name,state);
++  }
++ }
++}

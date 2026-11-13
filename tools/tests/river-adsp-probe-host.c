@@ -41,6 +41,16 @@ static void reset(void) {
  word(0x5000,2);word(0x5000+44,1);
 }
 int main(void) {
+ reset();item(429,0x6800,344,0);word(0x6800,0x504d5324);word(0x6804,1);
+ word(0x6808,2u<<16);word(0x680c,(1u<<16)|16);
+ memcpy((char *)smem+0x6814,"master-kernel",14);word(0x6824,0);
+ assert(!ri_adsp_probe_impl());assert(strstr(ri_adsp_note,"header_valid=1"));
+ assert(strstr(ri_adsp_note,"entry0=master-kernel:0"));
+ word(0x6808,4u<<16);assert(!ri_adsp_probe_impl());assert(strstr(ri_adsp_note,"header_valid=0"));
+ word(0x6808,2u<<16);word(0x680c,(17u<<16)|16);
+ assert(!ri_adsp_probe_impl());assert(strstr(ri_adsp_note,"header_valid=0"));
+ item(429,0xffff0,344,0);assert(!ri_adsp_probe_impl());
+ assert(!strstr(ri_adsp_note,"header_valid="));
  reset();uint32_t before[sizeof(smem)/4];memcpy(before,smem,sizeof(smem));
  assert(!ri_adsp_probe_impl());assert(scm_calls==4);assert(!memcmp(before,smem,sizeof(smem)));
  assert(strstr(ri_adsp_note,"adsp_channels=1 apr_channels=1"));
