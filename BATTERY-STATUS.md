@@ -1,15 +1,15 @@
 # River battery and charging status
 
-Updated 2026-11-12. Source audit baseline: applied kernel in build `river-b90f2d1a5c76-Dw0M2o`, with battery implementation introduced by [patch0267](xnu/patches/0267-river-battery-jg30-power-source.patch). This audit did not access the phone. Host reproductions establish code defects; they do not establish which defect caused each percentage jump seen on the device.
+Updated 2026-11-13. Source audit baseline: applied kernel in build `river-b90f2d1a5c76-Dw0M2o`, with battery implementation introduced by [patch0267](xnu/patches/0267-river-battery-jg30-power-source.patch). The source audit used host tests; subsequent device observations are recorded below. Host reproductions establish code defects; they do not establish which defect caused each percentage jump seen on the device.
 
 **Build/boot update, 2026-11-13:** full XNU build through0289–0291 passed
 from source236a880. The verified26,697,728-byte temporary image (cmdline562)
-was accepted by `fastboot boot` on productriver. Home-screen confirmation and
-device validation are pending; bootloader success does not establish hardware
-reliability or correct battery behavior. See NOTES.md and the local
+was accepted by `fastboot boot` on productriver. The user confirmed the iOS home screen was responsive. Read-only live publication
+checks passed as described below; these checks do not establish general hardware
+reliability or correct charging behavior. See NOTES.md and the local
 `outputs/audit-fixes-build-manifest.json` for hashes and exact artifact paths.
 
-## Confirmed defects and prepared fixes
+## Confirmed defects and integrated fixes
 
 [Patch0290](xnu/patches/0290-river-battery-valid-samples.patch) preserves valid samples instead of inventing a replacement on failure. In baseline `SweetBattery::pollRiver`, any failed sample—including normal observer contention—publishes 85%, 4100 mV, external power and fully charged. A host reproduction changed a valid 53% sample to that fabricated state. The sampler also accepted current sentinel `0x8000` as a successful zero-current reading, changing the estimator input while reporting current valid. Patch0290 rejects incomplete voltage/current frames and retains the last complete published sample.
 
@@ -23,7 +23,7 @@ The whole-sample rule intentionally delays cable or charger-state updates when c
 
 [Patch0291](xnu/patches/0291-river-battery-readonly-sampling.patch) makes battery polling and `debug.river_battery` read-only with respect to charger control. Baseline `river_battery_sample` wrote `CHARGING_ENABLE_CMD` whenever external power was observed and charger state was 7. Both ordinary IOKit polling and the diagnostic handler call this sampler. The write ignored its result and could override a deliberate charger-disable decision. State 7 means `DISABLE_CHARGE`; it does not request charging. Patch0291 removes the command mapping and write, preserving external power / not charging / not full observations. It does not disable an already enabled charger or introduce new policy. Charging may remain disabled when firmware or another owner deliberately disabled it.
 
-Both patches are prepared and pass host regression checks. A full kernel build and device verification are still pending; this document does not claim they are running on River.
+Both patches pass host regression checks and are included in the full kernel build236a880 temporarily booted on River. Live publication checks passed; failure/recovery, load, cable-transition and charging validation remain pending.
 
 ## Percentage remains an estimate
 
@@ -63,6 +63,18 @@ Run from the repository root:
 python3 tools/test-river-battery.py
 ```
 
-The [test runner](tools/test-river-battery.py) extracts the actual baseline functions/LUT from patch0267, applies the actual proposed patch hunks, and compiles baseline,0290-only and0290+0291 host variants. The [host harness](tools/tests/river-battery-host.cpp) mocks SPMI/IOKit boundaries and exercises the actual sampler, polling method and diagnostic handler. It reproduces the old defects and verifies first-sample unavailability, retained values during contention and each read failure, VI sentinel rejection, plausible voltage bounds, valid zero current, recovery flags and zero charger-control writes for external power plus `DISABLE_CHARGE`. Both baseline paths demonstrably write before0291; both issue zero writes after it. The patched disabled/not-charging state is preserved.
+The [test runner](tools/test-river-battery.py) extracts the actual baseline functions/LUT from patch0267, applies the actual patch hunks, and compiles baseline,0290-only and0290+0291 host variants. The [host harness](tools/tests/river-battery-host.cpp) mocks SPMI/IOKit boundaries and exercises the actual sampler, polling method and diagnostic handler. It reproduces the old defects and verifies first-sample unavailability, retained values during contention and each read failure, VI sentinel rejection, plausible voltage bounds, valid zero current, recovery flags and zero charger-control writes for external power plus `DISABLE_CHARGE`. Both baseline paths demonstrably write before0291; both issue zero writes after it. The patched disabled/not-charging state is preserved.
 
-Result: PASS. Sequential `git apply` checks against copies of the b90 applied source also passed and produced files identical to the tested snapshots. The source audit did not perform device tests. Root subsequently completed the full XNU build and temporary bootloader handoff described above. Next checks are on-device failure/recovery and cable-state observations, and a timestamped voltage/current/status/percentage trace across controlled load changes before changing the SOC estimator.
+Result: PASS. Sequential `git apply` checks against copies of the b90 applied source also passed and produced files identical to the tested snapshots. The source audit did not perform device tests. The primary agent subsequently completed the full XNU build, temporary boot and live publication checks described here. Next checks are on-device failure/recovery and cable-state observations, plus a timestamped voltage/current/status/percentage trace across controlled load changes before changing the SOC estimator.
+
+## Live publication check, 2026-11-13
+
+The primary agent ran the existing read-only `battcheck` against temporary kernel236a880 after the user confirmed the iOS home screen was responsive. `SweetBattery` and `IOPMPowerSource` published the same observed state: 85%, 4195 mV, 0 mA, available=true, stale=false, hardware/current valid=true and fallback=false. External power was connected, charging=false and fully charged=false. `IOPSCopyPowerSourcesInfo` exposed one internal battery at 85% on AC Power, not charging and not charged. This verifies publication through the iOS power-source APIs for the observed state.
+
+The 85% reading is consistent with the current JG30 lookup estimate at 4194–4195 mV and measured zero current; it is not evidence of the removed 85% failure fallback. The validity/fallback flags and actual voltage distinguish this successful sample from the previous fabricated 4100 mV/full fallback. This check does not independently calibrate current or actual remaining charge.
+
+Six bounded snapshots recorded by the host from **2026-11-13 07:05:51.448703 UTC through 07:06:06.145560 UTC** all exited successfully. Percentage remained 85%, voltage ranged from 4194 to 4195 mV, current remained 0 mA, and all availability/validity and external/not-charging/not-full flags stayed unchanged. The roughly 15-second window spans only a small number of 10-second driver polling periods; six property reads are not six independently established PMIC samples. This is a publication consistency observation, not a load or endurance test.
+
+The phone clock was incorrect and printed June20 dates. Use the host timestamps above for this validation. Local evidence remains in workspace `work/audit-device-validation/battery-published.txt` and `battery-series.json`; these are diagnostic artifacts outside the repository and may contain device metadata.
+
+No transient read error, current sentinel, observer contention, first-sample absence, stale-to-valid recovery, cable transition or controlled load change was observed or induced during this check. Those paths have host coverage only. No charger-control-write trace or charge-current/temperature policy validation was collected on the device. External power plus not-charging is a faithfully published observation; its cause was not established by these snapshots. No additional battery patch is justified by this limited trace alone.

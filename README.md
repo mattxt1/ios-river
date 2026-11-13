@@ -186,3 +186,16 @@ This work builds on [dipa-studio/ios-sweet](https://github.com/dipa-studio/ios-s
 [NWylynko/ios-flame](https://github.com/NWylynko/ios-flame), Mesa/Freedreno,
 Apple's open-source Darwin components and the other sources referenced in the
 engineering logs and individual patches.
+
+### Latest device validation, 2026-11-13
+
+Temporary kernel236a880 booted with responsive iOS. Battery state agrees
+across SweetBattery, IOPMPowerSource and IOPS:85% at4194–4195mV, external
+power, not charging/not full, valid and nonfallback. Six bounded snapshots
+were consistent; failure recovery, load/cable transitions and charging
+validation remain pending. Settings Wi-Fi joining still failed with the
+nearby-channel warning and no checkmark. Patch0292 adds bounded request
+completion diagnostics to investigate preflight; it makes no speculative
+ABI or error-mapping change. Patch0293 corrects signed amplifier attenuation
+and verifies the level before unmuting. Both pass host checks and await a
+full build/device run. Physical audio playback/capture remain unimplemented.

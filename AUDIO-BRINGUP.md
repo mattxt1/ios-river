@@ -4,6 +4,27 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+## Attenuation correction prepared (2026-11-13)
+
+Patch0293 fixes the runtime CS35L41 volume helper before physical playback.
+The iOS ABI supplies positive attenuation in eighths of a dB. PCM_VOL is a
+signed11-bit field in bits13:3:80 means -10dB, encoded0x7b0<<3 =0x3d80.
+The old helper wrote raw80, placing positive10 in that field. Patch0293
+preserves unrelated/ramp bits, clamps attenuation to the existing ABI90dB
+limit and uses dedicated mute code0x4cf<<3. It holds output mute during
+preparation and verifies the level before clearing mute; failed preparatory
+I2C writes/readbacks retain mute. A failed final mute-state read requests
+mute again. The helper retains its existing void interface; it does not yet
+propagate a hardware error through the volume ioctl.
+
+The [Cirrus driver](https://github.com/torvalds/linux/blob/v6.1/sound/soc/codecs/cs35l41.c#L328)
+uses signed PCM volume at shift3 with mute raw0x4cf. Host tests extract the
+actual baseline and patched helper: baseline wrong-encoding and failed-write
+unmute reproduce; corrected signed levels, preserved fields, range clamp,
+explicit mute, unavailable speaker and injected read/write/readback failures
+pass. No new speaker-output or PCM test has run. Wi-Fi regressions also pass
+with0292/0293 together. Full build and device register verification pending.
+
 ## Verified progress and remaining work (2026-11-13)
 
 - CS47L35 identity is verified as `0x6360`, revision1, over SPI7 at
@@ -31,8 +52,8 @@ calls establish only the existing software plumbing.
 
 The Wi-Fi/battery audit fixes through patch0291 are committed in `236a880`.
 Their host regressions and full kernel build passed. The packaged image
-was accepted by temporary fastboot boot; responsive iOS and device validation
-are pending.
+was accepted by temporary fastboot boot and the user confirmed responsive
+iOS. Read-only battery publication passed; the Settings Wi-Fi join failed.
 See [WIFI-STATUS.md](WIFI-STATUS.md), [BATTERY-STATUS.md](BATTERY-STATUS.md)
 and [NOTES.md](NOTES.md) for results and artifact hashes. Audio milestones
 above were verified on earlier temporary images; they do not establish a

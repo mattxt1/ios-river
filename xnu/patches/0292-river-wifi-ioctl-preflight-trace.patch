@@ -1,0 +1,53 @@
+diff --git a/bsd/dev/river_apple80211.c b/bsd/dev/river_apple80211.c
+--- a/bsd/dev/river_apple80211.c
++++ b/bsd/dev/river_apple80211.c
+@@ -357,8 +357,7 @@
+ set(const struct apple80211req *request)
+ {
+ 	int error = 0;
+-	printf("river_apple80211: set req_type=%d req_val=%d req_len=%u\n",
+-	    request->req_type, request->req_val, request->req_len);
++
+ 	switch (request->req_type) {
+ 	case 10: {
+ 		lck_mtx_lock(&river_apple80211_mtx);
+@@ -775,6 +774,29 @@
+ 	printf("river_apple80211: initialized Apple80211 interface\n");
+ }
+ 
++/* Bounded metadata-only tracing for preflight failures before ASSOCIATE.
++ * Counters are per direction, request type and result class: repeated scans or
++ * unsupported vendor requests cannot consume another request's trace budget.
++ * No user buffer is copied or inspected here; no engine/net locks are taken. */
++static void
++river_apple80211_trace(bool is_set, int32_t type, uint32_t input_length,
++    const struct apple80211req *request, int error)
++{
++ static unsigned counts[2][512][2], other[2][2];
++ static uint64_t sequence;
++ unsigned direction=is_set?1:0, failed=error!=0;
++ unsigned *counter=(type>=0 && type<512)?&counts[direction][type][failed]:&other[direction][failed];
++ uint64_t serial=__atomic_add_fetch(&sequence,1,__ATOMIC_RELAXED);
++ /* Saturate the counter: repeated queries must not wrap and reopen logging. */
++ unsigned seen=__atomic_load_n(counter,__ATOMIC_RELAXED), limit=failed?4:2;
++ do {
++  if(seen>=limit)return;
++ } while(!__atomic_compare_exchange_n(counter,&seen,seen+1,false,__ATOMIC_RELAXED,__ATOMIC_RELAXED));
++ printf("RIVER WIFI IOCTL: seq=%llu op=%s type=%d in=%u out=%u val=%d errno=%d\n",
++     (unsigned long long)serial,is_set?"SET":"GET",type,input_length,
++     request->req_len,request->req_val,error);
++}
++
+ errno_t
+ river_apple80211_ioctl(u_long command, void *data)
+ {
+@@ -785,6 +807,9 @@
+ 	if (command != SIOCSA80211 && command != SIOCGA80211) {
+ 		return EOPNOTSUPP;
+ 	}
++	int32_t type=request->req_type;
++	uint32_t input_length=request->req_len;
+ 	error = is_set ? set(request) : get(request);
++	river_apple80211_trace(is_set,type,input_length,request,error);
+ 	return error;
+ }

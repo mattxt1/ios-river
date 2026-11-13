@@ -5,6 +5,46 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Live audit checks and next audio correction (2026-11-13)
+
+- User confirmed responsive home screen on236a880. SSH agent no longer had
+  identities. User explicitly approved the existing River handoff SSH key at
+  /Users/matttyson/Documents/Codex/2026-10-19/i-want-to-experiment-with-getting/outputs/Moto-G7-XNU-handoff/userland/ssh/id_ed25519.
+  Both private and public companion files were offloaded; explicit macOS
+  NSFileManager download requests made them resident. Do not copy/display
+  key material. SSH works with -F /dev/null, explicit -i, IdentitiesOnly=yes,
+  IdentityAgent=none; preserve host-key validation. Prior automatic approval
+  rejection was resolved by the user's specific approval; don't ask again.
+- Existing read-only battcheck compiled/signed/installed. Published state
+  agreed across SweetBattery/IOPMPowerSource/IOPS:85%,4194–4195mV,0mA,
+  available/current+hardwarevalid1,stale0,fallback0,external1,charging0,full0.
+  Six host-timestamped reads over15s were consistent, spanning only a few
+  polling intervals. This is valid estimated85%, not removed4100mV fallback.
+  Phone clock is wrong (June20); host UTC timestamps are authoritative here.
+  Logs in work/audit-device-validation/battery-{published.txt,series.json}.
+  Failure/recovery/load/cable/charging behavior has not been hardware-tested.
+- User photo confirms failed Wi-Fi join with nearby-channel warning, spinner
+  and no checkmark. Captured UDP logs have scans/vendor SETs but no SET20
+  or authentication/WPA attempt. Bounded UDP absence isn't complete evidence.
+  Wi-Fi agent prepared0292 completion diagnostics for GET/SET metadata with
+  bounded atomic budgets, no user-buffer/credential/network-identity logging.
+  No speculative macOS ABI or generic-error mapping changes. Actual engine
+  regressions passed with0292 and0293 together; full build/device trace pending.
+- Audio read-only --probe passed on integrated236a880: PAS1 supported/calls
+  available, retained SMEM valid, APPS/ADSP partition empty/stable with no
+  malformed entries. No DSP-start request or new audio experiment. Log
+  work/audit-device-validation/adsp-readonly-probe.txt.
+- Root0293 fixes runtime speaker PCM attenuation: signed11-bit bits13:3,
+  -80 eighths=-10dB ->0x3d80, mute0x4cf<<3; preserve unrelated bits, clamp
+  to ABI90dB limit, verify new level while hardware-muted before unmuting.
+  Baseline actual helper reproduced wrong encoding and unmute after failed
+  volume write. Actual patched helper host cases pass encoding/range/mute,
+  preserved fields, unavailable speaker and injected read/write/readback errors.
+  Helper remains void; volume ioctl error propagation is future work.
+- Next full build0292/0293 and temporary boot for Wi-Fi preflight capture and
+  volume-register validation; then acknowledged RPM votes and authenticated
+  ADSP startup/readiness/PCM transport. Physical audio remains absent.
+
 ## Integrated audit build and temporary boot (2026-11-13)
 
 - Keep Downloaded made the required KDK library available. Full isolated

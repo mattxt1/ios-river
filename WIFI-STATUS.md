@@ -1,12 +1,12 @@
 # River Wi-Fi implementation audit and handoff
 
-Updated 2026-11-12. Source baseline: applied `b90f2d1` kernel tree through patch0288. Patch0289 is integrated in236a880; the source audit did not access the phone or establish hardware reliability. Host regressions and the full kernel build pass. Device testing remains required.
+Updated 2026-11-13. Source baseline: applied `b90f2d1` kernel tree through patch0288. Patch0289 is integrated in236a880; the source audit did not access the phone or establish hardware reliability. Host regressions and the full kernel build pass. Device testing remains required.
 
 **Build/boot update, 2026-11-13:** full XNU build through0289–0291 passed
 from source236a880. The verified26,697,728-byte temporary image (cmdline562)
-was accepted by `fastboot boot` on productriver. Home-screen confirmation and
-device validation are pending; bootloader success does not establish hardware
-reliability or correct battery behavior. See NOTES.md and the local
+was accepted by `fastboot boot` on productriver. The user confirmed a responsive iOS home screen. A Settings join failed with
+no checkmark and a channel-congestion alert. Association reliability remains
+unverified; this image did not resolve the observed connection failure. See NOTES.md and the local
 `outputs/audit-fixes-build-manifest.json` for hashes and exact artifact paths.
 
 ## Source-proven failures
@@ -25,13 +25,28 @@ Baseline line references above identify pre0289 source, not positions in the pat
 
 The initial `riverwifi`/private PMK path remains supported. It adopts generation zero and uses the same confirmed-success publication and spontaneous-loss retry path as a UI join. The first explicit UI join, disconnect or radio-off invalidates generation zero, so startup cannot override a newer user request or report a stale initial failure. Power-off before the boot-profile attempt prevents association. Saved credentials are cleared when abandoning a connection. A pre-existing DMA-stall flag remains set: a new join must not pretend that a stuck DMA ring recovered.
 
-## The reported frequency/congestion warning
+## Device validation and the reported frequency/congestion warning
+
+The user's photo confirms “Unable to join network” with an explanation that the network uses Wi-Fi channels shared by nearby networks and suggests restarting the router. That text is an observed UI result, not proof of actual RF congestion.
+
+The captured boot and join UDP logs for `236a880` contain **no SET request20 (ASSOCIATE), target lookup, authentication attempt or WPA attempt**. They show repeated scan request10 plus SET51 and SET383, and no keyed data-port success. The captures suggest a failure before the logged worker join path; bounded UDP logging can lose records and does not establish that every request was captured. The old source logged SET entry only, so GET preflight calls and return errors are absent from these logs; identifying which preflight operation prevents association requires another trace. A missing SET20 in these captures does not prove why the consumer declined to issue it.
+
+Patch0292 replaces the unbounded SET-entry log with completion metadata for GET and SET: sequence number, operation, numeric type, input/output lengths, returned scalar and errno. The trace reads no user buffers, credentials, network names, BSSIDs or pointers. Atomic saturating counters cap successful calls at two and failures at four independently for each direction/type/result class, with a shared bounded bucket for out-of-range types. Repeated scans and unsupported vendor requests cannot exhaust another type's budget. It takes no engine/net locks and introduces no extra user-memory copy.
 
 The exact user-visible warning has **not been traced to a verified private iOS error mapping**. Source does prove that the baseline reports generic association failure as value `16`, regardless of the real AP association status, and stale completions can publish that failure after a newer operation. Patch0289 prevents stale-result publication and clears the result on confirmed success. It deliberately retains existing error values `1` and `16`; it does not claim that either is a particular public 802.11 reason code or that the congestion warning is fixed.
 
-Next device investigation should correlate the exact Settings text with the join generation, reported Apple80211 association result, AP authentication/association status, WPA stage and link event timing. Change the error mapping only after confirming the consumer's enum/ABI or observing that correlation.
+Next device investigation should first capture patch0292 from boot through one Settings join, identify unsupported or malformed GET preflight replies and confirm whether SET20 is issued. Then correlate the exact Settings text with the join generation, reported Apple80211 association result, AP authentication/association status, WPA stage and link event timing. Change the error mapping only after confirming the consumer's enum/ABI or observing that correlation.
 
 ## Validation performed
+
+Patch0292 applies cleanly after0289 against the integrated engine. The same actual-code state regressions compile and pass with0292 included:
+
+```sh
+python3 tools/test-river-wifi-state.py --kernel-source /absolute/path/to/pre0289/xnu --extra-patch xnu/patches/0292-river-wifi-ioctl-preflight-trace.patch
+```
+
+The `--extra-patch` option applies additional patches only to the temporary test copy. These tests preserve behavioral regression coverage; they do not claim to reproduce the private iOS consumer's preflight decisions. A separate host stress check of the extracted trace helper passed with eight concurrent threads and 800,000 calls: the shared type emitted exactly two success and four failure records, SET retained an independent budget, a later association type retained its budget, and negative/out-of-range types stayed bounded.
+
 
 Run from the repository, with a kernel source tree containing patches through0288 and excluding0289:
 
@@ -51,3 +66,7 @@ Coverage includes stale completion and stale link-loss rejection; exact BSSID se
 - A stuck TX DMA ring still needs explicit, verified recovery. Clearing its stalled flag during a new join is insufficient.
 - Suspend/resume, firmware-reset recovery, long-running packet loss and broader network compatibility need hardware coverage.
 - No claim is made that this audit found every cause of the user's intermittent connection failures. Its fixes address demonstrated state-machine and RX reentrancy defects.
+
+## ABI cautions for the next investigation
+
+Comparison with the Apple-origin headers maintained by the [itlwm driver](https://github.com/OpenIntelWireless/itlwm/blob/master/include/Airport/apple80211_ioctl.h) identifies suspicious replies: current GET14 returns MAC bytes although the header names14 PHY_MODE; GET23 returns scalar20 although the header describes STATUS_DEV_NAME; several other getters use only `req_val` where that implementation uses versioned structures. This is **cross-platform corroboration, not a verified ABI match for River's iOS consumer**. Do not bulk-rewrite these responses from macOS headers. Use actual GET type/length/result observations, then inspect the matching iOS consumer if the layout remains uncertain. Patch0292 deliberately makes no speculative ABI changes.

@@ -1,0 +1,41 @@
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -4313,15 +4313,29 @@
+ river_speaker_set_volume_locked(uint32_t below_eighths, bool muted)
+ {
+  if (!ri_speaker_ok) return;
+- uint32_t control=0;
++ uint32_t control=0, digital=0, verified=0;
+  if(!ri_cs35l41_rd(0x2024,&control)) return;
+- uint32_t volume=muted?0x4cf:(below_eighths>0x400?0x400:below_eighths);
+- // CS35L41 AMP_MUTE is bit4. Preserve unrelated output-control bits.
+- if(muted) (void)ri_cs35l41_wr(0x2024,control|0x10);
+- (void)ri_cs35l41_wr(0x6000,volume);
+- if(!muted) (void)ri_cs35l41_wr(0x2024,control&~0x10u);
+- (void)ri_cs35l41_rd(0x6000,&ri_cs35l41_dig_vol);
+- (void)ri_cs35l41_rd(0x2024,&ri_cs35l41_out_mute);
++ /* Keep the output muted while preparing and verifying a new level. Never
++  * clear hardware mute after a failed attenuation write/readback. */
++ if(!ri_cs35l41_wr(0x2024,control|0x10u) ||
++    !ri_cs35l41_rd(0x2024,&verified) || !(verified&0x10u)) return;
++ ri_cs35l41_out_mute=verified;
++ if(!ri_cs35l41_rd(0x6000,&digital)) return;
++ /* PCM_VOL is signed 11-bit two's complement in bits13:3, in 1/8dB steps.
++  * The ABI supplies positive attenuation:80 means -10dB, encoded0x7b0.
++  * Raw0x4cf is the dedicated mute code; preserve ramp/unrelated fields. */
++ uint32_t attenuation=below_eighths>720u?720u:below_eighths;
++ uint32_t code=muted?0x4cfu:((0u-attenuation)&0x7ffu);
++ uint32_t volume=(digital&~0x3ff8u)|(code<<3);
++ if(!ri_cs35l41_wr(0x6000,volume) ||
++    !ri_cs35l41_rd(0x6000,&ri_cs35l41_dig_vol) ||
++    (ri_cs35l41_dig_vol&0x3ff8u)!=(volume&0x3ff8u)) return;
++ if(!muted) {
++  if(!ri_cs35l41_wr(0x2024,control&~0x10u)) return;
++  if(!ri_cs35l41_rd(0x2024,&ri_cs35l41_out_mute)) {
++   (void)ri_cs35l41_wr(0x2024,control|0x10u);
++  }
++ }
+ }
+ void
+ river_speaker_set_volume(uint32_t below_eighths, bool muted)

@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('--kernel-source',type=Path,required=True)
+p.add_argument('--extra-patch',type=Path,action='append',default=[],help='Additional patch to apply after0289 (repeatable).')
 a=p.parse_args()
 r=Path(__file__).resolve().parent.parent
 with tempfile.TemporaryDirectory(prefix='river-wifi-state-') as tmp:
@@ -15,6 +16,8 @@ with tempfile.TemporaryDirectory(prefix='river-wifi-state-') as tmp:
     for rel in ('bsd/dev/sweet_keys.c','bsd/dev/river_apple80211.c','bsd/sys/river_apple80211.h'):
         target=d/rel;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes((a.kernel_source/rel).read_bytes())
     subprocess.run(['git','apply',str(r/'xnu/patches/0289-river-wifi-connection-state.patch')],cwd=d,check=True)
+    for extra in a.extra_patch:
+        subprocess.run(['git','apply',str(extra.resolve())],cwd=d,check=True)
     abi=(d/'bsd/sys/river_apple80211.h').read_text()
     abi='\n'.join(line for line in abi.splitlines() if not line.startswith('#include'))
     (d/'river-wifi-abi.h').write_text(abi)
