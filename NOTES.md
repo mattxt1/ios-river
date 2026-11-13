@@ -31,6 +31,16 @@
   requested and observed values. Test attenuation now uses the actual PCM
   volume field(bits13:3), mute code0x400 shifted3, preserving other fields
   (Cirrus MCU CS35L41 spec section7.12.1). No protection guards removed.
+- Source `fa7283fcd76723e6d51b9ec15798f5ed26ead35b` passed all host checks,
+  including first failed amp register reporting, corrected TX word-length
+  whitelist, PCM attenuation field and all prior rollback cases. Local build
+  succeeded; kernel SHA256
+  `19af1a6db646ac16ecd08e8fcc5c99ce91be72b397e2de02cec2d3460c8651d7`.
+- Image `outputs/river-muted-i2s-amp-fa7283f.img`: 26,626,048 bytes,
+  cmdline562, SHA256
+  `9b1fbdc094a44cb650d3cb49634e41de10c067b87b6c3f85fff32b248e1cb4ed`.
+  Payload checks passed. Waiting for fastboot, then explicit user home screen
+  readiness before one-shot testing. No0281 hardware result yet.
 
 ## I2S snapshot readable; native pinmux required (2026-11-12)
 

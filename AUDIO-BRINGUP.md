@@ -54,6 +54,14 @@ and explicitly selects native AIF1 mux from the observed GPIO-input defaults.
 It still rejects active interfaces, GPIO outputs and other pin functions.
 Muted clock-test hardware result is pending.
 
+**0280 live attempt:** baseline succeeded and the one-shot test ran, but stopped
+with `phase=amp_prepare error=5` before PMIC reference routing or I2S clocks.
+Codec/AIF, amplifier, PMIC and SPI restoration all verified. iOS home screen
+became responsive afterward. Patch0281 corrects SP_TX_WL to0x4830, uses the
+PCM attenuation field correctly, and reports the first failed amplifier
+write/readback/quiet check. Next attempt must wait for responsive iOS before
+running the one-shot test; exact cause of the amplifier failure is unproven.
+
 ## Current continuation
 
 Patch 0273 adds `debug.river_audio_prereq`, a read-only, on-demand survey:
