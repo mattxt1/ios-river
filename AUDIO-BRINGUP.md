@@ -4,6 +4,13 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+**Partition live result:** the APPS↔ADSP partition at SMEM+0x86000 is valid
+and empty (uncached free0x20, cached free0x24000 equals size). Patch0288 adds
+an explicit, bounded outbound429 initialization under vendor remote lockS:3,
+with complete readback and no IPC/power/DSP-start operation. Its hardware
+result is pending. Startup still needs correctly acknowledged CX/XO votes,
+remote negotiation and bounded authenticated reset before APR/Q6 transport.
+
 **Startup ownership audit:** the global startup survey passed and found RPM
 auxiliary descriptors, with global SMP2P429/443 unallocated. The vendor driver
 can instead use an APPS↔ADSP SMEM partition; global absence does not establish

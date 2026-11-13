@@ -5,6 +5,26 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Parallel Wi-Fi and battery audits requested (2026-11-12)
+
+- User requested subagent audits of unreliable Wi-Fi establishment, a
+  persistent congestion/frequency warning, and jumping battery percentage/
+  charging implementation. Also requested current docs/readmes from all agents.
+- Root continues audio/device access/builds/Git. Wi-Fi agent owns
+  WIFI-STATUS.md and proposed patch0289; battery agent owns BATTERY-STATUS.md
+  and proposed patch0290. Agents do not access phone or mutate shared Git.
+- Preliminary battery source defect: any failed or busy River sample falls
+  back to85%/4100mV/external=true/full=true in SweetBattery.cpp. This directly
+  permits spurious jumps. Agent validating last-valid-sample fix, invalid
+  current handling and voltage-based estimation limits. No fix deployed.
+- Preliminary Wi-Fi source defects: automatic rejoin can complete without
+  restoring live interface or publishing link/association success; deauth
+  changes the stage such that existing retry branch cannot run. Generic
+  failure is reported with hard-coded reason16; relation to exact iOS warning
+  wording remains unverified. Agent preparing tested state-machine fix.
+- README now records current user-reported limitations and audit state rather
+  than implying stable Wi-Fi/battery from prior successful demonstrations.
+
 ## Empty ADSP partition verified; outbound init prepared (2026-11-12)
 
 - User confirmed responsive iOS on f5bdc45 boot. Read-only --probe exited0.
@@ -32,7 +52,25 @@
   before allocation, exact bounded writes, version/free-pointer ordering,
   readback failure and lock release, no adjacent-memory changes, one-shot
   limit, parser recognizing the new record, and all prior ADSP tests.
-  iOS helper compiled with warnings-as-errors and ad-hoc signed. Build pending.
+  iOS helper compiled with warnings-as-errors and ad-hoc signed. Source
+  b90f2d1a5c7670504c92fdcc23ff3e5edd74f184 is building in
+  work/build/river-b90f2d1a5c76-Dw0M2o from a minimal committed checkout,
+  standard toolchain/options and local pinned XNU source. Build succeeded,
+  kernel SHA2568c617e0fd4842bddf8b86c5add6bc57237d55bb97226f58adf84fc569207270f.
+- Packaged outputs/river-adsp-handshake-b90f2d1.img:26695680bytes, cmdline562,
+  SHA2567ec7855c109cc74096eaa3dc8267d1199d552a419e39e328b87dd530d73dcb9e.
+  Payload checks passed using hydrated work/packaging-tools. Awaiting fastboot
+  and responsive iOS, then --probe and --handshake-init, post-init --probe.
+  Verified productriver and temporary fastboot boot succeeded. Waiting for
+  user-confirmed responsive iOS; no0288 hardware result yet.
+- Future RPM driver requirement: captured prior USB logs show Wi-Fi boot's
+  simplistic ACK parser consumed msgID1 for both L19 and L9 requests. Do not
+  reuse its `any packet = ack` behavior. V0 successful response payload is
+  req0x716572/len12/keymsg#0x2367736d/value-length4/idACK; validate exact
+  unique current ID, frame length and lack of NACK/error data before claiming
+  a CX/XO vote. Source confirms XO resourceclk0/id0/keyEnab0x62616e45;
+  CX resource smpa/id2/keyvlvl384 for TURBO plus documented load/enable.
+  No ADSP RPM request has been sent.
 
 ## Partitioned SMEM ownership correction (2026-11-12)
 

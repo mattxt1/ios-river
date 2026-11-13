@@ -21,7 +21,7 @@
   - **Audio Subsystem**:
     - Kernel endpoints: `/dev/hakios-audio` and `/dev/hakios-mic` (patch 0270).
     - CS35L41 smart speaker amplifier: I2C `0x40` on QUP2 (`0x078b6000`), reset on TLMM GPIO 94 (`0x0105e000`), IRQ on GPIO 63. Boost energized at 8.5V, 4500 mA peak, +17 dB analog power gain (`0x00006c04 = 0x220`).
-    - CS47L35 (Madera) audio hub codec: SPI bus 7 (`0x07af7000`), BLSP2 QUP3 (source-derived; not yet probed), reset on TLMM GPIO 68 (`0x01044000`), IRQ on GPIO 46. AIF1 signal names appear on codec GPIOs 9–11; the exact board-level connection to the amplifier is not established by the pin list alone.
+    - CS47L35 (Madera) audio hub codec: SPI bus 7 (`0x07af7000`), BLSP2 QUP3 (ID `0x6360`, revision1 verified), reset on TLMM GPIO 68 (`0x01044000`), IRQ on GPIO 46. A muted native AIF1 clock test on GPIO9/11 achieved both codec FLL and amplifier PLL lock, then restored all state. PCM transport is still unimplemented; clock lock does not establish audible playback.
     - **Hardware Protection Interlock**: When `CS35L41_PLL_UNLOCK` is set (register `0x00010098` bit 4 = `0x10`), CS35L41 hardware safety logic enforces an automatic Hi-Z protective shutdown of the Class-D PWM H-bridge output stage. Physical sound requires a synchronous locked clock on ASP BCLK.
     - **QUP2 Concurrency**: QUP2 is shared between CS35L41 audio amplifier operations and AW8697 haptic/input worker threads. All transfers must be serialized via `lck_mtx_t ri_qup2_lock`.
   - **Battery Subsystem**:
@@ -32,4 +32,5 @@
   - **Networking**:
     - WCNSS Wi-Fi (`en0`) managed by `org.river.net` launchd daemon.
     - USB CDC-ECM Ethernet (`192.168.7.2`), root SSH via Dropbear on port 22.
+- **Current audio continuation**: Stock ADSP metadata acceptance and17MiB memory staging passed without DSP startup. APPS/ADSP partition2 at SMEM+0x86000 is empty at baseline. Patch0288 handshake-init image is built but its locked allocation still needs hardware testing. See the newest NOTES.md entry and AUDIO-BRINGUP.md; do not infer legacy global-table absence means no partition records.
 - Keep device dumps, serial numbers, private keys, firmware, and downloaded Apple artifacts out of Git.
