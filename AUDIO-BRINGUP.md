@@ -4,6 +4,15 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+**PCM transport work:** stock ADSP firmware has been extracted read-only and
+its embedded per-file SHA256 hashes verified. `tools/river-adsp-fw.py` checks
+Hexagon metadata and exact River carveout bounds; this is not secure signature
+authentication. Patch0282 adds an explicit read-only PAS1/retained-SMEM survey
+(`river-adsp-status --probe`); the passive command reads its last result.
+No ADSP firmware has been started, no physical PCM path is advertised, and
+its hardware probe result is pending. Next is source-derived secure startup,
+SMP2P readiness, APR/QMI and Q6AFE/Q6ASM/SLIMbus buffer transport.
+
 **Latest live result, 2026-11-12:** the muted codec-to-amplifier I2S clock test
 passed on source `fa7283f` (through patch0281). Codec FLL locked (`raw=0x100`)
 and amplifier raw PLL-unlock cleared twice (`0x20000010`→`0x2000000a`) with

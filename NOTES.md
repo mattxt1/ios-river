@@ -21,8 +21,8 @@
   rget/rput and purpose-built tools rather than assuming desktop utilities.
 - New `tools/river-adsp-fw.py` validates ELF32 Hexagon headers, split sizes,
   packed MDT/header/hash identity, embedded per-file SHA256, relocatable
-  non-overlapping ranges and exact 17MiB extent. All stock nonempty file
-  hashes match. This checks extraction integrity, not secure authentication.
+  non-overlapping ranges and exact 17MiB extent. All applicable non-hash
+  split-file digests match; the hash chunk matches packed MDT metadata. This checks extraction integrity, not secure authentication.
 - Pinned DT (`msm8953.dtsi`) ADSP PAS1, carveout0x8d600000+0x1100000.
   Firmware linked0x8a200000..0x8b300000, relocate+0x3400000. Metadata SHA256
   3aae7a57e5a417465cd435d25cb3343dd81b7088f2f77434c6002f88de1fcd00.
@@ -37,7 +37,15 @@
   failed queries, invalid heap/descriptor/aux ranges, malformed channel names,
   foreign edges and state layout; firmware corruption, wrong architecture,
   overlap and incorrect carveout extent are rejected. iOS status helper
-  compiled with warnings-as-errors and ad-hoc signed. Build/boot pending.
+  compiled with warnings-as-errors and ad-hoc signed. Repacker tests verify
+  new ADSP helper insertion/replacement, unrelated file preservation and
+  duplicate rejection. Source committed5721d3e98a4345e4ac1cc09a0250e353076d1add;
+  local build succeeded in work/build/river-5721d3e98a43-ZAUGz1.
+- Kernel SHA2561aefa1666819b27bbf35cf2544b41ebf24c633a1fede538765c8c2c18b788278.
+  Packaged outputs/river-adsp-probe-5721d3e.img with the new status helper;
+  image SHA256b8ef49c1d88e0f0144e66b9ffc7ac055c182492b34159d7cf1202325fc0a35cd.
+  Image size26677248, cmdline562; payload segment checks passed.
+  Awaiting fastboot coordination for read-only hardware probe.
 - Remaining prerequisites before physical PCM: ADSP secure loading with its
   source-derived CX/XO/crypto proxy requirements, SMP2P readiness, APR/QMI,
   Q6AFE/Q6ASM + SLIMbus channel configuration, paced buffer lifecycle, codec
