@@ -24,7 +24,21 @@
   1088 ordered pages, mapping/unmapping/barrier order, incomplete transfer,
   wrong final hash, map failure, helper corrupted/short input and rewind.
   All ADSP probe/MDT/firmware/repacker checks also passed. iOS helper compiled
-  with warnings-as-errors and ad-hoc signed. No0285 hardware result yet.
+  with warnings-as-errors and ad-hoc signed.
+- Source a247fb77bdfd50bb116868295bffd39d41efd769 is building in
+  work/build/river-a247fb77bdfd-miZI9V. Build succeeded; kernel SHA256
+  0d2268de8c907a75c53a946fdc50f733292d0864cdf848790419891324e7a321.
+- Image outputs/river-adsp-stage-a247fb7.img: 26679296bytes,
+  cmdline562, SHA256
+  49f24a6fe78eff7238b141a29b45b2fc7ecf898827a9451e19e5eb8bd1c13f9e.
+  Payload checks passed. Awaiting fastboot, then confirmed responsive iOS,
+  read-only baseline, metadata authentication on the new boot, and explicit
+  --stage-image /private/var/tmp/river-adsp-f325942f.img. Never invoke start.
+  Verified fastboot productriver and temporary boot succeeded. Waiting for
+  user-confirmed responsive iOS; no0285 memory-staging result yet.
+- Staged /private/var/tmp/river-adsp-f325942f.img as mode0600 regular file.
+  Read back all17825792bytes; full SHA256 matches expected stock image.
+  Readback only covers the temporary file, not the destination ADSP carveout.
 
 ## Stock ADSP metadata accepted by TrustZone (2026-11-12)
 

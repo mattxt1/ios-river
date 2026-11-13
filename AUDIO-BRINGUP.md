@@ -4,6 +4,13 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+**ADSP metadata live result:** the exact recovered stock MDT was accepted by
+TrustZone PAS1 INIT_IMAGE (`status=0 result=0`), and iOS stayed responsive.
+No executable firmware was loaded or started in that test. Patch0285 adds a
+separate exact-carveout MEM_SETUP and bounded image staging step, with stock
+input hashes verified before setup and at completion; it cannot start the DSP.
+Destination-memory readback and full executable authentication remain unverified.
+
 **PCM transport work:** stock ADSP firmware has been extracted read-only and
 its embedded per-file SHA256 hashes verified. `tools/river-adsp-fw.py` checks
 Hexagon metadata and exact River carveout bounds; this is not secure signature
