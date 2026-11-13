@@ -5,6 +5,21 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+##0296 temporary boot accepted; UI confirmation pending (2026-11-13)
+
+- User returned River to fastboot. Reverified26,697,728-byte image/hash
+  b5c2969f3e1f2d1f5cd010dcaead265e9f9150d4b2fdc2857b155c8933d851a3
+  and productriver. Temporary fastboot transfer+boot bothOKAY; noflashing.
+- USB-only receiverstarted(work/audit-device-validation/boot-dbf26b6-usb.log,
+  bounded300s afterup-to180sbindwait). Read-onlyapproved-keySSH retainedlog
+  captured199481bytesatwork/audit-device-validation/kernel-early-dbf26b6.log.
+  No devicecontrol/runjoinoperation beforeuserUIconfirmation. Asyncquestion
+  awaitsresponsivehome screen; actualWiFi/rank/DNS0296resultsremainpending.
+- Next afterUIconfirmationreadcurrentstate/address/config/NWIassertions;
+  ifidleaskoneSettingsjoin,thenverifyON/OFFnotificationeffects,checkmark,
+  boundHTTPandordinaryDNS. KeepprivatecapturesoutofGit. Sourceprefixdbf26b6
+  remainsrunningimage; latestdoconlycommitscanbenewer. AudioPCMstillpending.
+
 ##0296 link-event image built/verified; awaiting fastboot (2026-11-13)
 
 - Fulldbf26b6f8150c8a0b9c3a27f5871e3b11611546a buildpassedthrough0296in
