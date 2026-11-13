@@ -5,6 +5,22 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+##0296 responsive iOS; manual Wi-Fi join pending (2026-11-13)
+
+- Userconfirmedresponsivehome screenon0296/dbf26b6. Approved-keySSH andUSB
+  logswork. EarlyRPMACK1/stale1ignored/ACK2againverifiedinbootcapture.
+- Initialandlaterreadonlyriver-wifi-statequeriesbothstate0/result0; nojoin
+  requestorDLtransitionseenatlastcheck. Initialen0configdNeverassertionis
+  presentwhileidle,NWIen0absent,asexpectedbeforenetworkconfiguration.
+  Thisdoesnotestablishwhether0296changesjoinedrank/DNSbehavior.
+- Pendingasyncquestionasksuserjoinusualnetworkonceandreportcheckmark/
+  spinner/error. Nextafterjoincollectstate/result,selectedSC/rank/DNS/NWI,
+  retainedlogsfordata-linkerrorsandboundnumericHTTP+ordinaryDNS. Do not
+  initiateanotherjoinorclaimruntimeON/OFFsuccessbeforeactualtransition.
+- Currentmanifestoutputs/wifi-link-build-manifest.jsonrecordsiOSresponsive,
+  pendingmanualjoin. Source/dbf26b6 remainsrunningkernel. AudioADSPstartup
+  andphysicalPCMremainnextprincipalobjectiveafterthisboundednetworkcheck.
+
 ##0296 temporary boot accepted; UI confirmation pending (2026-11-13)
 
 - User returned River to fastboot. Reverified26,697,728-byte image/hash
