@@ -44,6 +44,12 @@ with the test so an iOS volume command cannot override its mute mid-test.
 Run the snapshot before the test, and do not consume the shared one-shot with
 `--test` or `--route-test` first. This is a clock-path test, not audible audio.
 
+**0278 live baseline:** temporary boot succeeded, but `--i2s-snapshot`
+repeatedly returned `phase=i2s_snapshot error=5 attempted=0` with SPI pins
+restored. The amplifier survey retained expected ID and idle register values.
+No clock test was triggered. Patch0279 reports the precise failing snapshot
+stage/register/values without relaxing guards; its hardware result is pending.
+
 ## Current continuation
 
 Patch 0273 adds `debug.river_audio_prereq`, a read-only, on-demand survey:

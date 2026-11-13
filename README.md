@@ -159,7 +159,7 @@ configuration. Preparing or writing one is destructive to the target partition.
   fit experiments and diagnostics.
 - [LOCAL-BUILD.md](LOCAL-BUILD.md): verified local XNU build setup.
 - `shim-river/`, `xnu/patches/`, `tools/`, `phone-tools/`, `mesa/`: loader,
-  ordered kernel patches (currently through patch 0277), host utilities, device tools and Mesa integration.
+  ordered kernel patches (currently through patch 0279), host utilities, device tools and Mesa integration.
 
 ## Next work
 

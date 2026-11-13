@@ -14,11 +14,19 @@
   `attempted=0 route_touched=0 pins_restored=1`. No `--i2s-test` was run.
 - Amplifier survey still reported ID0x35a40/revB0, power0x21, mute0,
   format0x20200233, PLL0x833 and IRQ3 0x20000010. Endpoint flags3.
+- User confirmed iOS remained responsive after the read-only snapshot checks.
 - Failure cause is unknown: 0278 snapshot did not report which exact read,
   identity or repeated-value check failed. Added patch0279 with read-only
   failure stage/register/expected/observed diagnostics. All guards and
   hardware write sequences remain unchanged. A new boot is required to
   identify the blocker before attempting the clock test.
+- Diagnostic source `7d8cfc653ad24832eeb59069532406b2d3c2607b` built
+  successfully; all host checks passed, including failed-ID diagnostics and
+  zero codec/amp/PMIC writes on snapshot failure. New image
+  `outputs/river-muted-i2s-diag-7d8cfc6.img`: 26,626,048 bytes, cmdline562,
+  SHA256 `ad11e0365453b271852eb005f7b35fd0540059cf6a2acbd365bbc4db222fa48f`.
+  Kernel SHA256 `6f874df7dd8df730b4713d19372665045f747cc607dcc679a41057912624b9ff`.
+  Payload verification passed. Waiting for user fastboot coordination.
 
 ## Muted I2S clock-test preparation (2026-11-12)
 
