@@ -22,9 +22,11 @@ uses signed PCM volume at shift3 with mute raw0x4cf. Host tests extract the
 actual baseline and patched helper: baseline wrong-encoding and failed-write
 unmute reproduce; corrected signed levels, preserved fields, range clamp,
 explicit mute, unavailable speaker and injected read/write/readback failures
-pass. No new speaker-output or PCM test has run. Wi-Fi regressions and the
-full a6de705 kernel build pass with0292/0293 together. Device register
-verification is pending; final image will also include the RPM reply fix below.
+pass. Live4d238b8 register tests now pass:80 eighths below0dB→0x3d80,720→0x2980,
+explicit mute→0x2678/outputmute0x10. Baseline digital0/outputmute0, format,
+PLL and power registers restored exactly. No PCM was played and no codec
+clock was changed. Wi-Fi regressions and the
+full a6de705 kernel build pass with0292/0293 together. Device register verification passed; the image also includes the RPM reply fix below.
 
 ## RPM reply prerequisite (2026-11-13)
 
@@ -49,7 +51,10 @@ it, shared-channel serialization, TX capacity/ownership, unique request IDs
 and an explicit CX/XO vote policy remain required. It does not make WCNSS
 startup contingent on ACK success; that existing startup policy is separate.
 The combined4d238b8 full kernel build passed and its temporary image is packaged
-and verified. Hardware ACK and volume-register validation are pending.
+and verified. Volume-register validation passed on the phone. Early RPM ACK messages were
+missed during USB enumeration and had rotated out of the128KiB retained log;
+exact-ID runtime ACK validation remains pending. The next temporary image
+uses the supported msgbuf argument to retain1MiB for those diagnostics.
 
 ## Verified progress and remaining work (2026-11-13)
 

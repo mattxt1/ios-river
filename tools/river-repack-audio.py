@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import struct
 import tempfile
@@ -68,6 +69,8 @@ def main():
     ap.add_argument('--kernel', type=Path, required=True)
     ap.add_argument('--clock-helper', type=Path, required=True)
     ap.add_argument('--adsp-helper', type=Path)
+    ap.add_argument('--msgbuf-bytes', type=int, choices=(131072, 262144, 1048576),
+                    help='Optional bounded kernel log buffer for temporary diagnostics')
     ap.add_argument('--output', type=Path, required=True)
     args = ap.parse_args()
     require(not args.output.exists(), 'Refusing to overwrite output')
@@ -89,6 +92,17 @@ def main():
         require(size <= vs and off + size <= len(prior), 'Invalid payload segment')
     cmdline = prior[0x48:0x2a8].split(b'\0')[0]
     require(len(cmdline) < 608 and b'rd=emmc0s64' in cmdline, 'Unexpected command line')
+    if args.msgbuf_bytes is not None:
+        matches = list(re.finditer(rb'(?<!\S)msgbuf=[0-9]+(?=\s|$)', cmdline))
+        require(len(matches) <= 1, 'Duplicate msgbuf arguments')
+        require(b'msgbuf=' not in cmdline or len(matches) == 1, 'Unsupported msgbuf argument')
+        token = ('msgbuf=%d' % args.msgbuf_bytes).encode('ascii')
+        if matches:
+            match = matches[0]
+            cmdline = cmdline[:match.start()] + token + cmdline[match.end():]
+        else:
+            cmdline += b' ' + token
+        require(len(cmdline) < 608, 'Diagnostic command line exceeds fixed field')
     adt_off, adt_size = struct.unpack_from('<2Q', prior, 0x20)
     require(adt_off + adt_size <= len(prior), 'Invalid ADT range')
     root, _ = adt.parse(prior[adt_off:adt_off + adt_size])
@@ -159,6 +173,8 @@ def main():
                     image_sha256=digest(output), image_bytes=len(output),
                     cmdline_bytes=len(cmdline), kernel_payload_segments_verified=True,
                     clock_helper_sha256=digest(replacement), temporary_boot_only=True)
+    if args.msgbuf_bytes is not None:
+        manifest['msgbuf_bytes'] = args.msgbuf_bytes
     print(json.dumps(manifest, indent=2))
 
 

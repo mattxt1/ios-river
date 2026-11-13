@@ -5,6 +5,45 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+##0294 live checks passed; Wi-Fi completion ABI fix prepared (2026-11-13)
+
+- User confirmed responsive iOS after4d238b8 temporary boot. Mac initially
+  had no USB device/en6. User unplugged/reconnected USB; River CDC-ECM en6
+  and approved-key SSH immediately worked. Private log
+  work/audit-device-validation/boot-4d238b8-usb.log began after reconnect.
+- Live speaker-control test required discard-only backend and exact baseline
+  vol0/mute0/fmt20200233/pll833.80 eighths attenuation read0x3d80,720 read
+ 0x2980; explicit mute read0x2678 and outputmute0x10. All expected values
+  verified; original digital/mute/format/PLL/power registers restored exactly.
+  No PCM sent, no codec or clock change. Private volume-4d238b8-{log.txt,result.json}.
+- User repeated join and reported same alert. New trace proves SET20,
+  AP associationstatus0, WPA PTK/GTK+M4 success and protected DHCP OFFER.
+  Later getters show active BSSID/channel/SSID, yet GET21 result0. Read-only
+  river-wifi-state independently returns state4/result0. This supersedes
+  earlier noSET20 inference. Optional unsupported getters are not blindly
+  changed from macOS headers.
+- Agent0295 separates internal status0-success from iOS result0-pending,
+ 1-success,2-genericfailure in both completion paths. Prior exact scalar
+  iOS-flame0123 source documents this mapping; root checked the actual source.
+  Full engine/public GET21 regressions passed with0292/0293/0294/0295 together.
+- netprobe now reports IPv4: en0 has an address and UP/RUNNING flags, but
+  address presence does not prove a fresh lease. A20s-bounded HTTP helper
+  bound viaIP_BOUND_IF en0 failed phone DNS; both host-resolved Apple targets
+  then failed connect with Network is unreachable. No DNS/routes modified.
+  Settings checkmark, actual lease/default route/DNS/Internet remain unverified.
+- New read-only river-kmsg compiled/signed/installed and retrieved131073bytes
+  using normal libproc root/MAC checks. Early RPM messages had rotated; no
+  claim of live exact-ID ACK success. Root added bounded --msgbuf-bytes to
+  tracked repacker and hydrated copy: actual1MiB packaging test passed all
+  kernel-segment checks,577-byte command line, one msgbuf token. Default
+  preserves base args. This supports the next boot's retained diagnostics.
+- Helper sources/build script updated: river-kmsg, river-wifi-state, bounded
+  en0-only river-wifi-check and IPv4 netprobe. Actual helpers compiled with
+  warnings-as-errors, ad-hoc signed and exercised. Captures/keys stay out of Git.
+- Next commit/build0295, package with1MiB retained log, temporary boot and
+  verify public result1, real Settings completion and Wi-Fi-bound connectivity;
+  also recover early exact RPM replies. ADSP startup/physical PCM still pending.
+
 ##0294 temporary boot handed off; UI pending (2026-11-13)
 
 - User returned River to fastboot. Independently reverified packaged image

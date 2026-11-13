@@ -1,6 +1,8 @@
 /* Read-only network inventory for River: interface names and IONetworkController services. */
 #include <ifaddrs.h>
 #include <net/if.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <stdio.h>
 #include <string.h>
 #include <IOKit/IOKitLib.h>
@@ -23,6 +25,18 @@ int main(void)
 			}
 		}
 		if (!seen) printf("  %s flags=0x%x\n", it->ifa_name, it->ifa_flags);
+	}
+	puts("IPv4 addresses:");
+	for (struct ifaddrs *it = head; it != NULL; it = it->ifa_next) {
+		if (!it->ifa_name || !it->ifa_addr || it->ifa_addr->sa_family != AF_INET) continue;
+		char address[INET_ADDRSTRLEN], mask[INET_ADDRSTRLEN] = "unknown";
+		const struct sockaddr_in *sin = (const struct sockaddr_in *)it->ifa_addr;
+		if (!inet_ntop(AF_INET, &sin->sin_addr, address, sizeof(address))) continue;
+		if (it->ifa_netmask && it->ifa_netmask->sa_family == AF_INET) {
+			const struct sockaddr_in *netmask = (const struct sockaddr_in *)it->ifa_netmask;
+			(void)inet_ntop(AF_INET, &netmask->sin_addr, mask, sizeof(mask));
+		}
+		printf("  %s address=%s netmask=%s\n", it->ifa_name, address, mask);
 	}
 	freeifaddrs(head);
 

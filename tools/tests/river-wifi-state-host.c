@@ -33,6 +33,13 @@ static void kev_post_msg(const struct kev_msg *msg) {assert(msg->event_code);eve
 #include "river-wifi-abi.h"
 void river_pbkdf2_pmk(const char *pass,const char *ssid,size_t len,uint8_t pmk[32]) {(void)pass;(void)ssid;(void)len;memset(pmk,7,32);}
 #include "river-wifi-engine.h"
+#ifdef HOST_RESULT_ABI
+#define HOST_JOIN_SUCCESS 1
+#define HOST_JOIN_FAILED 2
+#else
+#define HOST_JOIN_SUCCESS 0
+#define HOST_JOIN_FAILED 16
+#endif
 typedef uintptr_t vm_offset_t;
 static struct {uint8_t pmk[32],pending[512];unsigned stage,pending_len;bool associated,keys_installed,data_tx_stalled,pmk_ready;} river_wpa;
 static struct {uint8_t ssid[32],bssid[6],rates[12],rsn[22],ap_rsn[257];unsigned channel,beacon,caps,dtim,nrates,rsn_len,ap_rsn_len,ssid_len;bool found,enabled,rates_ok,security_ok;} river_target;
@@ -104,7 +111,7 @@ static void deauth(void) {
 int main(void) {
  setup();memcpy(river_target.ssid,"one",3);river_target.ssid_len=3;memcpy(river_target.bssid,ap_a,6);
  river_target.enabled=river_target.found=true;river_wpa.pmk_ready=true;memset(river_wpa.pmk,5,32);
- river_connection_boot();assert(river_net_live&&river_connection_saved&&active_phase==PHASE_JOINED&&assoc_calls==1);
+ river_connection_boot();assert(river_net_live&&river_connection_saved&&active_phase==PHASE_JOINED&&assoc_calls==1&&join_result==HOST_JOIN_SUCCESS);
  deauth();river_connection_service();river_reconnect_wait=0;river_connection_service();assert(river_net_live&&assoc_calls==2);
  setup();memcpy(river_target.ssid,"one",3);river_target.ssid_len=3;memcpy(river_target.bssid,ap_a,6);
  river_target.enabled=river_target.found=true;river_wpa.pmk_ready=true;
@@ -113,17 +120,34 @@ int main(void) {
  setup();memcpy(river_target.ssid,"one",3);river_target.ssid_len=3;memcpy(river_target.bssid,ap_a,6);
  river_target.enabled=river_target.found=true;river_wpa.pmk_ready=true;queue_join("two",ap_b);river_connection_boot();
  assert(!assoc_calls&&join_pending_flag&&active_phase==PHASE_JOINING);
+#ifdef HOST_RESULT_ABI
+ /* GET21 has no payload on iOS. Exercise pending, completed and stale results
+  * through the ioctl boundary, independently of internal status arguments. */
+ setup();struct apple80211req result={.req_type=21};
+ queue_join("one",ap_a);assert(!river_apple80211_ioctl(SIOCGA80211,&result)&&result.req_val==0);
+ river_connection_service();assert(river_net_live&&active_phase==PHASE_JOINED);
+ assert(!river_apple80211_ioctl(SIOCGA80211,&result)&&result.req_val==1);
+ queue_join("two",ap_b);assert(!river_apple80211_ioctl(SIOCGA80211,&result)&&result.req_val==0);
+ assoc_success=false;river_connection_service();assert(!river_net_live&&active_phase==PHASE_IDLE);
+ assert(!river_apple80211_ioctl(SIOCGA80211,&result)&&result.req_val==2);
+ queue_join("one",ap_a);assoc_success=true;river_connection_service();
+ assert(!river_apple80211_ioctl(SIOCGA80211,&result)&&result.req_val==1);
+ /* Legacy completion also translates the public enum, never its errno. */
+ river_apple80211_assoc_done(0);assert(!river_apple80211_ioctl(SIOCGA80211,&result)&&result.req_val==1);
+ river_apple80211_assoc_done(1);assert(!river_apple80211_ioctl(SIOCGA80211,&result)&&result.req_val==2);
+ river_apple80211_assoc_done(16);assert(!river_apple80211_ioctl(SIOCGA80211,&result)&&result.req_val==2);
+#endif
  setup();queue_join("one",ap_a);struct river_apple80211_join_req old,current;
  assert(river_apple80211_join_pending(&old));queue_join("two",ap_b);unsigned before=events;
  assert(!river_apple80211_join_complete(&old,NULL,16)&&events==before&&join_pending_flag&&active_phase==PHASE_JOINING);
  assert(river_apple80211_join_pending(&current));struct river_apple80211_target_info info;
  assert(river_apple80211_find_target(&current,&info));assert(river_apple80211_join_complete(&current,&info,0));
- assert(active_phase==PHASE_JOINED&&join_result==0&&!memcmp(active_bss.bssid,ap_b,6));
- assert(!river_apple80211_join_complete(&old,NULL,16)&&active_phase==PHASE_JOINED&&join_result==0);
+ assert(active_phase==PHASE_JOINED&&join_result==HOST_JOIN_SUCCESS&&!memcmp(active_bss.bssid,ap_b,6));
+ assert(!river_apple80211_join_complete(&old,NULL,16)&&active_phase==PHASE_JOINED&&join_result==HOST_JOIN_SUCCESS);
  assert(!river_apple80211_link_lost(old.generation,0)&&active_phase==PHASE_JOINED);
  setup();queue_join("one",ap_a);assert(river_apple80211_join_pending(&current));assert(river_apple80211_find_target(&current,&info));
- assert(river_apple80211_join_complete(&current,NULL,16)&&join_result==16);
- assert(river_apple80211_join_complete(&current,&info,0)&&join_result==0&&river_apple80211_data_allowed(current.generation));
+ assert(river_apple80211_join_complete(&current,NULL,16)&&join_result==HOST_JOIN_FAILED);
+ assert(river_apple80211_join_complete(&current,&info,0)&&join_result==HOST_JOIN_SUCCESS&&river_apple80211_data_allowed(current.generation));
  struct apple80211req stop={.req_type=22};assert(!set(&stop));assert(!river_apple80211_join_current(current.generation));
  assert(!river_apple80211_data_allowed(current.generation)&&river_apple80211_take_stop()&&!river_apple80211_take_stop());
  assert(!river_apple80211_join_complete(&current,&info,0)&&active_phase==PHASE_IDLE);
@@ -132,7 +156,7 @@ int main(void) {
  queued_packets=3;deauth();assert(!river_net_live&&!queued_packets&&river_wpa.stage==3&&river_cleanup_pending);
  assert(!cleanup_calls&&!link_calls);river_connection_service();assert(cleanup_calls==1&&link_calls==1&&!river_cleanup_pending);
  river_connection_service();assert(cleanup_calls==1);river_target.found=true;river_reconnect_wait=0;
- river_connection_service();assert(river_net_live&&river_wpa.stage==2&&active_phase==PHASE_JOINED&&join_result==0&&assoc_calls==2);
+ river_connection_service();assert(river_net_live&&river_wpa.stage==2&&active_phase==PHASE_JOINED&&join_result==HOST_JOIN_SUCCESS&&assoc_calls==2);
  setup();queue_join("one",ap_a);river_connection_service();deauth();assert(!set(&stop));river_connection_service();
  assert(!river_connection_saved&&!river_target.enabled&&!river_net_live&&river_wpa.stage==0&&assoc_calls==1);
  setup();queue_join("one",ap_a);river_connection_service();deauth();struct apple80211req power={.req_type=19,.req_val=0};assert(!set(&power));
@@ -143,7 +167,7 @@ int main(void) {
  river_connection_service();assert(river_net_live&&active_phase==PHASE_JOINED&&!memcmp(active_bss.bssid,ap_b,6));
  setup();queue_join("one",ap_a);river_connection_service();deauth();river_connection_cleanup();
  river_target.found=true;river_reconnect_wait=0;river_reconnect_attempts=5;river_connection_service();
- assert(!river_connection_saved&&!river_net_live&&join_result==16&&assoc_calls==1);
+ assert(!river_connection_saved&&!river_net_live&&join_result==HOST_JOIN_FAILED&&assoc_calls==1);
  setup();queue_join("one",ap_a);river_connection_service();deauth();river_connection_cleanup();
  river_bss_count=0;river_reconnect_wait=0;river_connection_service();
  assert(river_reconnect_attempts==1&&river_wpa.stage==3&&!river_target.found&&assoc_calls==1);

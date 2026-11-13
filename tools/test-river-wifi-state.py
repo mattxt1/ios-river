@@ -25,6 +25,9 @@ with tempfile.TemporaryDirectory(prefix='river-wifi-state-') as tmp:
     engine='\n'.join(line for line in engine.splitlines() if not line.startswith('#include'))
     start=engine.index('static void\nhmac_sha1(');end=engine.index('static void\npost(',start)
     engine=engine[:start]+engine[end:]
+    has_result_abi='RIVER_ASSOC_SUCCESS' in engine
+    if has_result_abi:
+        engine='#define HOST_RESULT_ABI 1\n'+engine
     (d/'river-wifi-engine.h').write_text(engine)
     driver=(d/'bsd/dev/sweet_keys.c').read_text()
     start=driver.index('static void\nriver_target_rx(');end=driver.index('static uint32_t\nriver_bd_word',start)

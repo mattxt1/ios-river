@@ -70,3 +70,13 @@ previous verified build only after its Git object hash matches the committed
 object ID. Keep firmware, KDK files, private logs and local recovery backups
 out of Git. Recheck the committed patch inputs, then use the normal isolated
 build; do not report the kernel built or deployed until those steps pass.
+
+For a temporary diagnostic image, `tools/river-repack-audio.py` optionally
+accepts `--msgbuf-bytes 1048576` (also131072 or262144). The default preserves
+the verified base command line. An override replaces one decimal msgbuf
+argument or appends it, refuses duplicates/unknown encodings, and rechecks
+the608-byte field. Actual packaging with1MiB passed all payload checks at
+577 command-line bytes. `phone-tools/river-kmsg` reads up to1MiB through the
+normal root/MAC-checked libproc API without consuming /dev/klog or resizing
+the buffer; keep captures private. Larger retention helps when USB enumerates
+late. It does not guarantee early messages remain after long delays.
