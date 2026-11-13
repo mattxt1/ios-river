@@ -12,6 +12,9 @@ static uint32_t smem[0x100000/4];
 static vm_offset_t river_smd_smem;
 static unsigned scm_calls,scenario;
 static int64_t river_scm(uint32_t svc,uint32_t cmd,uint64_t ai,uint64_t a0,uint64_t a1,uint64_t a2,uint64_t *r) {
+#ifdef RI_ADSP_STAGE_HOST
+ if(svc==2&&cmd==2) return stage_scm(ai,a0,a1,a2,r);
+#endif
 #ifdef RI_ADSP_METADATA_HOST
  if(svc==2&&cmd==1) return metadata_scm(ai,a0,a1,a2,r);
 #endif

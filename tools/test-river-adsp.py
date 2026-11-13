@@ -16,6 +16,7 @@ with tempfile.TemporaryDirectory() as d:
     (dev/'river_adsp_probe.h').write_text(code+'\n')
     subprocess.run(['git','apply',str(r/'xnu/patches/0283-river-adsp-metadata-auth.patch')],cwd=root,check=True)
     subprocess.run(['git','apply',str(r/'xnu/patches/0284-river-adsp-builtin-sha256.patch')],cwd=root,check=True)
+    subprocess.run(['git','apply',str(r/'xnu/patches/0285-river-adsp-memory-stage.patch')],cwd=root,check=True)
     code=(dev/'river_adsp_probe.h').read_text()
     code='\n'.join(x for x in code.splitlines() if not x.startswith('#include <'))
     code=code.split('#include "river_adsp_metadata.h"',1)[0]
@@ -36,6 +37,34 @@ with tempfile.TemporaryDirectory() as d:
     subprocess.run(['cc','-O2','-Wall','-Wextra','-Werror','-Wno-unused-function',
                     '-Wno-deprecated-declarations','-I',d,str(r/'tools/tests/river-adsp-metadata-host.c'),'-o',str(binary)],check=True)
     subprocess.run([str(binary)],check=True)
+    stage=(dev/'river_adsp_stage.h').read_text().split('static int\nriver_adsp_stage_sysctl',1)[0]
+    page=bytes(i*7&255 for i in range(0x4000))
+    digest=hashlib.sha256(page*(fw.SIZE//len(page))).digest()
+    stage=re.sub(r'(ri_adsp_image_sha256\[32\]=\{).*?(\};)',
+                 lambda m:m[1]+','.join(hex(x) for x in digest)+m[2],stage,flags=re.S)
+    stage=stage.replace('__asm__ volatile("dsb sy" ::: "memory");','host_stage_dsb();')
+    (root/'river-adsp-stage-added.h').write_text(stage)
+    binary=root/'stage'
+    subprocess.run(['cc','-O2','-Wall','-Wextra','-Werror','-Wno-unused-function',
+                    '-Wno-deprecated-declarations','-I',d,str(r/'tools/tests/river-adsp-stage-host.c'),'-o',str(binary)],check=True)
+    subprocess.run([str(binary)],check=True)
+    helper=(r/'phone-tools/river-adsp-status.c').read_text()
+    helper=helper.split('static int verify_image(int fd) {',1)[1].split('#pragma clang diagnostic pop',1)[0]
+    helper='static int verify_image(int fd) {'+helper
+    helper=re.sub(r'(expected\[32\]=\{).*?(\};)',
+                  lambda m:m[1]+','.join(hex(x) for x in digest)+m[2],helper,flags=re.S)
+    program='#include <CommonCrypto/CommonDigest.h>\n#include <unistd.h>\n#include <fcntl.h>\n#include <errno.h>\n#include <string.h>\n#include <assert.h>\n'+helper
+    program+='int main(int argc,char **argv) {assert(argc==3);int fd=open(argv[1],O_RDONLY);assert(fd>=0);int result=verify_image(fd);assert((result!=0)==(argv[2][0]==49));if(!result)assert(lseek(fd,0,SEEK_CUR)==0);close(fd);return 0;}\n'
+    (root/'image-helper.c').write_text(program)
+    binary=root/'image-helper'
+    subprocess.run(['cc','-O2','-Wall','-Wextra','-Werror','-Wno-deprecated-declarations',str(root/'image-helper.c'),'-o',str(binary)],check=True)
+    image=root/'image.bin';image.write_bytes(page*(fw.SIZE//len(page)))
+    subprocess.run([str(binary),str(image),'0'],check=True)
+    with image.open('r+b') as f:f.write(b'X')
+    subprocess.run([str(binary),str(image),'1'],check=True)
+    image.write_bytes(page)
+    subprocess.run([str(binary),str(image),'1'],check=True)
+    print('PASS: actual phone helper rejects corrupt/short images before setup and rewinds verified input')
     def fixture(overlap=False,extent=None):
         head=bytearray(180);head[:7]=b'\x7fELF\x01\x01\x01'
         struct.pack_into('<HHI',head,16,2,164,1)

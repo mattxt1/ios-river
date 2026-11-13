@@ -5,6 +5,45 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## ADSP memory staging prepared (2026-11-12)
+
+- Patch0285 adds a separately requested PAS1 MEM_SETUP for the exact DT
+  carveout0x8d600000+0x1100000, then sequential16KiB writes via short-lived
+  write-combining mappings, matching the proven WCNSS loading approach.
+  Requires this boot's successful stock MDT acceptance, existing GPU/crypto
+  prerequisite, PAS capabilities, valid SMEM and no observed ADSP channels.
+- No AUTH_AND_RESET, LPASS MMIO, regulator, clock or channel writes. DSP
+  startup remains disabled. One setup attempt per boot; failed mapping closes
+  staging permanently. Missing/out-of-order/unaligned/oversized data rejected.
+- Helper verifies full stock image SHA256 before MEM_SETUP. Kernel verifies
+  the ordered input stream again at completion against
+  f325942f83057364dcabe759d350b40439fa08c2e4ede90853050e15a52e01a5.
+  These input hashes do not prove destination-memory readback or full image
+  secure authentication; status explicitly reports no executable readback.
+- Host tests passed for exact PAS1/range, metadata gate, one-shot failure,
+  1088 ordered pages, mapping/unmapping/barrier order, incomplete transfer,
+  wrong final hash, map failure, helper corrupted/short input and rewind.
+  All ADSP probe/MDT/firmware/repacker checks also passed. iOS helper compiled
+  with warnings-as-errors and ad-hoc signed. No0285 hardware result yet.
+
+## Stock ADSP metadata accepted by TrustZone (2026-11-12)
+
+- Verified productriver and temporary boot of metadata image2a87069 succeeded;
+  user confirmed home screen responsive. Passive `not requested`; PAS/SMEM
+  baseline matched prior: support1, all query return0/1, no legacy ADSP/APR
+  channels. MDT file survived boot and readback matched full SHA256.
+- Explicit `river-adsp-status --metadata /private/var/tmp/river-adsp-3aae7a57.mdt`
+  exited0: `phase=metadata_init pas_id=1 attempted=1 stock_sha256_verified=1
+  init_status=0 init_result=0 metadata_accepted=1 pages_retained=1
+  firmware_start_requested=0 firmware_memory_written=0 pcm_transport=0`.
+  This verifies acceptance of metadata only; executable image was not loaded
+  or authenticated and DSP startup was not requested. No clock/power vote.
+- Endpoint version1 flags3 output155648 input0. Private result log
+  work/adsp-metadata/live-auth-test.txt. User confirmed post-test UI responsive.
+- Next is separate PAS_MEM_SETUP and bounded firmware-image staging in the
+  exact reserved ADSP carveout. Keep AUTH_AND_RESET unavailable until source
+  proxy power/clock and SMP2P startup ownership are implemented and verified.
+
 ## ADSP PAS prerequisites verified; metadata-only test prepared (2026-11-12)
 
 - User confirmed responsive iOS on retry boot; explicit ADSP read-only probe
@@ -51,8 +90,8 @@
 - Packaged outputs/river-adsp-metadata-2a87069.img: 26,679,296bytes,
   cmdline562, SHA256
   5e5eafe2f5670e658706e2f72ad86b0d1e73eb3e884d6859739ded2cb491c558.
-  Payload checks passed. Waiting for fastboot then responsive home screen;
-  no metadata secure call yet.
+  Payload checks passed. Verified productriver; temporary fastboot boot
+  succeeded. Waiting for responsive home screen; no metadata secure call yet.
 - Before audible PCM, audit/fix runtime speaker-volume register packing:
   its public helper still writes an unshifted attenuation code to0x6000;
   actual PCM volume occupies bits13:3. The muted clock test already uses

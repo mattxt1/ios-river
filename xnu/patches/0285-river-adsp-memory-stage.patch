@@ -1,0 +1,139 @@
+diff --git a/bsd/dev/river_adsp_metadata.h b/bsd/dev/river_adsp_metadata.h
+--- a/bsd/dev/river_adsp_metadata.h
++++ b/bsd/dev/river_adsp_metadata.h
+@@ -5,7 +5,7 @@
+  0x3a,0xae,0x7a,0x57,0xe5,0xa4,0x17,0x46,0x5c,0xd4,0x35,0xd2,0x5c,0xb3,0x34,0x3d,
+  0xd8,0x1b,0x70,0x88,0xf2,0xf7,0x74,0x34,0xc6,0x00,0x2f,0x88,0xde,0x1f,0xcd,0x00
+ };
+-static bool ri_adsp_metadata_attempted;
++static bool ri_adsp_metadata_attempted,ri_adsp_metadata_accepted;
+ static vm_offset_t ri_adsp_metadata_page;
+ static int
+ ri_adsp_metadata_auth(const uint8_t *metadata,size_t length)
+@@ -46,6 +46,7 @@
+  ri_adsp_metadata_attempted=true;
+  uint64_t result=0;
+  int64_t status=river_scm(2,1,2|(2<<6),1,pa,0,&result);
++ ri_adsp_metadata_accepted=!status&&!result;
+  snprintf(ri_adsp_note,sizeof(ri_adsp_note),
+      "phase=metadata_init pas_id=1 attempted=1 stock_sha256_verified=1 init_status=%lld init_result=%llu metadata_accepted=%u pages_retained=1 firmware_start_requested=0 firmware_memory_written=0 pcm_transport=0",
+      (long long)status,(unsigned long long)result,(!status&&!result));
+diff --git a/bsd/dev/river_adsp_probe.h b/bsd/dev/river_adsp_probe.h
+--- a/bsd/dev/river_adsp_probe.h
++++ b/bsd/dev/river_adsp_probe.h
+@@ -94,6 +94,7 @@
+  return error;
+ }
+ #include "river_adsp_metadata.h"
++#include "river_adsp_stage.h"
+ 
+ static int
+ river_adsp_probe_sysctl SYSCTL_HANDLER_ARGS
+diff --git a/bsd/dev/river_adsp_stage.h b/bsd/dev/river_adsp_stage.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/river_adsp_stage.h
+@@ -0,0 +1,103 @@
++/* Exact River ADSP carveout staging only: no AUTH_AND_RESET or LPASS MMIO. */
++#define RI_ADSP_STAGE_BASE 0x8d600000u
++#define RI_ADSP_STAGE_SIZE 0x1100000u
++#define RI_ADSP_STAGE_BEGIN 0x41445301u
++#define RI_ADSP_STAGE_DATA 0x41445302u
++#define RI_ADSP_STAGE_END 0x41445303u
++static const uint8_t ri_adsp_image_sha256[32]={
++ 0xf3,0x25,0x94,0x2f,0x83,0x05,0x73,0x64,0xdc,0xab,0xe7,0x59,0xd3,0x50,0xb4,0x04,
++ 0x39,0xfa,0x08,0xc2,0xe4,0xed,0xe9,0x08,0x53,0x05,0x0e,0x15,0xa5,0x2e,0x01,0xa5
++};
++static bool ri_adsp_stage_attempted,ri_adsp_stage_open,ri_adsp_stage_failed,ri_adsp_image_staged;
++static uint32_t ri_adsp_stage_offset;
++static SHA256_CTX ri_adsp_stage_hash;
++static int
++ri_adsp_stage_note(const char *phase,int error)
++{
++ snprintf(ri_adsp_note,sizeof(ri_adsp_note),
++     "phase=%s error=%d mem_setup_attempted=%u stage_open=%u stage_failed=%u copied_bytes=%u expected_bytes=%u image_input_sha256_verified=%u firmware_start_requested=0 executable_readback=not_performed pcm_transport=0",
++     phase,error,ri_adsp_stage_attempted,ri_adsp_stage_open,ri_adsp_stage_failed,
++     ri_adsp_stage_offset,RI_ADSP_STAGE_SIZE,ri_adsp_image_staged);
++ return error;
++}
++static int
++ri_adsp_stage_request(uint32_t operation,uint32_t offset,const uint8_t *data,size_t length)
++{
++ if(operation==RI_ADSP_STAGE_BEGIN) {
++  if(offset||length) return EINVAL;
++  if(ri_adsp_stage_attempted) return EALREADY;
++  if(!ri_adsp_metadata_accepted || !river_gpu_pas_ready()) return EBUSY;
++  int error=ri_adsp_probe_impl();
++  if(error||!ri_adsp_caps_ok||!ri_adsp_smem_ok||ri_adsp_channels) return error?error:EBUSY;
++  ri_adsp_stage_attempted=true;
++  uint64_t result=0;
++  printf("RIVER ADSP: PAS1 MEM_SETUP for exact reserved carveout, no DSP start\n");
++  int64_t status=river_scm(2,2,3,1,RI_ADSP_STAGE_BASE,RI_ADSP_STAGE_SIZE,&result);
++  if(status||result) {
++   ri_adsp_stage_failed=true;
++   snprintf(ri_adsp_note,sizeof(ri_adsp_note),
++       "phase=memory_setup pas_id=1 attempted=1 status=%lld result=%llu firmware_start_requested=0 pcm_transport=0",
++       (long long)status,(unsigned long long)result);
++   return EIO;
++  }
++  ri_adsp_stage_open=true;ri_adsp_stage_offset=0;SHA256_Init(&ri_adsp_stage_hash);
++  return ri_adsp_stage_note("memory_setup",0);
++ }
++ if(!ri_adsp_stage_open||ri_adsp_stage_failed) return EBUSY;
++ if(operation==RI_ADSP_STAGE_DATA) {
++  if(!data || length!=0x4000 || (offset&0x3fff) || offset!=ri_adsp_stage_offset ||
++      offset>RI_ADSP_STAGE_SIZE-0x4000) return EINVAL;
++  if(!(offset&0xfffff)) {
++   printf("RIVER ADSP: copying firmware page offset %#x, no DSP start\n",offset);
++   ri_wait(100); /* Drain the diagnostic marker before the first bus access. */
++  }
++  vm_offset_t page=ml_io_map_unmappable(RI_ADSP_STAGE_BASE+offset,0x4000,VM_WIMG_WCOMB);
++  if(!page) {
++   ri_adsp_stage_failed=true;ri_adsp_stage_open=false;
++   return ri_adsp_stage_note("stage_map",ENOMEM);
++  }
++  volatile uint32_t *dest=(volatile uint32_t *)page;
++  /* Source is kalloc-aligned; no target reads before secure authentication. */
++  for(unsigned i=0;i<0x4000/4;i++) {
++   uint32_t value;memcpy(&value,data+i*4,sizeof(value));dest[i]=value;
++  }
++  __asm__ volatile("dsb sy" ::: "memory");
++  ml_io_unmap(page,0x4000);
++  SHA256_Update(&ri_adsp_stage_hash,data,length);
++  ri_adsp_stage_offset+=0x4000;
++  return ri_adsp_stage_note("image_copy",0);
++ }
++ if(operation==RI_ADSP_STAGE_END) {
++  if(offset||length||ri_adsp_stage_offset!=RI_ADSP_STAGE_SIZE) return EINVAL;
++  uint8_t digest[32];SHA256_Final(digest,&ri_adsp_stage_hash);
++  ri_adsp_stage_open=false;
++  ri_adsp_image_staged=!memcmp(digest,ri_adsp_image_sha256,sizeof(digest));
++  ri_adsp_stage_failed=!ri_adsp_image_staged;
++  return ri_adsp_stage_note("image_staged",ri_adsp_image_staged?0:EIO);
++ }
++ return EINVAL;
++}
++static int
++river_adsp_stage_sysctl SYSCTL_HANDLER_ARGS
++{
++ struct {uint32_t operation,offset,length;} header;
++ if(!req->newptr||req->newlen<sizeof(header)||req->newlen>sizeof(header)+0x4000) return EINVAL;
++ int error=SYSCTL_IN(req,&header,sizeof(header));
++ if(error) return error;
++ if(header.length>0x4000 || req->newlen!=sizeof(header)+header.length) return EINVAL;
++ uint8_t *data=NULL;
++ if(header.length) {
++  data=kalloc_data(header.length,Z_WAITOK|Z_ZERO);
++  if(!data) return ENOMEM;
++  error=SYSCTL_IN(req,data,header.length);
++ }
++ if(!error) {
++  lck_mtx_lock(&ri_adsp_lock);
++  error=ri_adsp_stage_request(header.operation,header.offset,data,header.length);
++  lck_mtx_unlock(&ri_adsp_lock);
++ }
++ if(data) kfree_data(data,header.length);
++ return error;
++}
++SYSCTL_PROC(_debug, OID_AUTO, river_adsp_stage, CTLTYPE_OPAQUE | CTLFLAG_WR | CTLFLAG_LOCKED,
++    NULL,0,river_adsp_stage_sysctl,"S","Explicit ADSP memory setup and bounded stock image staging only");
