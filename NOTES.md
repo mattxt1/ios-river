@@ -37,7 +37,8 @@
 - Endpoint status version1 flags3, output_frames155648 input_frames0.
   This is still discarded playback and synthetic capture, not physical PCM.
   Device log stays outside Git at `work/i2s-amp-fix/live-test.txt`.
-- Awaiting user's post-test iOS responsiveness confirmation. Next work is
+- User confirmed the iOS home screen remained responsive after the test.
+  Next work is
   real PCM transport and a controlled data-path test, then physical capture;
   do not treat this clock result as acoustic playback or microphone proof.
 
