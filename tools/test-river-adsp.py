@@ -21,9 +21,10 @@ with tempfile.TemporaryDirectory() as d:
     (root/'river_adsp_startup_survey.h').write_text((dev/'river_adsp_startup_survey.h').read_text())
     subprocess.run(['git','apply',str(r/'xnu/patches/0287-river-adsp-partition-survey.patch')],cwd=root,check=True)
     (root/'river_adsp_partition.h').write_text((dev/'river_adsp_partition.h').read_text())
+    subprocess.run(['git','apply',str(r/'xnu/patches/0288-river-adsp-handshake-init.patch')],cwd=root,check=True)
     code=(dev/'river_adsp_probe.h').read_text()
     code='\n'.join(x for x in code.splitlines() if not x.startswith('#include <'))
-    code=code.split('#include "river_adsp_metadata.h"',1)[0]
+    code=code.split('#include "river_adsp_handshake.h"',1)[0]
     (root/'river-adsp-added.h').write_text(code)
     binary=root/'probe'
     subprocess.run(['cc','-O2','-Wall','-Wextra','-Werror','-Wno-unused-function','-I',d,str(r/'tools/tests/river-adsp-probe-host.c'),'-o',str(binary)],check=True)
@@ -69,6 +70,13 @@ with tempfile.TemporaryDirectory() as d:
     image.write_bytes(page)
     subprocess.run([str(binary),str(image),'1'],check=True)
     print('PASS: actual phone helper rejects corrupt/short images before setup and rewinds verified input')
+    handshake=(dev/'river_adsp_handshake.h').read_text().split('static int\nriver_adsp_handshake_sysctl',1)[0]
+    handshake=handshake.replace('__asm__ volatile("dmb sy" ::: "memory");','host_handshake_barrier();')
+    (root/'river-adsp-handshake-added.h').write_text(handshake)
+    binary=root/'handshake'
+    subprocess.run(['cc','-O2','-Wall','-Wextra','-Werror','-Wno-unused-function','-I',d,
+                    str(r/'tools/tests/river-adsp-handshake-host.c'),'-o',str(binary)],check=True)
+    subprocess.run([str(binary)],check=True)
     def fixture(overlap=False,extent=None):
         head=bytearray(180);head[:7]=b'\x7fELF\x01\x01\x01'
         struct.pack_into('<HHI',head,16,2,164,1)

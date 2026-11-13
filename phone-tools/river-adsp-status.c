@@ -85,10 +85,14 @@ int main(int argc,char **argv) {
   if(sysctlbyname("debug.river_adsp_probe",NULL,NULL,&request,sizeof(request))) {
    perror("ADSP prerequisite probe");rc=1;
   }
+ } else if(argc==2&&!strcmp(argv[1],"--handshake-init")) {
+  if(sysctlbyname("debug.river_adsp_handshake",NULL,NULL,&request,sizeof(request))) {
+   perror("ADSP handshake initialization");rc=1;
+  }
  } else if(argc==3&&!strcmp(argv[1],"--metadata")) rc=metadata_test(argv[2]);
  else if(argc==3&&!strcmp(argv[1],"--stage-image")) rc=stage_image(argv[2]);
  else if(argc!=1) {
-  fprintf(stderr,"Usage: %s [--probe|--metadata PATH|--stage-image PATH]\n",argv[0]);return 2;
+  fprintf(stderr,"Usage: %s [--probe|--handshake-init|--metadata PATH|--stage-image PATH]\n",argv[0]);return 2;
  }
  char note[8192]={0};size_t n=sizeof(note)-1;
  if(sysctlbyname("debug.river_adsp_status",note,&n,NULL,0)) {perror("ADSP status");return 1;}

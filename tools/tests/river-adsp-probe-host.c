@@ -24,6 +24,9 @@ static int64_t river_scm(uint32_t svc,uint32_t cmd,uint64_t ai,uint64_t a0,uint6
  *r=scenario==1?0:1;return scenario==2?-1:0;
 }
 static uint32_t ri_rd(vm_offset_t base,unsigned off) {
+#ifdef RI_ADSP_HANDSHAKE_HOST
+ if(base==0x01908000) return handshake_lock_read(off);
+#endif
  assert(base==(uintptr_t)smem && !(off&3) && off<sizeof(smem));
  return smem[off/4];
 }

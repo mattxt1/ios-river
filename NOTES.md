@@ -5,6 +5,35 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Empty ADSP partition verified; outbound init prepared (2026-11-12)
+
+- User confirmed responsive iOS on f5bdc45 boot. Read-only --probe exited0.
+  $TOC magic0x434f5424/version1/count7; APPS↔ADSP partition2 off0x86000
+  size0x24000 flags0/cacheline32; valid $PRT hosts0x20000, uncachedfree0x20,
+  cachedfree0x24000. Records0, malformed0, stable1. Because uncachedfree is
+  exactly header32 and cachedfree equals partition size, both heaps are
+  unused at this snapshot. Global429/443/423 also absent, ADSP/APR channels0.
+  Read-only result does not establish the DSP power state. Endpoint flags3,
+  output272384/input0. Private log work/adsp-partition/live-survey.txt.
+- Patch0288 adds explicit one-shot --handshake-init, for this exact empty
+  observed partition only. Acquires SFPB S:3 at0x01908000 with APPS token1,
+  1000x10us bounded attempts; refuses an already-APPS-owned or invalid token.
+  Rechecks all exact table/partition emptiness fields under the remote lock.
+- Initializes allocation record429:16-byte header(canary0xa5a5,size344,
+  paddingdata4), then340-byte SMP2P structure plus4alignment bytes. Header
+  magic$SMP, local0/remote2, feature0/version1, max16/valid1, master-kernel
+  value0. Publish version after initialization, then uncachedfree0x188 after
+  barrier. Verifies all record bytes and new/freecached pointers. Never
+  rewinds a published shared heap on error. Releases only lock owned byAPPS.
+- No IPC, regulator, clock, firmware-memory or DSP-start operation. This
+  establishes outbound state only; negotiation/readiness require later
+  remote startup and feature handling. It must not be treated as DSP ready.
+- Host checks passed lock exclusion/timeout, mapfailure, partition changing
+  before allocation, exact bounded writes, version/free-pointer ordering,
+  readback failure and lock release, no adjacent-memory changes, one-shot
+  limit, parser recognizing the new record, and all prior ADSP tests.
+  iOS helper compiled with warnings-as-errors and ad-hoc signed. Build pending.
+
 ## Partitioned SMEM ownership correction (2026-11-12)
 
 - Vendor msm_smp2p.c looks up/allocates records with remotePID2 and flags0.
@@ -44,7 +73,8 @@
   base image; helper SHA256 matched manifest. Rerun succeeded immediately.
   Use these hydrated packaging copies if cloud eviction recurs.
 - Awaiting fastboot then responsive iOS for --probe only. Do not infer
-  missing global records imply no partition records. New survey pending.
+  missing global records imply no partition records. Verified productriver
+  and temporary boot succeeded. Waiting for responsive iOS; survey pending.
 
 ## Startup survey: no existing ADSP handshake blocks (2026-11-12)
 

@@ -1,0 +1,118 @@
+diff --git a/bsd/dev/river_adsp_probe.h b/bsd/dev/river_adsp_probe.h
+--- a/bsd/dev/river_adsp_probe.h
++++ b/bsd/dev/river_adsp_probe.h
+@@ -98,6 +98,7 @@
+  ri_adsp_partition_survey(smem);
+  return error;
+ }
++#include "river_adsp_handshake.h"
+ #include "river_adsp_metadata.h"
+ #include "river_adsp_stage.h"
+ 
+diff --git a/bsd/dev/river_adsp_handshake.h b/bsd/dev/river_adsp_handshake.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/river_adsp_handshake.h
+@@ -0,0 +1,102 @@
++/* Empty observed APPS/ADSP partition only. Remote lock S:3 uses the vendor
++ * SFPB protocol. This publishes an outbound block but sends no IPC/start. */
++static bool ri_adsp_handshake_attempted,ri_adsp_handshake_created;
++static bool
++ri_adsp_handshake_empty(vm_offset_t smem)
++{
++ const unsigned entry=0xff080,part=0x86000;
++ return ri_rd(smem,0xc0)==1 && ri_rd(smem,0xff000)==0x434f5424 &&
++     ri_rd(smem,0xff004)==1 && ri_rd(smem,0xff008)==7 &&
++     ri_rd(smem,entry)==part && ri_rd(smem,entry+4)==0x24000 &&
++     !ri_rd(smem,entry+8) && ri_rd(smem,entry+12)==0x20000 && ri_rd(smem,entry+16)==32 &&
++     ri_rd(smem,part)==0x54525024 && ri_rd(smem,part+4)==0x20000 &&
++     ri_rd(smem,part+8)==0x24000 && ri_rd(smem,part+12)==32 &&
++     ri_rd(smem,part+16)==0x24000 && !ri_rd(smem,0xd0+429*16) &&
++     !ri_rd(smem,0xd0+443*16);
++}
++static int
++ri_adsp_handshake_impl(void)
++{
++ if(ri_adsp_handshake_attempted) return EALREADY;
++ int error=ri_adsp_probe_impl();
++ vm_offset_t smem=river_smd_smem;
++ if(error || !smem || !ri_adsp_smem_ok || ri_adsp_channels ||
++     !ri_adsp_partition_valid || ri_adsp_partition_count!=1 || !ri_adsp_handshake_empty(smem)) {
++  size_t n=strlen(ri_adsp_note);
++  snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n," handshake_refused=changed_or_owned_partition");
++  return error?error:EBUSY;
++ }
++ vm_offset_t lock=ml_io_map_unmappable(0x01908000,0x4000,VM_WIMG_IO);
++ if(!lock) return ENOMEM;
++ bool held=false,released=false,modified=false;
++ uint32_t owner=ri_rd(lock,0);
++ if(owner==1 || owner>8) {error=EBUSY;goto out;}
++ ri_adsp_handshake_attempted=true;
++ for(unsigned i=0;i<1000;i++) {
++  ri_wr(lock,0,1);__asm__ volatile("dmb sy" ::: "memory");
++  owner=ri_rd(lock,0);
++  if(owner==1) {held=true;break;}
++  if(owner>8) break;
++  delay(10);
++ }
++ if(!held) {error=ETIMEDOUT;goto out;}
++ if(!ri_adsp_handshake_empty(smem)) {error=EBUSY;goto out;}
++ /* $PRT header32, allocation header16, 340-byte SMP2P item padded344.
++  * Initialize everything before publishing free_uncached=0x188. */
++ const unsigned header=0x86020,data=header+16;
++ modified=true;
++ for(unsigned off=0;off<16+344;off+=4) ri_wr(smem,header+off,0);
++ ri_wr(smem,header,(429u<<16)|0xa5a5);
++ ri_wr(smem,header+4,344);ri_wr(smem,header+8,4);
++ ri_wr(smem,data,0x504d5324);ri_wr(smem,data+8,0x20000);
++ ri_wr(smem,data+12,(1u<<16)|16u);
++ ri_wr(smem,data+20,0x7473616d);ri_wr(smem,data+24,0x6b2d7265);
++ ri_wr(smem,data+28,0x656e7265);ri_wr(smem,data+32,0x6c);
++ __asm__ volatile("dmb sy" ::: "memory");
++ ri_wr(smem,data+4,1); /* Version published after complete entry/header. */
++ __asm__ volatile("dmb sy" ::: "memory");
++ ri_wr(smem,0x8600c,0x188);
++ __asm__ volatile("dmb sy" ::: "memory");
++ error=0;
++ for(unsigned off=0;off<16+344;off+=4) {
++  uint32_t want=0;
++  switch(off) {
++  case 0:want=(429u<<16)|0xa5a5;break;
++  case 4:want=344;break;case 8:want=4;break;
++  case 16:want=0x504d5324;break;case 20:want=1;break;
++  case 24:want=0x20000;break;case 28:want=(1u<<16)|16;break;
++  case 36:want=0x7473616d;break;case 40:want=0x6b2d7265;break;
++  case 44:want=0x656e7265;break;case 48:want=0x6c;break;
++  }
++  if(ri_rd(smem,header+off)!=want)error=EIO;
++ }
++ if(ri_rd(smem,0x8600c)!=0x188 || ri_rd(smem,0x86010)!=0x24000)error=EIO;
++ ri_adsp_handshake_created=!error;
++out:
++ if(held) {
++  __asm__ volatile("dmb sy" ::: "memory");
++  if(ri_rd(lock,0)==1) {
++   ri_wr(lock,0,0);__asm__ volatile("dmb sy" ::: "memory");
++   released=ri_rd(lock,0)!=1;
++  }
++  if(!released)error=EIO;
++ }
++ ml_io_unmap(lock,0x4000);
++ snprintf(ri_adsp_note,sizeof(ri_adsp_note),
++     "phase=handshake_init error=%d attempted=%u lock_acquired=%u lock_released=%u partition_modified=%u handshake_created=%u outbound_item=429 partition_offset=0x86000 expected_uncached_free=0x188 record_bytes=344 ipc_sent=0 firmware_start_requested=0 pcm_transport=0",
++     error,ri_adsp_handshake_attempted,held,released,modified,ri_adsp_handshake_created);
++ return error;
++}
++static int
++river_adsp_handshake_sysctl SYSCTL_HANDLER_ARGS
++{
++ int request=0,error=sysctl_handle_int(oidp,&request,0,req);
++ if(error||!req->newptr)return error;
++ if(request!=1)return EINVAL;
++ lck_mtx_lock(&ri_adsp_lock);
++ error=ri_adsp_handshake_impl();
++ lck_mtx_unlock(&ri_adsp_lock);
++ return error;
++}
++SYSCTL_PROC(_debug, OID_AUTO, river_adsp_handshake, CTLTYPE_INT|CTLFLAG_RW|CTLFLAG_LOCKED,
++    NULL,0,river_adsp_handshake_sysctl,"I","Explicit empty-partition ADSP outbound handshake initialization only");
