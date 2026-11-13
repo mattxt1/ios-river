@@ -4,6 +4,12 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+**Outbound handshake live result:** patch0288 acquired/released remote lockS:3,
+initialized record429 and verified the full block. An independent partition
+scan found one valid340-byte SMP2P item at0x86030, new uncachedfree0x188,
+with no malformed records. No IPC, power vote or DSP start was requested.
+Next is acknowledged CX/XO votes and authenticated startup/readiness.
+
 **Partition live result:** the APPS↔ADSP partition at SMEM+0x86000 is valid
 and empty (uncached free0x20, cached free0x24000 equals size). Patch0288 adds
 an explicit, bounded outbound429 initialization under vendor remote lockS:3,

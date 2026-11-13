@@ -1,0 +1,65 @@
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -3576,7 +3576,10 @@
+  __atomic_store_n(&ri_power_busy, 0, __ATOMIC_RELEASE);
+  uint16_t v_raw = (uint16_t)(vi_pair & 0xffffu);
+  uint16_t i_raw = (uint16_t)((vi_pair >> 16) & 0xffffu);
+- if (!ok || v_raw == 0x8000u || v_raw == 0) return false;
++ /* Current is needed for the discharge load compensation. A reset/invalid
++  * current is not a measured zero and must not silently change the SOC
++  * estimator's input. Keep the previous whole sample until VI is complete. */
++ if (!ok || v_raw == 0x8000u || v_raw == 0 || i_raw == 0x8000u) return false;
+  uint32_t uv = (uint32_t)((194637ULL * (uint64_t)v_raw) / 1000);
+  unsigned mv = uv / 1000;
+  if (mv < 2800 || mv > 4600) return false;
+diff --git a/iokit/Kernel/arm/SweetBattery.cpp b/iokit/Kernel/arm/SweetBattery.cpp
+--- a/iokit/Kernel/arm/SweetBattery.cpp
++++ b/iokit/Kernel/arm/SweetBattery.cpp
+@@ -32,6 +32,9 @@
+ 	IOTimerEventSource *fTimer;
+ 	bool fTimerAdded, fRunning, fReal;
+ 	int fLastMode;
++#if defined(RIVER)
++	bool fRiverHasSample;
++#endif
+ 	void putNumber(const char *key, UInt32 value);
+ 	void putBool(const char *key, bool value);
+ 	void publish(unsigned percent, unsigned mv, int ma, bool external,
+@@ -80,6 +83,9 @@
+ 		}
+ 	}
+ 	fLastMode = -1;
++#if defined(RIVER)
++	fRiverHasSample = false;
++#endif
+ 	return true;
+ }
+ 
+@@ -340,7 +346,15 @@
+ 	bool external = true, charging = false, full = false;
+ 	bool ok = river_battery_sample(&mv, &ma, &external, &charging, &full, &soc);
+ 	if (!ok) {
+-		publish(85, 4100, 0, true, true, false, true, false, false);
++		/* A busy observer or failed/incomplete VI read does not establish a
++		 * new capacity, cable state or charging state. Preserve all last
++		 * valid values; before the first sample leave those properties absent. */
++		putBool("SweetBatteryHardwareSampleValid", false);
++		putBool("SweetBatteryCurrentValid", false);
++		putBool("SweetBatterySampleAvailable", fRiverHasSample);
++		putBool("SweetBatterySampleStale", fRiverHasSample);
++		putBool("SweetBatteryFallback", false); /* No fabricated fallback. */
++		updateStatus();
+ 		return false;
+ 	}
+ 	int override_pct = -1;
+@@ -351,6 +365,9 @@
+ 	} else {
+ 		percent = soc;
+ 	}
++	fRiverHasSample = true;
++	putBool("SweetBatterySampleAvailable", true);
++	putBool("SweetBatterySampleStale", false);
+ 	publish(percent, mv, ma, external, external, charging, full, true, true);
+ 	static unsigned river_logs;
+ 	if (river_logs++ % 10 == 0) {

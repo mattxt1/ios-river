@@ -5,6 +5,72 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Wi-Fi/battery audits integrated for full build (2026-11-12)
+
+- Both requested subagents completed their audits, prepared focused patches
+  and tests, and wrote WIFI-STATUS.md/BATTERY-STATUS.md. Root reviewed the
+  patches, reran the actual-code regressions and applied0289→0290→0291
+  sequentially against copies of the exact b90 kernel source without errors.
+- Wi-Fi0289 fixes deauth receive recursion by deferring firmware cleanup,
+  rejects stale-generation results, gates data/media publication, restores
+  bounded spontaneous reconnect and selected BSSID, honors disconnect/off,
+  and preserves boot-profile generation0 behavior. Root review caught and
+  agent corrected missing-target retry starvation and activation cancellation
+  window. Tests exercise those paths plus stale completions, callback no-I/O,
+  owned cleanup, retry failure/recovery and boot-profile supersession.
+- Generic association failure values1/16 remain unchanged; the exact iOS
+  congestion/frequency warning mapping has not been established. Do not claim
+  that warning or Wi-Fi reliability fixed on hardware until device tests.
+- Battery0290/0291 remove fabricated failed samples and charger-enable writes
+  from polling/diagnostics. Full host cases passed; remaining voltage-based
+  estimator and charging-policy limitations are documented separately.
+- All ADSP and audio host checks also pass after integration work. Neither
+  Wi-Fi nor battery fixes are deployed yet. Next is full kernel build and
+  temporary-boot validation, with current verified audio handshake retained.
+
+## Battery audit fixes prepared and host-verified (2026-11-12)
+
+- Battery subagent completed BATTERY-STATUS.md, patch0290 valid samples and
+  patch0291 read-only sampling, plus tools/test-river-battery.py and actual-
+  source host harness. Root reviewed patches/docs and reran the regressions.
+- Baseline reproduction: valid53%→85%/external/full on ordinary observer
+  contention; current0x8000 accepted as measured0mA; both polling and actual
+  debug.river_battery handler write charger enable for DISABLE_CHARGE7.
+-0290 preserves last complete state on busy/incomplete sample, marks stale/
+  invalid observations, has no fabricated first reading, rejects current
+  sentinel while accepting genuine0mA. This also delays cable/status updates
+  until a complete VI sample recovers; flags clear on recovery.
+-0291 removes charger command mapping and writes from sampling/diagnostics.
+  State7 remains external/notcharging/notfull. Does not disable an already
+  enabled charger or implement new policy. Future policy needs JEITA/thermal/
+  MMI disable voters, error/mode and current/voltage limits.
+- Full regressions passed: baseline,0290-only,0290+0291; read failures,
+  sentinels, voltage bounds, recovery and exact zero control writes after0291.
+  Remaining percentage is load-sensitive: actual estimator at3800mV gives
+  38%(0mA),54%(-500mA),61%(-1000mA). No smoothing/OCV redesign was added.
+- Patches currently prepared, not in a built/deployed image. Wi-Fi agent is
+  completing0289 state/retry/cancellation and receive-reentrancy fixes/tests.
+
+## ADSP outbound handshake initialization verified (2026-11-12)
+
+- User confirmed responsive iOS on temporary b90f2d1 boot; passive result
+  notrequested and exact empty APPS/ADSP partition baseline matched.
+- Explicit --handshake-init exited0: `phase=handshake_init error=0
+  attempted=1 lock_acquired=1 lock_released=1 partition_modified=1
+  handshake_created=1 outbound_item=429 partition_offset=0x86000
+  expected_uncached_free=0x188 record_bytes=344 ipc_sent=0
+  firmware_start_requested=0 pcm_transport=0`.
+- Separate --probe scan verified partition uncachedfree0x188/cachefree0x24000,
+  one record429 atSMEM+0x86030 actual340bytes; valid $SMP version1/pids0x20000/
+  entries0x10010/flags0. Malformed0/stable1. Global heap unchanged free0x10b48;
+  global429/443 absent as expected (record is partitioned). No ADSP/APR channels.
+- Endpoint flags3/output155648/input0. Private result log
+  work/adsp-handshake/live-init.txt. User confirmed post-test iOS responsive.
+- Next: bounded RPM CX/XO votes with exact current-ID ACK/NACK validation,
+  preserve shared vote ownership, then authenticated PAS1 start and remote
+  SMP2P negotiation/readiness before APR/QMI and physical Q6 PCM transport.
+  No DSP startup or physical PCM has been implemented yet.
+
 ## Parallel Wi-Fi and battery audits requested (2026-11-12)
 
 - User requested subagent audits of unreliable Wi-Fi establishment, a

@@ -1,0 +1,515 @@
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -708,6 +708,15 @@
+ static unsigned river_peer_sta, river_peer_dpu, river_peer_sign;
+ static vm_offset_t river_smd_smem, river_smd_ipc;
+ static uint32_t river_smd_wlan_info, river_smd_wlan_fifo;
++/* WCNSS worker owns hardware and deferred cleanup; Apple ioctl requests carry
++ * generations so an old operation cannot publish completion for a new join. */
++static uint64_t river_connection_generation,river_cleanup_generation;
++static struct river_apple80211_join_req river_connection_req;
++static struct river_apple80211_target_info river_connection_info;
++static bool river_connection_saved,river_cleanup_pending;
++static unsigned river_reconnect_wait,river_reconnect_attempts;
++static void river_connection_boot(void);
++
+ static void
+ river_secret_clear(void *p, unsigned n)
+ {
+@@ -882,16 +891,15 @@
+  if (!river_target.found || !river_mac_equal(f + 4, river_test_mac) ||
+      !river_mac_equal(f + 10, river_target.bssid)) return;
+  if (((fc & 0xfcu) == 0xa0 || (fc & 0xfcu) == 0xc0) && len >= 26) {
+-  river_wpa.associated = false; river_wpa.stage = 0;
+-  river_wpa.keys_installed = false; river_target.found = false;
++  river_wpa.associated = false;river_wpa.keys_installed = false;
++  river_wpa.pending_len = 0;river_target.found = false;
++  uint64_t generation=__atomic_load_n(&river_connection_generation,__ATOMIC_ACQUIRE);
++  bool retry=river_connection_saved && river_apple80211_join_current(generation);
++  river_wpa.stage=retry?3:0;
++  river_reconnect_wait=100;river_reconnect_attempts=0;
++  river_cleanup_generation=generation;river_cleanup_pending=true;
+   river_network_drop();
+-  river_apple80211_link_changed(false, 0);
+-  if (river_target_bss != 255 && river_smd_smem && river_smd_wlan_info) {
+-   uint8_t del[9] = {0}; del[8] = river_target_bss;
+-   (void)river_scan_xact(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc, 18, del, sizeof(del));
+-   river_target_bss = 255;
+-   (void)river_target_link(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc, 0);
+-  }
++  (void)river_apple80211_link_lost(generation,0);
+   printf("RIVER NET: AP disconnected reason=%u; data link closed\n",river_le16(f+24));
+  }
+  if ((fc & 0xfcu) == 0xb0 && len >= 30 && river_le16(f+24) == 0 && river_le16(f+26) == 2) {
+@@ -1589,8 +1597,10 @@
+ river_net_output(ifnet_t ifp, mbuf_t m)
+ {
+  size_t n = mbuf_pkthdr_len(m); bool queued = false;
++ uint64_t generation=__atomic_load_n(&river_connection_generation,__ATOMIC_ACQUIRE);
++ bool allowed=river_apple80211_data_allowed(generation);
+  lck_mtx_lock(river_net_lock);
+- if (river_net_live && river_net_count < 32 && n >= 14 && n <= 1514) {
++ if (allowed && generation==__atomic_load_n(&river_connection_generation,__ATOMIC_ACQUIRE) && river_net_live && river_net_count < 32 && n >= 14 && n <= 1514) {
+   unsigned slot = (river_net_head+river_net_count)%32;
+   if (!mbuf_copydata(m,0,n,river_net_queue[slot].bytes)) {
+    river_net_queue[slot].len = n; river_net_count++; queued = true;
+@@ -1613,7 +1623,7 @@
+   if (ifmr) {
+    ifmr->ifm_current = 0x80;
+    ifmr->ifm_active = 0x80;
+-   ifmr->ifm_status = 1 | 2;
++   ifmr->ifm_status = 1 | ((river_net_live && river_apple80211_data_allowed(__atomic_load_n(&river_connection_generation,__ATOMIC_ACQUIRE))) ? 2 : 0);
+    ifmr->ifm_count = 0;
+   }
+   return 0;
+@@ -1663,6 +1673,7 @@
+ river_network_poll(void)
+ {
+  if (!river_net_lock || !river_wifi_ifp) return;
++ if (!river_apple80211_data_allowed(__atomic_load_n(&river_connection_generation,__ATOMIC_ACQUIRE))) {river_network_drop();return;}
+  uint8_t ethernet[1514];unsigned n=0;
+  lck_mtx_lock(river_net_lock);
+  if (river_net_live && river_net_count) {
+@@ -1680,7 +1691,7 @@
+ static void
+ river_network_rx(const volatile uint8_t *f,unsigned len,unsigned hlen,unsigned fc,uint32_t flags)
+ {
+- if (!river_wifi_ifp || !river_net_live || river_wpa.stage!=2 || !(fc&0x4000) || (flags&8) ||
++ if (!river_wifi_ifp || !river_net_live || !river_apple80211_data_allowed(__atomic_load_n(&river_connection_generation,__ATOMIC_ACQUIRE)) || river_wpa.stage!=2 || !(fc&0x4000) || (flags&8) ||
+      (fc&0x30c)!=0x208 || (fc&0x40) || hlen<24 || hlen>len || len-hlen<8 ||
+      !river_mac_equal(f+10,river_target.bssid)) return;
+  /* A-MSDU subframes require a separate deaggregator. */
+@@ -1749,7 +1760,7 @@
+ river_wpa_run(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t ipc)
+ {
+  if (!river_wpa.pmk_ready || !river_wpa.associated) return;
+- for (unsigned w = 0; w < 1000 && river_dxe_ready; w++) {
++ for (unsigned w = 0; w < 1000 && river_dxe_ready && river_wpa.associated; w++) {
+   river_dxe_poll(); river_wpa_step(smem, info, fifo, ipc);
+   if (river_wpa.stage == 2) break;
+   ri_wait(10);
+@@ -2884,12 +2895,9 @@
+      scan_attempted = true;
+      river_passive_scan(smem, wcnss_wlan_info, wcnss_wlan_fifo, ipc_reg2);
+      river_apple80211_scan_done(0);
+-     if (river_target.enabled && river_target.found) {
+-      river_target_associate(smem, wcnss_wlan_info, wcnss_wlan_fifo, ipc_reg2);
+-      river_wpa_run(smem, wcnss_wlan_info, wcnss_wlan_fifo, ipc_reg2);
+-     }
+      river_smd_smem = smem; river_smd_ipc = ipc_reg2;
+      river_smd_wlan_info = wcnss_wlan_info; river_smd_wlan_fifo = wcnss_wlan_fifo;
++     river_connection_boot();
+     }
+     static const unsigned tbls[] = { 13, 266 };
+     for (unsigned t = 0; t < sizeof(tbls) / sizeof(tbls[0]); t++) {
+@@ -2982,6 +2990,150 @@
+ 
+ }
+ 
++/* Called only by the outer WCNSS poll loop, after RX reclaim has completed.
++ * A stale cleanup cannot delete the BSS installed by a newer join. */
++static void
++river_connection_cleanup(void)
++{
++ if (!river_cleanup_pending) return;
++ uint64_t generation=river_cleanup_generation;
++ river_cleanup_pending=false;
++ if (generation!=__atomic_load_n(&river_connection_generation,__ATOMIC_ACQUIRE)) return;
++ uint8_t bss=river_target_bss;
++ river_target_bss=255;
++ if (bss!=255 && river_smd_smem && river_smd_wlan_info) {
++  uint8_t del[9]={0};del[8]=bss;
++  (void)river_scan_xact(river_smd_smem,river_smd_wlan_info,river_smd_wlan_fifo,river_smd_ipc,18,del,sizeof(del));
++  (void)river_target_link(river_smd_smem,river_smd_wlan_info,river_smd_wlan_fifo,river_smd_ipc,0);
++ }
++}
++static void
++river_connection_abandon(void)
++{
++ river_network_drop();
++ river_target.enabled=river_target.found=false;
++ river_wpa.associated=false;river_wpa.keys_installed=false;river_wpa.stage=0;river_wpa.pending_len=0;
++ river_cleanup_generation=__atomic_load_n(&river_connection_generation,__ATOMIC_ACQUIRE);
++ river_cleanup_pending=true;
++ river_connection_cleanup();
++ bool stalled=river_wpa.data_tx_stalled;
++ river_secret_clear(&river_wpa,sizeof(river_wpa));
++ river_wpa.data_tx_stalled=stalled; /* A stuck DMA ring needs explicit recovery, not flag clearing. */
++ river_connection_saved=false;river_reconnect_wait=river_reconnect_attempts=0;
++ river_secret_clear(&river_connection_req,sizeof(river_connection_req));
++ river_secret_clear(&river_connection_info,sizeof(river_connection_info));
++}
++static void
++river_connection_attempt(void)
++{
++ const struct river_apple80211_join_req *req=&river_connection_req;
++ const struct river_apple80211_target_info *tinfo=&river_connection_info;
++ bool stalled=river_wpa.data_tx_stalled;
++ river_secret_clear(&river_wpa,sizeof(river_wpa));river_wpa.data_tx_stalled=stalled;
++ river_target.channel=tinfo->channel;river_target.beacon=tinfo->beacon;
++ river_target.caps=tinfo->caps;river_target.dtim=tinfo->dtim?tinfo->dtim:1;
++ river_target.nrates=tinfo->nrates;memcpy(river_target.rates,tinfo->rates,tinfo->nrates);
++ river_target.rates_ok=river_target.security_ok=true;
++ river_target.rsn_len=tinfo->rsn_len;memcpy(river_target.rsn,tinfo->rsn,tinfo->rsn_len);
++ river_target.ap_rsn_len=tinfo->ap_rsn_len;memcpy(river_target.ap_rsn,tinfo->ap_rsn,tinfo->ap_rsn_len);
++ memcpy(river_target.bssid,tinfo->bssid,6);memcpy(river_target.ssid,req->ssid,req->ssid_len);
++ river_target.ssid_len=req->ssid_len;river_target.enabled=river_target.found=true;
++ if(req->has_pmk){memcpy(river_wpa.pmk,req->pmk,32);river_wpa.pmk_ready=true;}
++ river_target_associate(river_smd_smem,river_smd_wlan_info,river_smd_wlan_fifo,river_smd_ipc);
++ river_wpa_run(river_smd_smem,river_smd_wlan_info,river_smd_wlan_fifo,river_smd_ipc);
++}
++/* Invoked under the Apple generation lock; all output checks acquire that
++ * lock before the net lock, so cancellation cannot reopen a stale data port. */
++static void
++river_connection_activate(void)
++{
++ lck_mtx_lock(river_net_lock);river_net_live=true;lck_mtx_unlock(river_net_lock);
++}
++static bool
++river_connection_publish(void)
++{
++ if(river_wpa.stage!=2 || !river_wpa.keys_installed) return false;
++ if(!river_wifi_ifp)river_network_create();
++ if(!river_wifi_ifp)return false;
++ if(!river_apple80211_join_complete(&river_connection_req,&river_connection_info,0)) return false;
++ ifnet_set_flags(river_wifi_ifp,IFF_UP|IFF_RUNNING,IFF_UP|IFF_RUNNING);
++ return river_apple80211_activate_data(river_connection_req.generation,river_connection_activate);
++}
++/* The private boot profile predates user joins. Generation zero is valid only
++ * until the first user join, disconnect or radio-off, so it cannot override UI. */
++static void
++river_connection_boot(void)
++{
++ if(!river_target.enabled || !river_target.found || !river_wpa.pmk_ready ||
++    !river_apple80211_join_current(0)) return;
++ struct river_apple80211_join_req req={0};
++ req.ssid_len=river_target.ssid_len;memcpy(req.ssid,river_target.ssid,req.ssid_len);
++ memcpy(req.bssid,river_target.bssid,6);
++ memcpy(req.pmk,river_wpa.pmk,32);req.has_pmk=true;
++ struct river_apple80211_target_info info;
++ if(river_apple80211_find_target(&req,&info)) {
++  memcpy(&river_connection_req,&req,sizeof(req));memcpy(&river_connection_info,&info,sizeof(info));
++  river_connection_saved=true;
++  river_connection_attempt();
++  if(!river_connection_publish()) {
++   int status=river_wpa.associated?1:16;
++   river_connection_abandon();(void)river_apple80211_join_complete(&req,NULL,status);
++  }
++ }
++ river_secret_clear(&req,sizeof(req));
++}
++static void
++river_connection_service(void)
++{
++ river_connection_cleanup();
++ /* User disconnect/radio-off cancels retry; spontaneous loss retains a target. */
++ if(river_apple80211_take_stop())river_connection_abandon();
++ struct river_apple80211_join_req req;
++ if(river_smd_smem && river_smd_wlan_info && river_apple80211_join_pending(&req)) {
++  if(river_apple80211_join_current(req.generation)) {
++   river_connection_abandon();
++   __atomic_store_n(&river_connection_generation,req.generation,__ATOMIC_RELEASE);
++   struct river_apple80211_target_info info;
++   if(!river_apple80211_find_target(&req,&info) || (info.rsn_len && !req.has_pmk)) {
++    (void)river_apple80211_join_complete(&req,NULL,1);
++   } else {
++    memcpy(&river_connection_req,&req,sizeof(req));memcpy(&river_connection_info,&info,sizeof(info));
++    river_connection_saved=true;
++    river_connection_attempt();
++    if(!river_connection_publish()) {
++     int status=river_wpa.associated?1:16; /* Existing ABI values; UI mapping is not inferred here. */
++     river_connection_abandon();
++     (void)river_apple80211_join_complete(&req,NULL,status);
++    }
++   }
++  }
++  river_secret_clear(&req,sizeof(req));
++ }
++ if(river_connection_saved && river_wpa.stage==3 && river_target.enabled &&
++     river_smd_smem && river_smd_wlan_info) {
++  if(!river_apple80211_join_current(river_connection_req.generation)) {
++   river_connection_abandon();return;
++  }
++  if(river_reconnect_wait){river_reconnect_wait--;return;}
++  if(river_reconnect_attempts>=5) {
++   struct river_apple80211_join_req failed=river_connection_req;
++   river_connection_abandon();(void)river_apple80211_join_complete(&failed,NULL,16);
++   river_secret_clear(&failed,sizeof(failed));return;
++  }
++  river_reconnect_attempts++;
++  if(!river_apple80211_find_target(&river_connection_req,&river_connection_info)) {
++   river_target.found=false;river_reconnect_wait=100;return;
++  }
++  river_connection_attempt();
++  if(!river_connection_publish()) {
++   river_network_drop();river_wpa.associated=false;river_wpa.keys_installed=false;
++   river_wpa.stage=3;river_target.found=false;
++   river_cleanup_generation=river_connection_req.generation;river_cleanup_pending=true;
++   river_reconnect_wait=100u<<river_reconnect_attempts;
++  }
++ }
++}
++
+ static void
+ river_wcnss_thread(void *arg, wait_result_t result)
+ {
+@@ -2996,85 +3148,14 @@
+   printf("RIVER DXE: persistent 10ms RX polling started\n");
+   for (unsigned ticks = 0; river_dxe_ready; ticks++) {
+    river_dxe_poll();
+-   river_network_poll();
+    if (!river_wifi_ifp) river_network_create();
+    if (river_apple80211_scan_pending() && river_smd_smem && river_smd_wlan_info) {
+     if (river_wpa.stage == 2) river_wpa.stage = 0;
+     river_passive_scan(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc);
+     river_apple80211_scan_done(0);
+    }
+-   struct river_apple80211_join_req jreq;
+-   if (river_apple80211_join_pending(&jreq) && river_smd_smem && river_smd_wlan_info) {
+-    struct river_apple80211_target_info tinfo;
+-    if (river_apple80211_find_target(&jreq, &tinfo)) {
+-     if (tinfo.rsn_len > 0 && !jreq.has_pmk) {
+-      river_apple80211_assoc_done(1);
+-      river_apple80211_link_changed(false, 0);
+-      river_wpa.stage = 0;
+-      river_target.enabled = false;
+-     } else {
+-      river_target.channel = tinfo.channel;
+-      river_target.beacon = tinfo.beacon;
+-      river_target.caps = tinfo.caps;
+-      river_target.dtim = tinfo.dtim ? tinfo.dtim : 1;
+-      river_target.nrates = tinfo.nrates;
+-      memcpy(river_target.rates, tinfo.rates, tinfo.nrates);
+-      river_target.rates_ok = true;
+-      river_target.security_ok = true;
+-      river_target.rsn_len = tinfo.rsn_len;
+-      memcpy(river_target.rsn, tinfo.rsn, tinfo.rsn_len);
+-      river_target.ap_rsn_len = tinfo.ap_rsn_len;
+-      memcpy(river_target.ap_rsn, tinfo.ap_rsn, tinfo.ap_rsn_len);
+-      memcpy(river_target.bssid, tinfo.bssid, 6);
+-      memcpy(river_target.ssid, jreq.ssid, jreq.ssid_len);
+-      river_target.ssid_len = jreq.ssid_len;
+-      river_target.enabled = true;
+-      river_target.found = true;
+-      if (jreq.has_pmk) {
+-       memcpy(river_wpa.pmk, jreq.pmk, 32);
+-       river_wpa.pmk_ready = true;
+-      }
+-      river_wpa.associated = false;
+-      river_wpa.keys_installed = false;
+-      river_wpa.stage = 0;
+-      river_wpa.pending_len = 0;
+-      river_wpa.data_tx_stalled = false;
+-      river_target_associate(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc);
+-      river_wpa_run(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc);
+-      if (river_wpa.stage == 2) {
+-       ifnet_set_flags(river_wifi_ifp, IFF_UP | IFF_RUNNING, IFF_UP | IFF_RUNNING);
+-       river_net_live = true;
+-       river_apple80211_link_changed(true, tinfo.rssi);
+-       river_apple80211_assoc_done(0);
+-      } else {
+-       printf("RIVER JOIN: assoc/WPA failed: associated=%u stage=%u keys_installed=%u (auth_seen=%u st=%u assoc_seen=%u st=%u aid=%u)\n",
+-           river_wpa.associated, river_wpa.stage, river_wpa.keys_installed,
+-           river_auth_seen, river_auth_status, river_assoc_seen, river_assoc_status, river_assoc_aid);
+-       if (river_target_bss != 255) {
+-        uint8_t del[9] = {0}; del[8] = river_target_bss;
+-        (void)river_scan_xact(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc, 18, del, sizeof(del));
+-        river_target_bss = 255;
+-        (void)river_target_link(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc, 0);
+-       }
+-       river_apple80211_link_changed(false, 0);
+-       river_apple80211_assoc_done(river_wpa.associated ? 1 : 16);
+-       river_wpa.stage = 0;
+-       river_target.enabled = false;
+-      }
+-     }
+-    } else {
+-     printf("RIVER JOIN: target not matched, returning assoc failure\n");
+-     river_apple80211_assoc_done(1);
+-     river_apple80211_link_changed(false, 0);
+-     river_wpa.stage = 0;
+-     river_target.enabled = false;
+-    }
+-   }
+-   if (river_target.enabled && river_wpa.stage == 3 && river_target.found && river_smd_smem && river_smd_wlan_info) {
+-    printf("RIVER JOIN: target AP re-discovered; re-associating...\n");
+-    river_target_associate(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc);
+-    river_wpa_run(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc);
+-   }
++   river_connection_service();
++   river_network_poll();
+    if (river_wpa.pending_len && river_smd_smem && river_smd_wlan_info)
+     river_wpa_step(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc);
+    if (ticks && ticks % 3000 == 0)
+diff --git a/bsd/dev/river_apple80211.c b/bsd/dev/river_apple80211.c
+--- a/bsd/dev/river_apple80211.c
++++ b/bsd/dev/river_apple80211.c
+@@ -43,6 +43,8 @@
+ static struct river_apple80211_join_req pending_join;
+ static bool join_pending_flag = false;
+ static uint32_t join_result = 0;
++static uint64_t join_generation;
++static bool stop_pending_flag;
+ 
+ enum river_wifi_phase {
+ 	PHASE_IDLE = 0,
+@@ -419,6 +421,7 @@
+ 		}
+ 		printf("river_apple80211: join req key_len=%u key_cipher=%u has_pmk=%u\n",
+ 		    asked->key_length, asked->key_cipher, pending_join.has_pmk);
++		pending_join.generation = ++join_generation;
+ 		join_pending_flag = true;
+ 		join_result = 0;
+ 		active_phase = PHASE_JOINING;
+@@ -429,6 +432,10 @@
+ 	}
+ 	case 22: {
+ 		lck_mtx_lock(&river_apple80211_mtx);
++		join_generation++;
++		join_pending_flag = scan_pending_flag = false;
++		stop_pending_flag = true;
++		memset_s(&pending_join, sizeof(pending_join), 0, sizeof(pending_join));
+ 		active_phase = PHASE_IDLE;
+ 		bzero(&active_bss, sizeof(active_bss));
+ 		lck_mtx_unlock(&river_apple80211_mtx);
+@@ -448,6 +455,10 @@
+ 		}
+ 		river_power_state = (pwr != 0);
+ 		if (!river_power_state) {
++			join_generation++;
++			join_pending_flag = scan_pending_flag = false;
++			stop_pending_flag = true;
++			memset_s(&pending_join, sizeof(pending_join), 0, sizeof(pending_join));
+ 			active_phase = PHASE_IDLE;
+ 			bzero(&active_bss, sizeof(active_bss));
+ 		}
+@@ -527,15 +538,6 @@
+ 		}
+ 	}
+ 	if (!target) {
+-		for (unsigned i = 0; i < river_bss_count; i++) {
+-			if (river_bss_table[i].ssid_len == req->ssid_len &&
+-			    memcmp(river_bss_table[i].ssid, req->ssid, req->ssid_len) == 0) {
+-				target = &river_bss_table[i];
+-				break;
+-			}
+-		}
+-	}
+-	if (!target) {
+ 		lck_mtx_unlock(&river_apple80211_mtx);
+ 		printf("river_apple80211: find_target FAILED to match any entry in table!\n");
+ 		return false;
+@@ -603,6 +605,87 @@
+ 	printf("river_apple80211: scan complete, posted EVENT_SCAN_DONE (%u BSS found)\n", river_bss_count);
+ }
+ 
++bool
++river_apple80211_join_current(uint64_t generation)
++{
++ lck_mtx_lock(&river_apple80211_mtx);
++ bool current = river_power_state && generation == join_generation;
++ lck_mtx_unlock(&river_apple80211_mtx);
++ return current;
++}
++bool
++river_apple80211_data_allowed(uint64_t generation)
++{
++ lck_mtx_lock(&river_apple80211_mtx);
++ bool allowed = river_power_state && generation == join_generation && active_phase == PHASE_JOINED;
++ lck_mtx_unlock(&river_apple80211_mtx);
++ return allowed;
++}
++bool
++river_apple80211_activate_data(uint64_t generation, void (*activate)(void))
++{
++ lck_mtx_lock(&river_apple80211_mtx);
++ bool allowed = river_power_state && generation == join_generation && active_phase == PHASE_JOINED;
++ if (allowed) activate();
++ lck_mtx_unlock(&river_apple80211_mtx);
++ return allowed;
++}
++bool
++river_apple80211_take_stop(void)
++{
++ lck_mtx_lock(&river_apple80211_mtx);
++ bool stop = stop_pending_flag;
++ stop_pending_flag = false;
++ lck_mtx_unlock(&river_apple80211_mtx);
++ return stop;
++}
++bool
++river_apple80211_join_complete(const struct river_apple80211_join_req *req,
++    const struct river_apple80211_target_info *info, int status)
++{
++ if (!req || (!status && !info)) return false;
++ lck_mtx_lock(&river_apple80211_mtx);
++ if (!river_power_state || req->generation != join_generation) {
++  lck_mtx_unlock(&river_apple80211_mtx);
++  return false;
++ }
++ join_result = (uint32_t)status;
++ join_pending_flag = false;
++ bzero(&active_bss, sizeof(active_bss));
++ active_phase = status ? PHASE_IDLE : PHASE_JOINED;
++ if (!status) {
++  for (unsigned i=0;i<river_bss_count;i++)
++   if (!memcmp(river_bss_table[i].bssid,info->bssid,6)) {
++    memcpy(&active_bss,&river_bss_table[i],sizeof(active_bss));break;
++   }
++  active_bss.ssid_len=req->ssid_len;
++  memcpy(active_bss.ssid,req->ssid,req->ssid_len);
++  memcpy(active_bss.bssid,info->bssid,6);
++  active_bss.channel=info->channel;
++  active_bss.rssi=info->rssi;
++ }
++ struct apple80211_link_changed link = {
++  .down=status!=0,.involuntary=status!=0,.rssi=status?0:info->rssi,.reason=status?4:0,
++ };
++ /* Serialize completion publication with a new join/disconnect request. */
++ post(EVENT_SSID_CHANGED,NULL,0);post(EVENT_BSSID_CHANGED,NULL,0);
++ post(EVENT_LINK_CHANGED,&link,sizeof(link));post(EVENT_ASSOC_DONE,NULL,0);
++ lck_mtx_unlock(&river_apple80211_mtx);
++ return true;
++}
++bool
++river_apple80211_link_lost(uint64_t generation,int16_t rssi)
++{
++ lck_mtx_lock(&river_apple80211_mtx);
++ if (generation != join_generation) {lck_mtx_unlock(&river_apple80211_mtx);return false;}
++ active_phase=PHASE_IDLE;bzero(&active_bss,sizeof(active_bss));
++ struct apple80211_link_changed link = {.down=1,.involuntary=1,.rssi=rssi,.reason=4};
++ post(EVENT_SSID_CHANGED,NULL,0);post(EVENT_BSSID_CHANGED,NULL,0);
++ post(EVENT_LINK_CHANGED,&link,sizeof(link));
++ lck_mtx_unlock(&river_apple80211_mtx);
++ return true;
++}
++
+ void
+ river_apple80211_assoc_done(int status)
+ {
+diff --git a/bsd/sys/river_apple80211.h b/bsd/sys/river_apple80211.h
+--- a/bsd/sys/river_apple80211.h
++++ b/bsd/sys/river_apple80211.h
+@@ -110,6 +110,7 @@
+ };
+ 
+ struct river_apple80211_join_req {
++	uint64_t generation; /* Internal request identity; not an Apple ioctl ABI field. */
+ 	uint8_t ssid[32];
+ 	uint8_t ssid_len;
+ 	uint8_t bssid[6];
+@@ -155,6 +156,13 @@
+ void river_apple80211_link_changed(bool up, int16_t rssi);
+ bool river_apple80211_scan_pending(void);
+ bool river_apple80211_join_pending(struct river_apple80211_join_req *req);
++bool river_apple80211_join_current(uint64_t generation);
++bool river_apple80211_data_allowed(uint64_t generation);
++bool river_apple80211_activate_data(uint64_t generation, void (*activate)(void));
++bool river_apple80211_take_stop(void);
++bool river_apple80211_join_complete(const struct river_apple80211_join_req *,
++    const struct river_apple80211_target_info *, int status);
++bool river_apple80211_link_lost(uint64_t generation, int16_t rssi);
+ bool river_apple80211_find_target(const struct river_apple80211_join_req *req, struct river_apple80211_target_info *info);
+ void river_pbkdf2_pmk(const char *passphrase, const char *ssid, size_t ssid_len, uint8_t pmk[32]);
+ #endif

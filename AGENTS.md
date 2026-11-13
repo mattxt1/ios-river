@@ -32,5 +32,5 @@
   - **Networking**:
     - WCNSS Wi-Fi (`en0`) managed by `org.river.net` launchd daemon.
     - USB CDC-ECM Ethernet (`192.168.7.2`), root SSH via Dropbear on port 22.
-- **Current audio continuation**: Stock ADSP metadata acceptance and17MiB memory staging passed without DSP startup. APPS/ADSP partition2 at SMEM+0x86000 is empty at baseline. Patch0288 handshake-init image is built but its locked allocation still needs hardware testing. See the newest NOTES.md entry and AUDIO-BRINGUP.md; do not infer legacy global-table absence means no partition records.
+- **Current audio continuation**: Stock ADSP metadata acceptance and17MiB memory staging passed without DSP startup. APPS/ADSP partition2 at SMEM+0x86000 is empty at baseline. Patch0288 locked outbound429 allocation and independent partition readback passed; DSP startup and physical PCM still remain unimplemented. See the newest NOTES.md entry and AUDIO-BRINGUP.md; do not infer legacy global-table absence means no partition records.
 - Keep device dumps, serial numbers, private keys, firmware, and downloaded Apple artifacts out of Git.
