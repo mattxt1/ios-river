@@ -15,16 +15,20 @@ static unsigned active_n, pmic_writes, pmic_ignore, pmic_mode, pmic_pull, cmd_mi
 static unsigned mode, writes, ignore_write, bits, reply, elapsed, enabled_once;
 static uint8_t tx[8];
 static uint32_t amp[0x11000],amp_initial[0x11000];
-static unsigned amp_writes,amp_ignore,amp_no_lock;
+static unsigned amp_writes,amp_ignore,amp_no_lock,gpio_reads;
 static bool codec_outputs_off(void) {
- return (regs[0x1711]&0x8000) && (regs[0x1715]&0x8000) && !(regs[0x101]&0x40);
+ bool bclk=((regs[0x1710]&0x1ff)==1 && (regs[0x1711]&0x8000)) ||
+     (!(regs[0x1710]&0x1ff) && !(regs[0x500]&0x60));
+ bool lrclk=((regs[0x1714]&0x1ff)==1 && (regs[0x1715]&0x8000)) ||
+     (!(regs[0x1714]&0x1ff) && !(regs[0x501]&3) && !(regs[0x502]&3));
+ return bclk && lrclk && !(regs[0x101]&0x40);
 }
 static bool amp_quiet(void) { return (amp[0x2024]&0x10) && !(amp[0x2018]&1) && !(amp[0x4808]&0x33); }
 static bool ri_cs35l41_rd(uint32_t reg,uint32_t *value) {
  assert(reg<0x11000);
  if(reg==0x10098) {
   bool driving=(regs[0x101]&0x40) && (regs[0x500]&0x60)==0x60 &&
-      !(regs[0x1711]&0x8000) && !(regs[0x1715]&0x8000);
+      !(regs[0x1710]&0x1ff) && !(regs[0x1714]&0x1ff);
   if(driving) {
    assert(amp_quiet());assert((amp[0x2c04]&0xff7)==0x370);
    assert((regs[0x500]&0x1f)==11 && (regs[0x506]&0x1fff)==32);
@@ -66,6 +70,10 @@ static bool allowed_write(unsigned reg) {
 static uint16_t reg_read(unsigned reg) {
  assert(reg < 0x2000);
  if (mode == 1 && reg == 0) return 0;
+ if(mode==41 && reg==0x1714) {
+  if(bits==48) gpio_reads++;
+  return (regs[reg]&0x7fff)|((gpio_reads&1)?0x8000:0);
+ }
  if (reg == 0x1881) return (regs[0x171] & 1) && active_n == 1000 && mode != 20 ? 0x100 : 0;
  return regs[reg];
 }
@@ -93,7 +101,7 @@ static void ri_wr(vm_offset_t p, unsigned off, uint32_t v) {
       assert((regs[0x172] & 0x3ff) == 1000);
       assert((regs[0x100] & 0x43) == 0x41);
      }
-     if(((reg==0x1711||reg==0x1715)&&!(value&0x8000)) || (reg==0x500&&(value&0x40)) || (reg==0x101&&(value&0x40)))
+     if(((reg==0x1710||reg==0x1714)&&!(value&0x1ff)) || (reg==0x500&&(value&0x40)) || (reg==0x101&&(value&0x40)))
       assert(amp_quiet());
      if (reg == 0x172 && (value & 0x8000)) active_n = value & 0x3ff;
      regs[reg] = reg == 0x172 && mode != 26 ? value & 0x7fff : value;
@@ -151,8 +159,9 @@ static void reset(unsigned scenario) {
  for (unsigned i = 0; i < 4; i++) { cfg[i] = 1; out[i] = 0; }
  memset(amp,0,sizeof(amp));amp[0]=0x35a40; amp[0x2018]=0x21; amp[0x2024]=0x100;
  amp[0x4808]=0x20200233;amp[0x2c04]=0x833;amp[0x4800]=0x10001;amp[0x4840]=24;amp[0x4838]=24;
- memcpy(amp_initial,amp,sizeof(amp));amp_writes=amp_ignore=amp_no_lock=0;
+ memcpy(amp_initial,amp,sizeof(amp));amp_writes=amp_ignore=amp_no_lock=gpio_reads=0;
  memset(regs, 0, sizeof(regs)); regs[0] = 0x6360; regs[1] = 1;
+ regs[0x1710]=0x2001;regs[0x1714]=0xa001;
  regs[0x1711]=regs[0x1715]=0xf000; regs[0x100] = 2; regs[0x101] = 0x404; regs[0x171] = 2; regs[0x172] = 8;
  regs[0x173] = 24; regs[0x174] = 125; regs[0x185] = 1;
  regs[0x1841] = regs[0x1941] = 0xffff;
@@ -169,6 +178,18 @@ static void check_restore(void) {
  assert(strstr(ri_clock_note, "clock_restored=1")); assert(active_n == 8);
 }
 int main(void) {
+ reset(41);assert(!ri_clock_run_impl(false,false,true));
+ assert(!writes&&!amp_writes&&!pmic_writes);check_pins();
+ reset(41);assert(!ri_clock_run_impl(true,true,true));check_restore();
+ assert(ri_i2s_amp_locked&&ri_i2s_amp_restored&&ri_i2s_codec_restored);
+ for(unsigned fn=2;fn<=4;fn++) {
+  reset(0);regs[0x1710]=(regs[0x1710]&~0x1ffu)|fn;
+  assert(ri_clock_run_impl(true,true,true)==EBUSY);
+  assert(!writes&&!amp_writes&&!pmic_writes);check_pins();
+ }
+ reset(0);regs[0x1711]&=~0x8000u;
+ assert(ri_clock_run_impl(true,true,true)==EBUSY);
+ assert(!writes&&!amp_writes&&!pmic_writes);check_pins();
  reset(0);amp[0]=0;
  assert(ri_clock_run_impl(false,false,true)==EIO);
  assert(strstr(ri_clock_note,"i2s_snapshot_error=amp_id"));

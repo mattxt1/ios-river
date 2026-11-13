@@ -53,6 +53,7 @@ with tempfile.TemporaryDirectory(prefix="river-audio-tests-") as tmp:
                     str(root / "xnu/patches/0278-river-muted-i2s-clock-test.patch")], cwd=tmp, check=True)
     (dev / "river_codec_i2s.h").write_text(i2s)
     subprocess.run(["git", "apply", str(root / "xnu/patches/0279-river-i2s-snapshot-diagnostics.patch")], cwd=tmp, check=True)
+    subprocess.run(["git", "apply", str(root / "xnu/patches/0280-river-i2s-native-pinmux.patch")], cwd=tmp, check=True)
     (Path(tmp) / "river_codec_i2s.h").write_text((dev / "river_codec_i2s.h").read_text())
     added = (dev / "river_codec_clock.h").read_text()
     added = added.split("static int\nriver_codec_clock_sysctl", 1)[0]

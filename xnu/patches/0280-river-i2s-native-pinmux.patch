@@ -1,0 +1,95 @@
+diff --git a/bsd/dev/river_codec_clock.h b/bsd/dev/river_codec_clock.h
+--- a/bsd/dev/river_codec_clock.h
++++ b/bsd/dev/river_codec_clock.h
+@@ -64,7 +64,8 @@
+  ri_wr(ri_codec_pin[1], 4, 2); delay(5);
+  /* CTRL_UPD is a command bit, excluded from immediate N validation.
+   * The caller explicitly rearms and clears it around each update strobe. */
+- uint16_t mask = reg == 0x172 ? 0x7fff : 0xffff;
++ /* GPn_LVL is live input status, not restorable GPIO configuration. */
++ uint16_t mask = (reg == 0x172 || reg == 0x1710 || reg == 0x1714) ? 0x7fff : 0xffff;
+  uint16_t got = ri_clock_read(reg);
+  bool ok = (got & mask) == (value & mask);
+  if (!ok && !ri_clock_bad_reg) {
+@@ -165,6 +166,7 @@
+   }
+   route_before[0] = mclk[2]; route_before[1] = mclk[4];
+  }
++ if(i2s && !ri_i2s_idle()) { error=EBUSY;phase="i2s_not_idle";goto release; }
+  ri_clock_attempted = 1; modified = true; phase = "configure";
+  if(i2s && !ri_i2s_prepare()) { error=EIO;phase="amp_prepare";goto restore; }
+  if (route) {
+diff --git a/bsd/dev/river_codec_i2s.h b/bsd/dev/river_codec_i2s.h
+--- a/bsd/dev/river_codec_i2s.h
++++ b/bsd/dev/river_codec_i2s.h
+@@ -49,7 +49,8 @@
+  for(unsigned i=0;i<16;i++) ri_i2s_codec_saved[i]=ri_clock_read(ri_i2s_codec_regs[i]);
+  for(unsigned i=0;i<16;i++) {
+   uint16_t got=ri_clock_read(ri_i2s_codec_regs[i]);
+-  if(got!=ri_i2s_codec_saved[i]) return ri_i2s_snapshot_fail("codec_changed",ri_i2s_codec_regs[i],ri_i2s_codec_saved[i],got);
++  uint16_t mask=(ri_i2s_codec_regs[i]==0x1710||ri_i2s_codec_regs[i]==0x1714)?0x7fff:0xffff;
++  if((got&mask)!=(ri_i2s_codec_saved[i]&mask)) return ri_i2s_snapshot_fail("codec_changed",ri_i2s_codec_regs[i],ri_i2s_codec_saved[i],got);
+  }
+  for(unsigned i=0;i<9;i++) if(!ri_cs35l41_rd(ri_i2s_amp_regs[i],&ri_i2s_amp_saved[i]))
+   return ri_i2s_snapshot_fail("amp_read",ri_i2s_amp_regs[i],0,0);
+@@ -69,13 +70,19 @@
+  return true;
+ }
+ static bool
++ri_i2s_idle(void)
++{
++ // Require inactive AIF and GPIO inputs in native(0) or plain GPIO(1) mode.
++ if ((ri_i2s_codec_saved[2]&0xe0) || (ri_i2s_codec_saved[3]&7) ||
++     (ri_i2s_codec_saved[4]&7) || ri_i2s_codec_saved[10] || ri_i2s_codec_saved[11] ||
++     (ri_i2s_codec_saved[12]&0x1ff)>1 || !(ri_i2s_codec_saved[13]&0x8000) ||
++     (ri_i2s_codec_saved[14]&0x1ff)>1 || !(ri_i2s_codec_saved[15]&0x8000)) return false;
++ return true;
++}
++static bool
+ ri_i2s_prepare(void)
+ {
+- // Refuse an already active/owned codec interface or GPIO alternate function.
+- if ((ri_i2s_codec_saved[2]&0xe0) || (ri_i2s_codec_saved[3]&7) ||
+-     (ri_i2s_codec_saved[4]&7) || ri_i2s_codec_saved[10] || ri_i2s_codec_saved[11] ||
+-     (ri_i2s_codec_saved[12]&0x1ff) || !(ri_i2s_codec_saved[13]&0x8000) ||
+-     (ri_i2s_codec_saved[14]&0x1ff) || !(ri_i2s_codec_saved[15]&0x8000)) return false;
++ if(!ri_i2s_idle()) return false;
+  ri_i2s_touched=true;ri_i2s_amp_restored=false;ri_i2s_codec_restored=false;
+  // Mute first, then disable the Class-D output stage. Both read back.
+  if(!ri_i2s_amp_write(0x2024,ri_i2s_amp_saved[1]|0x10) ||
+@@ -112,8 +119,13 @@
+     !ri_clock_write(0x502,(ri_i2s_codec_saved[4]&~7u)|3) ||
+     !ri_clock_write(0x500,(ri_i2s_codec_saved[2]&~0xffu)|0x2b)) return EIO;
+  if(!ri_i2s_quiet()) return EIO;
+- // Native GPIO functions, no pull; TXDATA remains tri-stated and channels off.
+- if(!ri_clock_write(0x1711,ri_i2s_codec_saved[13]&~0xe000u) ||
++ // Select AIF1 mux with SYSCLK still disabled, then enable its clocks.
++ // DS1085F2 table4-85: GP9_FN=0 BCLK, GP11_FN=0 LRCLK.
++ // Native mux ignores GP_DIR; AIF master bits control pin direction.
++ // TXDATA remains tri-stated and channels off.
++ if(!ri_clock_write(0x1710,ri_i2s_codec_saved[12]&~0x1ffu) ||
++    !ri_clock_write(0x1714,ri_i2s_codec_saved[14]&~0x1ffu) ||
++    !ri_clock_write(0x1711,ri_i2s_codec_saved[13]&~0xe000u) ||
+     !ri_clock_write(0x1715,ri_i2s_codec_saved[15]&~0xe000u) ||
+     !ri_clock_write(0x101,(ri_i2s_codec_saved[0]&~0x874fu)|0x444) ||
+     !ri_clock_write(0x500,(ri_i2s_codec_saved[2]&~0xffu)|0x6b)) return EIO;
+@@ -136,12 +148,18 @@
+  // Release codec clock outputs before restoring the amplifier's original mode.
+  if(!ri_clock_write(0x1711,ri_i2s_codec_saved[13]|0x8000)) ok=false;
+  if(!ri_clock_write(0x1715,ri_i2s_codec_saved[15]|0x8000)) ok=false;
++ // GP_DIR is ignored in native mode: mux both pins back to GPIO input first.
++ if(!ri_clock_write(0x1710,(ri_i2s_codec_saved[12]&~0x1ffu)|1)) ok=false;
++ if(!ri_clock_write(0x1714,(ri_i2s_codec_saved[14]&~0x1ffu)|1)) ok=false;
+  if(!ri_clock_write(0x500,ri_i2s_codec_saved[2]&~0xe0u)) ok=false;
+  if(!ri_clock_write(0x501,(ri_i2s_codec_saved[3]&~7u)|0x20)) ok=false;
+  if(!ri_clock_write(0x502,ri_i2s_codec_saved[4]&~7u)) ok=false;
+  if(!ri_clock_write(0x101,ri_i2s_codec_saved[0]&~0x40u)) ok=false;
+  for(unsigned i=0;i<16;i++) if(!ri_clock_write(ri_i2s_codec_regs[i],ri_i2s_codec_saved[i])) ok=false;
+- for(unsigned i=0;i<16;i++) if(ri_clock_read(ri_i2s_codec_regs[i])!=ri_i2s_codec_saved[i]) ok=false;
++ for(unsigned i=0;i<16;i++) {
++  uint16_t mask=(ri_i2s_codec_regs[i]==0x1710||ri_i2s_codec_regs[i]==0x1714)?0x7fff:0xffff;
++  if((ri_clock_read(ri_i2s_codec_regs[i])&mask)!=(ri_i2s_codec_saved[i]&mask)) ok=false;
++ }
+  ri_i2s_codec_restored=ok;
+ }
+ static void

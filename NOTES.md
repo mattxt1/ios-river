@@ -5,6 +5,29 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## I2S snapshot readable; native pinmux required (2026-11-12)
+
+- Verified fastboot productriver and temporarily booted diagnostic image
+  `river-muted-i2s-diag-7d8cfc6.img` successfully. No partition flashed.
+- Both codec/FLL and combined I2S snapshot succeeded on this boot; the earlier
+  snapshot failure has not reproduced and its original cause remains unknown.
+- Exact AIF baseline: sys0x404 sr0x11 bclk0xc txpin0 rxpin0 rate0 fmt0
+  bcpf0x40 txwl/rxwl0x1818 txen/rxen0; GP9=0x2001,0xf000 and
+  GP11=0xa001,0xf000. Amp power0x21 mute0 fmt0x20200233 PLL0x833
+  rawIRQ3=0x20000010. Endpoint flags3. No I2S test triggered.
+- Existing guard requires FN0; observed pins are FN1 GPIO inputs. Cirrus
+  CS47L35 datasheet DS1085F2 sections4.14.1–4.14.3, tables4-83/4-85 confirm
+  FN0 selects native AIF1 BCLK(GPIO9)/LRCLK(GPIO11), FN1 ordinary GPIO.
+  In native mode GP_DIR is ignored: direction follows AIF master controls.
+  GP_LVL(bit15 CTRL1) is live input status and cannot be restored as config.
+  Source: https://statics.cirrus.com/pubs/proDatasheet/CS47L35_F2.pdf
+- Patch0280 accepts only inactive FN0 or FN1 inputs; rejects other functions
+  or GPIO outputs before consuming the one-shot or writing clock registers.
+  Selects FN0 only after amplifier quiet/slave verification and with SYSCLK
+  disabled. Cleanup selects ordinary GPIO input before restoring AIF state
+  and amplifier. Ignores only volatile GP_LVL in configuration comparisons;
+  all function/direction/pull and other register checks remain exact.
+
 ## Muted I2S baseline blocked before clock writes (2026-11-12)
 
 - User returned River to fastboot; `getvar product` reported `river`.
