@@ -45,7 +45,14 @@
   Packaged outputs/river-adsp-probe-5721d3e.img with the new status helper;
   image SHA256b8ef49c1d88e0f0144e66b9ffc7ac055c182492b34159d7cf1202325fc0a35cd.
   Image size26677248, cmdline562; payload segment checks passed.
-  Awaiting fastboot coordination for read-only hardware probe.
+  Verified productriver and temporary fastboot boot succeeded. Waiting for
+  user-confirmed responsive iOS before the read-only hardware probe.
+- First boot had responsive UI but USB ARP/SSH timeouts; cable reconnect did
+  not recover it. Clearing host ARP required unavailable sudo authentication;
+  no host network setting was changed. User returned to fastboot; fresh boot
+  of identical image succeeded, USB logs resumed and SSH eventually worked
+  with a longer handshake. Passive ADSP result `not requested` confirms no
+  probe ran. Waiting for home screen confirmation on this retry boot.
 - Remaining prerequisites before physical PCM: ADSP secure loading with its
   source-derived CX/XO/crypto proxy requirements, SMP2P readiness, APR/QMI,
   Q6AFE/Q6ASM + SLIMbus channel configuration, paced buffer lifecycle, codec
