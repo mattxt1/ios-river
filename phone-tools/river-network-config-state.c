@@ -60,7 +60,7 @@ static void route_dump(void) {
 static void selected_options(const char *label,CFPropertyListRef value) {
  if(!value||CFGetTypeID(value)!=CFDictionaryGetTypeID()){print_plist(label,NULL);return;}
  CFMutableDictionaryRef selected=CFDictionaryCreateMutable(NULL,0,&kCFTypeDictionaryKeyCallBacks,&kCFTypeDictionaryValueCallBacks);
- const CFStringRef fields[]={CFSTR("PrimaryRank"),CFSTR("ServiceIndex"),CFSTR("IPIsCoupled"),CFSTR("IPIsIndependent"),CFSTR("OverridePrimary"),CFSTR("Scoped"),CFSTR("ExcludeFromNWI"),CFSTR("IsNULL")};
+ const CFStringRef fields[]={CFSTR("InterfaceName"),CFSTR("DeviceName"),CFSTR("ServiceID"),CFSTR("PrimaryRank"),CFSTR("ServiceIndex"),CFSTR("IPIsCoupled"),CFSTR("IPIsIndependent"),CFSTR("OverridePrimary"),CFSTR("Scoped"),CFSTR("ExcludeFromNWI"),CFSTR("IsNULL")};
  for(unsigned i=0;i<sizeof(fields)/sizeof(fields[0]);i++){
   CFTypeRef field=CFDictionaryGetValue(value,fields[i]);
   if(field&&(CFGetTypeID(field)==CFStringGetTypeID()||CFGetTypeID(field)==CFNumberGetTypeID()||CFGetTypeID(field)==CFBooleanGetTypeID()))CFDictionarySetValue(selected,fields[i],field);
@@ -104,7 +104,7 @@ static void dynamic_state(void) {
  if(!store){puts("SC read session unavailable");dlclose(handle);return;}
  const CFStringRef patterns[]={
   CFSTR("^(State|Setup):/Network/Global/(IPv4|DNS)$"),
-  CFSTR("^(State|Setup):/Network/Service/[^/]+/(IPv4|DNS|Interface)$"),
+  CFSTR("^(State|Setup):/Network/Service/[^/]+/(IPv4|IPv6|DNS|Interface)$"),
   CFSTR("^State:/Network/Interface/(en0|ue0)/(IPv4|Link)$"),
   CFSTR("^(State|Setup):/Network/Service/[^/]+$")
  };

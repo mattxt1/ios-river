@@ -5,6 +5,46 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Read-only primary-rank mapping and diagnostic builds (2026-11-13)
+
+- selected-service-map-bb395d6 maps threeScopedUUIDs toIPv6utun0/utun1/utun2,
+  notextraordinaryWi-Fiservices. Helperen0FFDAserviceStatePrimaryRankFirst;
+  configdPID35en0Neverassertionstilloverridesgeneralprimaryeligibility.
+- PublicAppleconfigd/bootpsourcesexplainrankselectionbutproductionsetter
+  callsitesforNeverarenotpresentthere; exactclosediOSpolicycauseunverified.
+  Do notforceclearanotherprocessassertion,killconfigd orrewritednsflags.
+- Addedselectedservicerootfieldsandread-onlyinterfaceassertionSPIaccessors
+  toconfiginspector,withnoAirPort/credentials/statewrites. Currenthelpers
+  rebuiltwithiOS16arm64target,Wall/Wextra/WerrorusingDarwinrouteheaderand
+  CoreFoundation;bothpass. phone-tools/build.shnowincludesinspectors.
+-0296fullkernelbuildstillrunningdbf26b6/YPSlnL,compilingkernelunitswithno
+  compilererrorsatlastcheck. No0296image/deviceclaimyet. Existingbb395d6
+  remainslatestdeviceboot,Settingscheckmark/result1/numericHTTPsuccesswith
+  generalDNSunresolved. AgentupdatedWiFi-statuswiththeseobservations.
+
+## Primary-network eligibility narrowed;0296 build running (2026-11-13)
+
+- After userconfirmedSettingscheckmark, en0-boundnumericAppleHTTPcheck passed
+  HTTP200/453bytes/expectedSuccess marker. NoDNS/TLSclaim:ordinarygetaddrinfo
+  stillEAI_NONAME. Actualresolver/NWIinspectorfindsgeneralIPv4ranklistempty,
+  scopedWi-Firesolverwithnameserversbutnodefaultnameservers. Thisisactual
+  compiledresolverstate,notmerelySCDynamicStoredisplaydictionary.
+- Extendedreadonlyrankinspectorfindsen0assertionrank3(Never),PID35configd;
+  ue0hasnoassertions. ExistinghelperStateFFDAservicePrimaryRankFirst;three
+  otherStateservicesScoped. Setup/prefsFFDAserviceDHCPandcurrentserviceorder
+  includesit. Agenttracingnativeownerpolicy/servicemappingbeforeanyrankchange.
+  Nootherownerassertioncleared,noconfigdkill,noDNSflagsmodified.
+- Committeddbf26b6f8150c8a0b9c3a27f5871e3b11611546a includes0296standard
+  linkevents,reviewedmetadata-onlySCobserverandreadonlyroute/DNSinspectors,
+  updatedevidence. Fullbuildrunninginwork/build/river-dbf26b6f8150-YPSlnL,
+  command session84098. Host0296regressionspassedincludingreentrantcallbacks.
+  Current0296devicevalidationpending; do notclaimnativeDNSfixedbyit.
+- Inspectorlaterextendedwithselectedservice-rootandreadonlyinterface-rank
+  APIaccess;sourcechangesuncommittedafterdbf26b6,compiled/signed/deployed.
+  Privateevidencework/network-config/selected-rank-state-bb395d6.txt. Existing
+  diagnosticnetworkhelperstillrunningwithunchangedentitlements/operations;
+  originalbinarybackupretained. Nextfinish0296buildandtraceconfigdrankcause.
+
 ## Wi-Fi Settings completion and bound HTTP verified; DNS unresolved (2026-11-13)
 
 - bb395d6 temporary boot product/hash verified; iOS responsive, USB enumerated

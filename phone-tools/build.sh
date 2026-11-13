@@ -33,6 +33,13 @@ cc -o "$out/btaudio-toggle" btaudio-toggle.c
 sign btaudio-toggle
 cc -framework IOKit -o "$out/netprobe" netprobe.c
 sign netprobe
+# iOS SDK omits net/route.h; the host Darwin header supplies the verified
+# read-only route-dump ABI (the inspector statically checks rt_msghdr size).
+cc -idirafter "$(xcrun --sdk macosx --show-sdk-path)/usr/include" \
+ -framework CoreFoundation -o "$out/river-network-config-state" river-network-config-state.c
+sign river-network-config-state
+cc -framework CoreFoundation -o "$out/river-dns-state" river-dns-state.c
+sign river-dns-state
 cc -framework Foundation -framework AVFoundation -o "$out/river-media-capability" river-media-capability.m
 sign river-media-capability
 cc -o "$out/river-audio-test" river-audio-test.c
