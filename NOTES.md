@@ -43,7 +43,21 @@
   built-in SHA256_Init/Update/Final (patch0023), not one-shot ccdigest.
   Patch0284 switches to that existing code-signing SHA256 API. Host checks
   rerun against the full0282→0283→0284 patch chain. No metadata secure call
-  or new image boot occurred; rebuilding corrected committed source next.
+  or new image boot occurred. Corrected source2a870695dcd5e7affc2a033fc5cd9f0d12d75930
+  built successfully in work/build/river-2a870695dcd5-ssnC4i. The actual build
+  headers match the tested source, and its compiled-in stock digest matches
+  the staged metadata. Kernel SHA256
+  182d47332418b66f493b171bd6cb0e2906293fb424ff64f49873235ffe461029.
+- Packaged outputs/river-adsp-metadata-2a87069.img: 26,679,296bytes,
+  cmdline562, SHA256
+  5e5eafe2f5670e658706e2f72ad86b0d1e73eb3e884d6859739ded2cb491c558.
+  Payload checks passed. Waiting for fastboot then responsive home screen;
+  no metadata secure call yet.
+- Before audible PCM, audit/fix runtime speaker-volume register packing:
+  its public helper still writes an unshifted attenuation code to0x6000;
+  actual PCM volume occupies bits13:3. The muted clock test already uses
+  masked/shifted code0x400. Derive the signed gain/attenuation conversion
+  from matching Cirrus documentation before enabling live playback.
 
 ## Physical PCM transport: stock ADSP firmware recovered (2026-11-12)
 
