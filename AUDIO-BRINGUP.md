@@ -45,17 +45,24 @@ frames, invalid states/indices and restricted RX-tail/flag/IPC writes.
 Primary V0 layout: [matching Motorola RPM driver](https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/2dba45b8e247958d5a1b15b33c6064c15af4983e/drivers/soc/qcom/rpm-smd.c).
 Sequential0292→0293→0294 application to the exact236a880 source passed.
 
-This is a reply receiver for the existing boot-only channel owner. It adds
-no ADSP vote, IPC-to-ADSP, DSP startup or PCM path. Before another client uses
-it, shared-channel serialization, TX capacity/ownership, unique request IDs
-and an explicit CX/XO vote policy remain required. It does not make WCNSS
-startup contingent on ACK success; that existing startup policy is separate.
-The combined4d238b8 full kernel build passed and its temporary image is packaged
-and verified. Volume-register validation passed on the phone. Early RPM ACK messages were
-missed during USB enumeration and had rotated out of the128KiB retained log;
-exact-ID runtime ACK validation subsequently passed on bb395d6: ACK1,
-staleACK1 ignored while awaiting2, then ACK2. The next temporary image
-uses the supported msgbuf argument to retain1MiB for those diagnostics.
+Patch0294 passed live on bb395d6: exact ACK1, stale ACK1 ignored while
+awaiting2, then exact ACK2. Patch0298 now refactors the existing L19/L9 boot
+requests into a shared, mutex-owned transport. It validates the observed SMEM
+item18/342 layout, channel states and FIFO indices; reserves four ring bytes;
+waits at most500ms for TX space and500ms for the exact reply; publishes packet
+contents before the head/doorbell; and never reuses a request ID during the
+boot. IDs begin at0x52490001 to distinguish them from inherited low IDs.
+Future audio clients are gated until both boot requests receive exact ACKs.
+This readiness ledger is not a record of CX/XO ownership or a power rollback.
+A timeout after sending means the remote outcome is unknown.
+
+Actual-code sanitizer tests pass for exact packet bytes, one/two/three KVPs,
+wrap, full/exact-capacity rings, delayed drain/replies, stale/NACK/timeout,
+invalid layouts/states/indices, ID exhaustion and the audio readiness gate.
+Full kernel build and device validation of0298 are pending. It issues the
+same existing L19/L9 votes and adds no ADSP votes or DSP startup. WCNSS startup
+still follows its existing policy even when boot votes fail. CX/XO shared
+ownership policy and authenticated startup remain the next audio work.
 
 ## Verified progress and remaining work (2026-11-13)
 

@@ -174,3 +174,21 @@ made yet that the user's AP appears or that native primary selection/DNS is
 fixed. The image preserves the original verified base network helper; the
 earlier diagnostic observer is not embedded. See NOTES.md for hashes and
 exact artifact paths.
+
+
+## c3d9af8 fresh-scan and Apple registration-helper inspection
+
+Patch0297 built, packaged and temporarily booted to responsive iOS in c3d9af8. Fresh scan counts now vary13–24 instead of remaining at32, verifying that completed scans refresh the bounded discovery set. The user's target visibility and a new join on this image remain to be confirmed; varying counts alone do not prove the desired AP was received.
+
+Read-only import/disassembly inspection of the device's existing `addNetworkInterface` binary establishes its rank decision without executing it. At virtual addresses0x100002bd8–0x100002c30 it reads `NetworkInterfaceFlags` from the controller parent: bit0x20000000 selects service rank3 (Never); an absent/clear property selects rank0 (Default). At0x100003080–0x1000030d0 it compares the existing service rank and calls `SCNetworkServiceSetPrimaryRank` only when the desired rank differs. It also checks recursive `HiddenInterface` and the `InterfaceRole` string `CarPlay` to skip configuration.
+
+Current RiverWLAN source publishes none of those properties, so this helper's observed path selects Default rather than Never. It imports service rank APIs, not `SCNetworkInterfaceSetPrimaryRank`; this does not explain the separately observed configd-owned interface assertion. The minimal synthetic IOKit hierarchy remains a possible broader integration limitation, but this binary supplies no basis for inventing new property bits or clearing another owner's assertion. Device binary and disassembly remain outside Git in private/intermediate workspace files.
+
+
+## c3d9af8 target found; two join attempts and bounded M1 audit
+
+The user now sees the usual target under My Networks, confirming the refreshed discovery path received it. The first join prompted for a password and showed the previous alert; the second prompted again and then showed a spinner without an error. Private retained logs establish first-attempt AP authentication/association status0 followed by four M1/M2 exchanges, no received M3, and AP disconnect reason15. The second attempt completed M1/M3, key installation, M4 and the protected DHCP OFFER probe. Direct scalar state is4/result1. Native IPConfiguration remains incomplete on this boot: configd still owns en0 Never, NWI has no en0/general IPv4 state, and no scoped resolver is published in that snapshot. No DNS/Internet success is claimed for c3d9af8.
+
+Source inspection finds no demonstrated cross-generation PMK/SNonce carryover: each worker attempt clears WPA state and copies the current request PMK; unchanged ANonce reuses the same SNonce/PTK, lower replay counters for that ANonce are rejected, and M2 echoes the received replay. A new ANonce before key installation derives fresh SNonce/PTK. The existing comment saying only identical nonce/replay is accepted is stricter than the implementation, which allows an increased replay counter and a new ANonce before keys. The captured logs contain no nonce/replay-change metadata, so the first failure cannot be attributed to that policy. DMA completion alone is not an AP acknowledgment or proof that the AP accepted M2's MIC. Wrong credentials, packet delivery and AP handshake behavior remain hypotheses; no request for secrets or unsupported explanation is warranted.
+
+The standard DL event payload remains source-correct: exact event-data offset/size, interface family/base-name/unit, worker delivery outside locks and success-based link readiness. Included code and absence of a logged event error do not independently prove native consumers completed configuration or cleared their rank policy. No further patch is justified by these captures; review of the existing helper's process/log and native configuration owner remains the next bounded evidence path.

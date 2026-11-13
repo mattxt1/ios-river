@@ -1,0 +1,218 @@
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -1810,6 +1810,9 @@
+ }
+ 
+ #include "river_rpm_reply.h"
++static LCK_GRP_DECLARE(ri_rpm_grp, "river-rpm");
++static LCK_MTX_DECLARE(ri_rpm_lock, &ri_rpm_grp);
++#include "river_rpm_transport.h"
+ 
+ static void
+ river_wcnss_probe(void)
+@@ -2105,10 +2108,13 @@
+   vm_offset_t ipc_page = ml_io_map_unmappable(0x0b010000, 0x4000, VM_WIMG_IO);
+   if (!ipc_page) {
+    printf("RIVER WCNSS: APCS IPC map failed\n");
+-  } else if (!auxmem) {
+-   printf("RIVER WCNSS: RPM SMD auxmem unavailable for handshake\n");
++  } else if (!auxmem || !ri_rpm_layout(smem)) {
++   printf("RIVER WCNSS: RPM SMD mapping/layout unavailable for handshake\n");
+    ml_io_unmap(ipc_page, 0x4000);
+   } else {
++   lck_mtx_lock(&ri_rpm_lock);
++   ri_rpm_channel.ready=false;
++   ri_rpm_channel.boot_votes=0;
+    vm_offset_t ipc_reg = ipc_page + 0x1008;
+    printf("RIVER WCNSS: APCS IPC mapped at %p (reg %p)\n", (void *)ipc_page, (void *)ipc_reg);
+    enum {
+@@ -2168,12 +2174,12 @@
+    uint32_t cur_rx_t = ri_rd(auxmem, 44 + 36);
+    printf("RIVER WCNSS: RPM SMD channel established: tx state %u rx state %u (tx_h %#x tx_t %#x rx_h %#x rx_t %#x)\n",
+        tx_st, rx_st, cur_tx_h, cur_tx_t, cur_rx_h, cur_rx_t);
+-   if (tx_st == SMD_OPENED && rx_st == SMD_OPENED) {
++   if (tx_st == SMD_OPENED && rx_st == SMD_OPENED &&
++       cur_tx_h<1024 && cur_tx_t<1024 && cur_rx_h<1024 && cur_rx_t<1024 &&
++       !((cur_tx_h|cur_tx_t|cur_rx_h|cur_rx_t)&3)) {
+     /* Purge any stale bootloader RX packet by syncing rx tail to current head */
+     ri_wr(auxmem, 44 + 36, cur_rx_h);
+     ri_wr(auxmem, 44 + 24, 1);
+-    vm_offset_t tx_fifo = auxmem + 0x800;
+-    vm_offset_t rx_fifo = auxmem + 0xc00;
+     static const struct {
+      uint32_t id;
+      uint32_t uV;
+@@ -2183,79 +2189,20 @@
+      { 19, 1300000, 10, "L19 vddrfa" },
+      { 9,  3300000, 10, "L9 vddpa" },
+     };
+-    static uint32_t next_msg_id = 1;
+     for (unsigned t = 0; t < sizeof(targets) / sizeof(targets[0]); t++) {
+-     uint32_t cur_msg_id = next_msg_id++;
+-     struct {
+-      uint32_t smd_hdr[5];
+-      uint32_t service_type;
+-      uint32_t length;
+-      uint32_t msg_id;
+-      uint32_t flags;
+-      uint32_t type;
+-      uint32_t id;
+-      uint32_t data_len;
+-      struct {
+-       uint32_t key;
+-       uint32_t nbytes;
+-       uint32_t value;
+-      } kv[3];
+-     } pkt;
+-     memset(&pkt, 0, sizeof(pkt));
+-     pkt.smd_hdr[0] = sizeof(pkt) - 20;
+-     pkt.service_type = 0x00716572;
+-     pkt.length = 20 + 36;
+-     pkt.msg_id = cur_msg_id;
+-     pkt.flags = 0;
+-     pkt.type = 0x616f646c;
+-     pkt.id = targets[t].id;
+-     pkt.data_len = 36;
+-     pkt.kv[0].key = 0x6e657773;
+-     pkt.kv[0].nbytes = 4;
+-     pkt.kv[0].value = 1;
+-     pkt.kv[1].key = 0x00007675;
+-     pkt.kv[1].nbytes = 4;
+-     pkt.kv[1].value = targets[t].uV;
+-     pkt.kv[2].key = 0x0000616d;
+-     pkt.kv[2].nbytes = 4;
+-     pkt.kv[2].value = targets[t].mA;
+-     uint32_t head = ri_rd(auxmem, 40);
+-     for (unsigned b = 0; b < sizeof(pkt); b += 4) {
+-      unsigned woff = (head + b) & 1023;
+-      *(volatile uint32_t *)(tx_fifo + woff) = *(uint32_t *)((char *)&pkt + b);
+-     }
+-     head = (head + sizeof(pkt)) & 1023;
+-     ri_wr(auxmem, 40, head);
+-     ri_wr(auxmem, 24, 0);
+-     ri_wr(auxmem, 20, 1);
+-     __asm__ volatile("dmb sy" ::: "memory");
+-     ri_wr(ipc_reg, 0, 1);
+-     printf("RIVER WCNSS: sent RPM request for %s (msg_id %u, %u uV) new head %#x\n",
+-         targets[t].name, cur_msg_id, targets[t].uV, head);
+-     bool acked=false, rejected=false;
+-     unsigned stale=0;
+-     for(unsigned wait_ms=0;wait_ms<500;wait_ms++) {
+-      uint32_t response_id=0;
+-      int reply=ri_rpm_take_reply(auxmem,rx_fifo,ipc_reg,cur_msg_id,&response_id);
+-      if(reply==RI_RPM_REPLY_ACK) {
+-       printf("RIVER WCNSS: RPM ACK for %s: exact msg_id %u\n",targets[t].name,cur_msg_id);
+-       acked=true;
+-       break;
+-      }
+-      if(reply<0) {
+-       printf("RIVER WCNSS: RPM response rejected for %s: expected %u received %u status %d\n",
+-           targets[t].name,cur_msg_id,response_id,reply);
+-       rejected=true;
+-       break;
+-      }
+-      if(reply==RI_RPM_REPLY_STALE && stale++<4)
+-       printf("RIVER WCNSS: ignored stale RPM reply %u while awaiting %u\n",response_id,cur_msg_id);
+-      delay(1000);
+-     }
+-     if(!acked && !rejected)
+-      printf("RIVER WCNSS: RPM request for %s timed out awaiting exact msg_id %u\n",
+-          targets[t].name,cur_msg_id);
++     const struct ri_rpm_kv kv[] = {
++      {0x6e657773,1}, {0x00007675,targets[t].uV}, {0x0000616d,targets[t].mA}
++     };
++     uint32_t id=0;
++     int result=ri_rpm_request_locked(auxmem,ipc_reg,true,0,0x616f646c,
++         targets[t].id,kv,3,&id);
++     if(result==RI_RPM_REPLY_ACK) ri_rpm_channel.boot_votes|=1u<<t;
++     printf("RIVER WCNSS: RPM request %s msg_id %u result %d (exact ACK=1)\n",
++         targets[t].name,id,result);
+     }
++    ri_rpm_channel.ready=ri_rpm_channel.boot_votes==3;
++    printf("RIVER RPM: shared transport ready %u boot ACK mask %#x\n",
++        ri_rpm_channel.ready,ri_rpm_channel.boot_votes);
+     delay(50000);
+     if (core) {
+      for (unsigned i = 0; i < sizeof(targets) / sizeof(targets[0]); i++) {
+@@ -2269,6 +2216,7 @@
+      }
+     }
+    }
++   lck_mtx_unlock(&ri_rpm_lock);
+    ml_io_unmap(ipc_page, 0x4000);
+   }
+  }
+diff --git a/bsd/dev/river_rpm_transport.h b/bsd/dev/river_rpm_transport.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/river_rpm_transport.h
+@@ -0,0 +1,68 @@
++/* Shared APPS->RPM V0 request transport. Caller holds ri_rpm_lock across
++ * handshake, request and reply. Pointers refer to validated item18/342 maps.
++ * A timeout is an unknown remote outcome, never an ACK or a rollback. */
++struct ri_rpm_kv { uint32_t key, value; };
++static struct {
++ uint32_t next_id;
++ unsigned boot_votes;
++ bool ready;
++} ri_rpm_channel = { .next_id=0x52490001u };
++
++enum { RI_RPM_REQUEST_TIMEOUT=-3, RI_RPM_REQUEST_GATED=-4 };
++static bool
++ri_rpm_layout(vm_offset_t smem)
++{
++ const unsigned info=0xd0+18*16, fifo=0xd0+342*16;
++ return ri_rd(smem,info)==1 && ri_rd(smem,info+4)==0 &&
++     ri_rd(smem,info+8)==88 && ri_rd(smem,info+12)==0x60000 &&
++     ri_rd(smem,fifo)==1 && ri_rd(smem,fifo+4)==0x800 &&
++     ri_rd(smem,fifo+8)==0x800 && ri_rd(smem,fifo+12)==0x60000;
++}
++static int
++ri_rpm_request_locked(vm_offset_t aux, vm_offset_t ipc, bool boot_client,
++    uint32_t set, uint32_t type, uint32_t resource,
++    const struct ri_rpm_kv *kv, unsigned count, uint32_t *request_id)
++{
++ lck_mtx_assert(&ri_rpm_lock,LCK_MTX_ASSERT_OWNED);
++ if(!request_id) return RI_RPM_REPLY_BAD;
++ *request_id=0;
++ if(!boot_client && !ri_rpm_channel.ready) return RI_RPM_REQUEST_GATED;
++ if(!kv || !count || count>3 || set>1 || !type ||
++    !ri_rpm_channel.next_id || ri_rpm_channel.next_id==0xffffffffu)
++  return RI_RPM_REPLY_BAD;
++ uint32_t packet[21]={0}; /* 20-byte SMD header, V0 header, <=3 KVPs. */
++ unsigned bytes=48+count*12;
++ packet[0]=bytes-20; packet[5]=0x00716572; packet[6]=bytes-28;
++ packet[8]=set; packet[9]=type; packet[10]=resource; packet[11]=count*12;
++ for(unsigned i=0;i<count;i++) {
++  packet[12+i*3]=kv[i].key; packet[13+i*3]=4; packet[14+i*3]=kv[i].value;
++ }
++ uint32_t head=0;
++ bool space=false;
++ for(unsigned wait=0;wait<500;wait++) {
++  if(ri_rd(aux,0)!=2 || ri_rd(aux,44)!=2) return RI_RPM_REPLY_BAD;
++  head=ri_rd(aux,40);
++  uint32_t tail=ri_rd(aux,36);
++  if(head>=1024 || tail>=1024 || ((head|tail)&3)) return RI_RPM_REPLY_BAD;
++  if(((tail-head-4)&1023)>=bytes) { space=true; break; }
++  delay(1000);
++ }
++ if(!space) return RI_RPM_REQUEST_TIMEOUT; /* No FIFO/control writes. */
++ uint32_t id=ri_rpm_channel.next_id++;
++ *request_id=id; packet[7]=id;
++ for(unsigned offset=0;offset<bytes;offset+=4)
++  ri_wr(aux+0x800,(head+offset)&1023,packet[offset/4]);
++ /* Publish complete packet before head, then flags before the IPC doorbell. */
++ __asm__ volatile("dmb sy" ::: "memory");
++ ri_wr(aux,40,(head+bytes)&1023);
++ ri_wr(aux,24,0); ri_wr(aux,20,1);
++ __asm__ volatile("dmb sy" ::: "memory");
++ ri_wr(ipc,0,1);
++ for(unsigned wait=0;wait<500;wait++) {
++  uint32_t response=0;
++  int result=ri_rpm_take_reply(aux,aux+0xc00,ipc,id,&response);
++  if(result!=RI_RPM_REPLY_WAIT && result!=RI_RPM_REPLY_STALE) return result;
++  delay(1000);
++ }
++ return RI_RPM_REQUEST_TIMEOUT;
++}

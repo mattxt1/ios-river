@@ -5,6 +5,31 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff: Wi-Fi evidence collected; audio transport0298 (2026-11-13)
+
+The c3d9af8 boot is responsive and USB SSH works with the approved existing
+River key. The usual AP is visible in My Networks. The first join authenticated
+and associated but timed out after repeated M2 submissions without M3; this
+is not proof of a wrong password. The second completed M1/M3/PTK/GTK/M4 and
+protected DHCP traffic. Read-only state is4/result1. Native IP/DNS remains
+incomplete: configd PID35 asserts interface Never rank3, State service IPv4
+is absent, NWI has no en0/general IPv4 entry and ordinary DNS fails. Existing
+river-net reports DHCP ACK/default/SC publication, which does not establish
+native configuration completion. See private work/network-config/*c3d9af8*
+for evidence. Do not ask for another identical join or treat the current
+spinner as an uncompleted WPA exchange. No new Wi-Fi patch is justified yet.
+
+Principal audio work resumed: patch0298 serializes RPM handshake/transactions,
+validates descriptors/rings and TX capacity, uses IDs from0x52490001 and gates
+future audio requests until both existing boot votes receive exact ACKs.
+Actual-code ASan/UBSan transport and prior reply tests pass. The host model
+covers packets, wrap, full/exact-capacity, delayed TX drain/ACK, stale/NACK,
+timeout, invalid input and readiness/ownership assertions. No ADSP vote/start,
+physical PCM or microphone input has been implemented. Full build and device
+validation pending; commit0298 before invoking the build. Current phone image
+remains outputs/river-wifi-scan-c3d9af8.img. Next: full build/package0298, then
+validate exact boot ACKs before implementing shared CX/XO power policy/startup.
+
 ## Current handoff: scan fix booted, UI confirmation pending (2026-11-13)
 
 Source `c3d9af8179c470e08a028d33ee51e885458d8255` includes patch0297.
