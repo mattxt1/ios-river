@@ -1,0 +1,109 @@
+diff --git a/bsd/dev/river_adsp_probe.h b/bsd/dev/river_adsp_probe.h
+--- a/bsd/dev/river_adsp_probe.h
++++ b/bsd/dev/river_adsp_probe.h
+@@ -24,6 +24,7 @@
+  *offset=off;*length=len;return true;
+ }
+ #include "river_adsp_startup_survey.h"
++#include "river_adsp_partition.h"
+ 
+ static int
+ ri_adsp_probe_impl(void)
+@@ -94,6 +95,7 @@
+  snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n,
+      "\nlegacy_tables=%u adsp_channels=%u apr_channels=%u malformed=%u no_channels_does_not_prove_dsp_off=1",tables,channels,apr,malformed);
+  ri_adsp_startup_survey(smem,freeoff);
++ ri_adsp_partition_survey(smem);
+  return error;
+ }
+ #include "river_adsp_metadata.h"
+diff --git a/bsd/dev/river_adsp_partition.h b/bsd/dev/river_adsp_partition.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/river_adsp_partition.h
+@@ -0,0 +1,85 @@
++/* Vendor msm_smem.c: APPS/ADSP uncached partition, read-only snapshot.
++ * Does not allocate, take remote locks, follow target mappings or write. */
++static bool ri_adsp_partition_valid;
++static unsigned ri_adsp_partition_count;
++static void
++ri_adsp_partition_survey(vm_offset_t smem)
++{
++ const uint32_t end=0xff000,table=0xff000;
++ ri_adsp_partition_valid=false;ri_adsp_partition_count=0;
++ uint32_t magic=ri_rd(smem,table),version=ri_rd(smem,table+4),count=ri_rd(smem,table+8);
++ size_t n=strlen(ri_adsp_note);
++ snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n,
++     "\npartition_table_magic=%#x version=%u count=%u",magic,version,count);
++ if(magic!=0x434f5424 || version!=1 || count>84) return;
++ for(unsigned i=0;i<count;i++) {
++  uint32_t ent=table+32+i*48;
++  if(ent+48>0x100000) return;
++  uint32_t hosts=ri_rd(smem,ent+12);
++  if(hosts!=0x20000 && hosts!=2) continue;
++  ri_adsp_partition_count++;
++  uint32_t off=ri_rd(smem,ent),size=ri_rd(smem,ent+4),flags=ri_rd(smem,ent+8);
++  uint32_t line=ri_rd(smem,ent+16);
++  bool range=!(off&7) && off>=0x2000 && size>=32 && off<end && size<=end-off &&
++      line>=8 && line<=4096 && !(line&(line-1));
++  n=strlen(ri_adsp_note);
++  if(sizeof(ri_adsp_note)-n<256)return;
++  snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n,
++      "\nadsp_partition=%u offset=%#x size=%#x flags=%#x cacheline=%u range_valid=%u",
++      i,off,size,flags,line,range);
++  if(!range || ri_rd(smem,ent)!=off || ri_rd(smem,ent+4)!=size || ri_rd(smem,ent+12)!=hosts) continue;
++  uint32_t pmagic=ri_rd(smem,off),phosts=ri_rd(smem,off+4),psize=ri_rd(smem,off+8);
++  uint32_t unc=ri_rd(smem,off+12),cached=ri_rd(smem,off+16);
++  bool valid=pmagic==0x54525024 && phosts==hosts && psize==size &&
++      unc>=32 && unc<=cached && cached<=size && !(unc&7) && !(cached&7);
++  n=strlen(ri_adsp_note);
++  snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n,
++      " header_valid=%u magic=%#x hosts=%#x uncached_free=%#x cached_free=%#x",
++      valid,pmagic,phosts,unc,cached);
++  if(!valid) continue;
++  unsigned cursor=32,records=0;
++  bool malformed=false;
++  while(cursor<unc && records<512) {
++   if(unc-cursor<16) {malformed=true;break;}
++   uint32_t pos=off+cursor,first=ri_rd(smem,pos),bytes=ri_rd(smem,pos+4),pads=ri_rd(smem,pos+8);
++   unsigned id=first>>16,pad_data=pads&0xffff,pad_header=pads>>16;
++   if((first&0xffff)!=0xa5a5 || !bytes || (bytes&7) || (pad_header&7) ||
++       pad_data>bytes || pad_header>unc-cursor-16 || bytes>unc-cursor-16-pad_header) {
++    malformed=true;break;
++   }
++   uint32_t data=pos+16+pad_header,actual=bytes-pad_data;
++   records++;
++   if(id==429||id==443||id==423||id==13||id==266) {
++    n=strlen(ri_adsp_note);
++    if(sizeof(ri_adsp_note)-n<256) {malformed=true;break;}
++    snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n,
++        "\npartition_item=%u offset=%#x bytes=%u",id,data,actual);
++    if((id==429||id==443) && actual>=20 && actual<=344) {
++     uint32_t smagic=ri_rd(smem,data),sver=ri_rd(smem,data+4),spids=ri_rd(smem,data+8);
++     uint32_t entries=ri_rd(smem,data+12),sflags=ri_rd(smem,data+16);
++     unsigned total=entries&0xffff,used=entries>>16;
++     bool header=smagic==0x504d5324 && (sver&255)==1 && total<=16 && used<=total &&
++         actual>=20+20*total && spids==(id==429?0x20000u:2u);
++     n=strlen(ri_adsp_note);
++     snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n,
++         " smp2p_valid=%u magic=%#x version=%#x pids=%#x entries=%#x flags=%#x",
++         header,smagic,sver,spids,entries,sflags);
++    }
++   }
++   cursor+=16+pad_header+bytes;
++  }
++  if(cursor!=unc)malformed=true;
++  bool stable=ri_rd(smem,off+12)==unc && ri_rd(smem,off+16)==cached;
++  n=strlen(ri_adsp_note);
++  if(sizeof(ri_adsp_note)-n<180)return;
++  snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n,
++      "\npartition_records=%u malformed=%u stable=%u cached_records_scanned=0",records,malformed,stable);
++  if(!malformed && stable)ri_adsp_partition_valid=true;
++ }
++ if(ri_adsp_partition_count!=1)ri_adsp_partition_valid=false;
++ n=strlen(ri_adsp_note);
++ if(sizeof(ri_adsp_note)-n>=128)
++  snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n,
++      "\nadsp_partitions=%u uncached_partition_valid=%u absence_in_global_is_not_absence_in_partition=1",
++      ri_adsp_partition_count,ri_adsp_partition_valid);
++}

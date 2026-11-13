@@ -5,6 +5,51 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Partitioned SMEM ownership correction (2026-11-12)
+
+- Vendor msm_smp2p.c looks up/allocates records with remotePID2 and flags0.
+  Vendor msm_smem.c selects an APPS↔ADSP partition if present; global TOC
+  absence is therefore insufficient to establish handshake absence. Earlier
+  global survey observations remain valid only for the checked table.
+- Patch0287 adds bounded read-only parsing of $TOC at SMEM+0xff000,
+  APPS0/ADSP2 partition entries (48bytes), $PRT32-byte header, and uncached
+  allocation headers (16bytes, canary0xa5a5). Validates version/count/range/
+  host IDs/cacheline/free offsets, checked arithmetic and stable free fields.
+  Reports selected records429/443/423/13/266 and validates SMP2P headers.
+  Cached records are explicitly unscanned; no claim of whole-heap absence.
+- No lock, allocation, RPM request, IPC, firmware load or start is performed
+  by this survey. Do not run metadata/staging/start based only on global
+  absence; inspect the partition result first and extend lifecycle ownership
+  guards before enabling DSP startup. No AUTH_AND_RESET exists yet.
+- Exact vendor hardware lock source found at drivers/hwspinlock/
+  msm_remote_spinlock.c: SFPB locks stride region-size/lock-count =0x1000,
+  S:3 register0x01908000. APPS owner token1. Refuse an already-APPS-owned
+  token; acquire by write1/barrier/read1 and release by owner-check/write0/
+  barrier. Allocation must hold this remote lock plus local serialization.
+  This protocol has not been exercised on hardware in our driver.
+- Host tests passed valid partitioned SMP2P429, wrong table bounds,
+  oversized record size, excessive partition count, and all existing ADSP
+  probe/metadata/staging/firmware/repacker tests. Build/hardware pending.
+
+## Startup survey: no existing ADSP handshake blocks (2026-11-12)
+
+- User confirmed responsive iOS after temporary boot c6652d8. Explicit --probe
+  exited0: PAS1 supported, init/mem/auth calls0/1, valid retained SMEM,
+  legacy ADSP/APR channels0, malformed0. RPM info18 allocated1 off0 len0x58
+  aux0x60000; FIFO342 allocated1 off0x800 len0x800 aux0x60000.
+  Outbound SMP2P429, inbound443 and ADSP SFR423 all unallocated0/off0/len0.
+  No record was dereferenced or changed outside the validated global heap.
+  Endpoint flags3, output159744/input0; PCM transport remains unimplemented.
+- Private live log work/adsp-startup/live-survey.txt. No firmware loading,
+  DSP start, RPM vote or channel handshake was performed on this boot.
+- New source fact: vendor msm_smem.c serializes global heap allocation with
+  remote spinlock S:3; simple free-pointer writes would bypass that protocol.
+  Board ipc-spinlock-sfpb region0x01905000+0x8000 with8locks. Need exact vendor
+  lock protocol/stride before allocating outbound429, then initialize
+  master-kernel and observe inbound slave-kernel readiness/fatal signals.
+  Matching upstream qcom_hwspinlock uses ownerAPPS1 but is a different DT
+  binding; do not infer exact vendor access from its name alone.
+
 ## ADSP startup layout survey prepared (2026-11-12)
 
 - Stock memory staging passed and iOS remains responsive. Startup is still
@@ -16,8 +61,9 @@
 - Legacy SMP2P IDs from pinned smem.h: APPS→ADSP429 (427+remotePID2),
   ADSP→APPS443 (audio-base443+APPS0), magic0x504d5324, version1,
   local/remote PID halves, at most16 entries of16-byte name+32-bit state.
-  Board IPC0x0b011008 bit10; readiness master-kernel bit1, fatal bit0,
-  proxy-unvote bit2, stop-ack bit3. No IPC write or handshake allocation yet.
+  Board IPC0x0b011008 bit10; inbound slave-kernel readiness bit1, fatal
+  bit0, proxy-unvote bit2, stop-ack bit3; outbound master-kernel controls
+  force-stop bit0. No IPC write or handshake allocation yet.
 - Patch0286 extends the existing read-only --probe with descriptor-only
   RPM info18/FIFO342 and SMP2P429/443 plus ADSP SFR423 presence. It follows
   only validated, stable, in-bounds global SMP2P records with matching PIDs,
@@ -28,6 +74,33 @@
   plus unchanged-SMEM assertion and all prior probe/metadata/staging cases.
   Next hardware snapshot will establish whether startup can reuse an existing
   block or needs an allocator/handshake. No AUTH_AND_RESET exists in0286.
+- Committed source c6652d83125d6c35bb8b33fd860dd5ce156132fc. Full worktree
+  checkout failed on a local Git blob mmap error; no source commit was lost.
+  Created a no-checkout worktree and restored only committed patches/build
+  script. Standard build now running from work/adsp-startup-build-minimal
+  into work/build/river-c6652d83125d-G5EODt. Network XNU clone later stalled;
+  interrupted it, reused local pristine commit1b191cb58250d0705d8a51287127505aa4bc0789
+  from the last successful build with git shared clone, and resumed identical
+  build.sh/options. Build-local-source.log completed successfully, no numbered
+  patches skipped. Kernel SHA256
+  5c4fdaf73752865544f0acfbe5679a2c87894414cebd807da80a8932ace0fc0a.
+- Packaged outputs/river-adsp-startup-survey-c6652d8.img:26679296bytes,
+  cmdline562, SHA256
+  d64e998dbc30cee9432503602b9507a04db2f3dee9331019faf46ca8d7c2fc9d.
+  Payload checks passed. Awaiting fastboot then responsive iOS. Run only
+  --probe on next boot to read startup layouts; no need to repeat firmware
+  staging before this read-only survey. Verified fastboot productriver and
+  temporary boot succeeded. Waiting for responsive home screen before the
+  read-only survey; no0286 hardware result yet.
+- Final documentation Git staging/metadata reads stalled again; interrupted
+  the commands. Source c6652d8 is committed; latest handoff/manifests are
+  saved on disk. Bundle refresh is incomplete and must be redone after
+  resolving local Git filesystem reads. Do not assume the bundle is current.
+- Later inspected macOS file flags: .git/HEAD, config and packed-refs are
+  compressed,dataless (offloaded). Preserved HEAD/config by rename to
+  *.offloaded-before-startup-survey; recreated current branch HEAD and core/
+  public origin config. packed-refs remains offloaded, so Git reads still
+  stall; left it intact to preserve other refs rather than guess contents.
 
 ## ADSP memory setup and full firmware staging passed (2026-11-12)
 

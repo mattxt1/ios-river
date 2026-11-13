@@ -19,6 +19,8 @@ with tempfile.TemporaryDirectory() as d:
     subprocess.run(['git','apply',str(r/'xnu/patches/0285-river-adsp-memory-stage.patch')],cwd=root,check=True)
     subprocess.run(['git','apply',str(r/'xnu/patches/0286-river-adsp-startup-layout.patch')],cwd=root,check=True)
     (root/'river_adsp_startup_survey.h').write_text((dev/'river_adsp_startup_survey.h').read_text())
+    subprocess.run(['git','apply',str(r/'xnu/patches/0287-river-adsp-partition-survey.patch')],cwd=root,check=True)
+    (root/'river_adsp_partition.h').write_text((dev/'river_adsp_partition.h').read_text())
     code=(dev/'river_adsp_probe.h').read_text()
     code='\n'.join(x for x in code.splitlines() if not x.startswith('#include <'))
     code=code.split('#include "river_adsp_metadata.h"',1)[0]

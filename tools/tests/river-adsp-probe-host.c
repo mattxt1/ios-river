@@ -41,6 +41,20 @@ static void reset(void) {
  word(0x5000,2);word(0x5000+44,1);
 }
 int main(void) {
+ reset();word(0xff000,0x434f5424);word(0xff004,1);word(0xff008,1);
+ word(0xff020,0x30000);word(0xff024,0x10000);word(0xff02c,0x20000);word(0xff030,32);
+ word(0x30000,0x54525024);word(0x30004,0x20000);word(0x30008,0x10000);
+ word(0x3000c,32+16+344);word(0x30010,0x10000);
+ word(0x30020,(429u<<16)|0xa5a5);word(0x30024,344);
+ word(0x30030,0x504d5324);word(0x30034,1);word(0x30038,0x20000);word(0x3003c,16);
+ assert(!ri_adsp_probe_impl());assert(ri_adsp_partition_valid);
+ assert(strstr(ri_adsp_note,"partition_item=429")&&strstr(ri_adsp_note,"smp2p_valid=1"));
+ word(0x30024,0xfffffff8);assert(!ri_adsp_probe_impl());assert(!ri_adsp_partition_valid);
+ assert(strstr(ri_adsp_note,"malformed=1"));
+ word(0xff020,0xff000);assert(!ri_adsp_probe_impl());assert(!ri_adsp_partition_valid);
+ assert(strstr(ri_adsp_note,"range_valid=0"));
+ reset();word(0xff000,0x434f5424);word(0xff004,1);word(0xff008,85);
+ assert(!ri_adsp_probe_impl());assert(!ri_adsp_partition_valid);
  reset();item(429,0x6800,344,0);word(0x6800,0x504d5324);word(0x6804,1);
  word(0x6808,2u<<16);word(0x680c,(1u<<16)|16);
  memcpy((char *)smem+0x6814,"master-kernel",14);word(0x6824,0);
