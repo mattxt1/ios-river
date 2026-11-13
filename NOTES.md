@@ -5,6 +5,28 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+##0294 temporary boot handed off; UI pending (2026-11-13)
+
+- User returned River to fastboot. Independently reverified packaged image
+  SHA2560a4e87042618ae6da77ba9e268f88494dfa110b827319450427f46b2d08ea79e
+  and26,697,728-byte size; fastboot productriver verified. Temporary boot
+  transfer and Booting both returnedOKAY. No partition flashed.
+- Async question now awaits confirmation that iOS home screen is responsive.
+  Host en6 has not reappeared yet; no SSH/control/volume experiment run.
+  This does not establish a boot failure or successful iOS startup.
+- Passive USB-only capture retries bind for at most180s, then listens at most
+ 300s if the link appears. NoSO_REUSEADDR; refuses another receiver. Private
+  target work/audit-device-validation/boot-4d238b8-usb.log; command session
+ 74391 was waiting at handoff. Check actual log/session state before reuse.
+- Handoff commit initially failed because .git/objects/pack was absent. Both
+  original packs were restored again from work/git-pack-hydration/resident-objects
+  after independently verifying SHA1 pack trailers, filenames and index hashes.
+  No commit/history reset or private file added. Fastboot devices check found0.
+- Next only after responsive UI: inspect boot exact-ID RPM ACKs and bounded
+  Wi-Fi GET/SET traces, then controlled volume register verification. Approved
+  SSH key and agent-independent options remain in previous handoff. Record
+  any failed startup or missing USB evidence before assuming a code regression.
+
 ## Combined0294 image built and packaged (2026-11-13)
 
 - Full4d238b8db81667199ddaea8d0cb57d3ae5b37b72 build passed in
