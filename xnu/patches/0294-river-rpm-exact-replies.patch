@@ -1,0 +1,131 @@
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -1802,6 +1802,8 @@
+  printf("RIVER TX: scan probes submitted=%u DMA-complete=%u probe-responses=%llu addressed-to-us=%llu\n",
+      river_tx_submitted, river_tx_completed, river_rx_probe_responses, river_rx_probe_ours);
+ }
++
++#include "river_rpm_reply.h"
+ 
+ static void
+ river_wcnss_probe(void)
+@@ -2224,42 +2226,29 @@
+      ri_wr(ipc_reg, 0, 1);
+      printf("RIVER WCNSS: sent RPM request for %s (msg_id %u, %u uV) new head %#x\n",
+          targets[t].name, cur_msg_id, targets[t].uV, head);
+-     bool acked = false;
+-     for (unsigned wait_ms = 0; wait_ms < 500; wait_ms++) {
+-      uint32_t rx_h = ri_rd(auxmem, 44 + 40);
+-      uint32_t rx_t = ri_rd(auxmem, 44 + 36);
+-      if (rx_h != rx_t) {
+-       uint32_t avail = (rx_h - rx_t) & 1023;
+-       uint32_t resp_smd_len = ri_rd(rx_fifo, rx_t & 1023);
+-       uint32_t resp_srv = ri_rd(rx_fifo, (rx_t + 20) & 1023);
+-       uint32_t resp_type = ri_rd(rx_fifo, (rx_t + 28) & 1023);
+-       uint32_t resp_msg_id = ri_rd(rx_fifo, (rx_t + 36) & 1023);
+-       printf("RIVER WCNSS: RPM ACK for %s: avail %u (rx_h %#x rx_t %#x) smd_len %u srv %#x type %#x msg_id %u\n",
+-           targets[t].name, avail, rx_h, rx_t, resp_smd_len, resp_srv, resp_type, resp_msg_id);
+-       printf("RIVER WCNSS: RPM FIFO words: %#x %#x %#x %#x %#x %#x %#x %#x\n",
+-           ri_rd(rx_fifo, (rx_t + 0) & 1023), ri_rd(rx_fifo, (rx_t + 4) & 1023),
+-           ri_rd(rx_fifo, (rx_t + 8) & 1023), ri_rd(rx_fifo, (rx_t + 12) & 1023),
+-           ri_rd(rx_fifo, (rx_t + 16) & 1023), ri_rd(rx_fifo, (rx_t + 20) & 1023),
+-           ri_rd(rx_fifo, (rx_t + 24) & 1023), ri_rd(rx_fifo, (rx_t + 28) & 1023));
+-       unsigned advance = avail;
+-       if (resp_smd_len <= 128) {
+-        unsigned pkt_tot = 20 + ((resp_smd_len + 3) & ~3);
+-        if (pkt_tot <= avail) advance = pkt_tot;
+-       }
+-       rx_t = (rx_t + advance) & 1023;
+-       ri_wr(auxmem, 44 + 36, rx_t);
+-       ri_wr(auxmem, 44 + 24, 1);
+-       __asm__ volatile("dmb sy" ::: "memory");
+-       ri_wr(ipc_reg, 0, 1);
+-       acked = true;
++     bool acked=false, rejected=false;
++     unsigned stale=0;
++     for(unsigned wait_ms=0;wait_ms<500;wait_ms++) {
++      uint32_t response_id=0;
++      int reply=ri_rpm_take_reply(auxmem,rx_fifo,ipc_reg,cur_msg_id,&response_id);
++      if(reply==RI_RPM_REPLY_ACK) {
++       printf("RIVER WCNSS: RPM ACK for %s: exact msg_id %u\n",targets[t].name,cur_msg_id);
++       acked=true;
+        break;
+       }
++      if(reply<0) {
++       printf("RIVER WCNSS: RPM response rejected for %s: expected %u received %u status %d\n",
++           targets[t].name,cur_msg_id,response_id,reply);
++       rejected=true;
++       break;
++      }
++      if(reply==RI_RPM_REPLY_STALE && stale++<4)
++       printf("RIVER WCNSS: ignored stale RPM reply %u while awaiting %u\n",response_id,cur_msg_id);
+       delay(1000);
+      }
+-     if (!acked) {
+-      printf("RIVER WCNSS: RPM request for %s timed out waiting for ACK (rx_h %#x rx_t %#x)\n",
+-          targets[t].name, ri_rd(auxmem, 44 + 40), ri_rd(auxmem, 44 + 36));
+-     }
++     if(!acked && !rejected)
++      printf("RIVER WCNSS: RPM request for %s timed out awaiting exact msg_id %u\n",
++          targets[t].name,cur_msg_id);
+     }
+     delay(50000);
+     if (core) {
+diff --git a/bsd/dev/river_rpm_reply.h b/bsd/dev/river_rpm_reply.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/river_rpm_reply.h
+@@ -0,0 +1,52 @@
++/* RPM V0 replies on the observed1024-byte SMD packet FIFO. Read-side only:
++ * callers must own/serialize the channel before using this for another client.
++ * An ACK belongs only to its exact nonzero request ID. */
++enum {
++ RI_RPM_REPLY_BAD=-2, RI_RPM_REPLY_NACK=-1, RI_RPM_REPLY_WAIT=0,
++ RI_RPM_REPLY_ACK=1, RI_RPM_REPLY_STALE=2
++};
++static int
++ri_rpm_v0_reply(const uint32_t *payload, unsigned bytes,
++    uint32_t wanted, uint32_t *reply_id)
++{
++ if(!payload || !reply_id || !wanted || bytes<20 || bytes>128) return RI_RPM_REPLY_BAD;
++ if(payload[0]!=0x00716572u || payload[1]!=bytes-8 ||
++    payload[2]!=0x2367736du || payload[3]!=4 || !payload[4]) return RI_RPM_REPLY_BAD;
++ *reply_id=payload[4];
++ int result=RI_RPM_REPLY_ACK;
++ if(bytes!=20) {
++  /* A V0 error follows msg#: err, byte-length, error text. Unknown or
++   * inconsistent trailing data must never be accepted as success. */
++  if(bytes<28 || payload[5]!=0x00727265u || payload[6]!=bytes-28) return RI_RPM_REPLY_BAD;
++  result=RI_RPM_REPLY_NACK;
++ }
++ return *reply_id==wanted?result:RI_RPM_REPLY_STALE;
++}
++static int
++ri_rpm_take_reply(vm_offset_t auxmem, vm_offset_t fifo, vm_offset_t ipc,
++    uint32_t wanted, uint32_t *reply_id)
++{
++ if(!reply_id || !wanted) return RI_RPM_REPLY_BAD;
++ *reply_id=0;
++ if(ri_rd(auxmem,0)!=2 || ri_rd(auxmem,44)!=2) return RI_RPM_REPLY_BAD;
++ uint32_t head=ri_rd(auxmem,84), tail=ri_rd(auxmem,80);
++ if(head>=1024 || tail>=1024 || ((head|tail)&3)) return RI_RPM_REPLY_BAD;
++ unsigned available=(head-tail)&1023;
++ if(available<20) return RI_RPM_REPLY_WAIT;
++ __asm__ volatile("dmb sy" ::: "memory");
++ uint32_t bytes=ri_rd(fifo,tail);
++ if(bytes<20 || bytes>128) return RI_RPM_REPLY_BAD;
++ unsigned total=20+((bytes+3)&~3u);
++ if(available<total) return RI_RPM_REPLY_WAIT;
++ uint32_t payload[32]={0};
++ for(unsigned offset=0;offset<bytes;offset+=4)
++  payload[offset/4]=ri_rd(fifo,(tail+20+offset)&1023);
++ int result=ri_rpm_v0_reply(payload,bytes,wanted,reply_id);
++ if(result==RI_RPM_REPLY_BAD) return result; /* Leave malformed packet alone. */
++ __asm__ volatile("dmb sy" ::: "memory");
++ ri_wr(auxmem,80,(tail+total)&1023);
++ ri_wr(auxmem,68,1);
++ __asm__ volatile("dmb sy" ::: "memory");
++ ri_wr(ipc,0,1);
++ return result;
++}

@@ -5,6 +5,32 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Diagnostics/volume build passed; exact RPM replies prepared (2026-11-13)
+
+- Full a6de705dbbac2e77ce7d73faa99db20c6325f63e build through0293 passed
+  in work/build/river-a6de705dbbac-YBHeoO. Kernel SHA256
+  aa9b852e68e0d6fa3b77fae5a1c3f640ae00b64ce3edf8812fcf8bb74dba3302.
+  No numbered project patch skipped. Not packaged/booted: final test image
+  will additionally include0294, so only one physical reboot is requested.
+-0294 replaces existing boot RPM any-packet-is-ACK logic with bounded V0
+  reply validation. Captured236a880 boot log proves duplicateID1 was accepted
+  for both L19/request1 and L9/request2. New read-side helper validates exact
+  ID/service/length/key, distinguishes ACK/stale/NACK/partial/malformed,
+  bounds128-byte payloads and1024-byte FIFO indices, handles wrap, consumes
+  only complete valid frames with barriers and bounded RX-tail/flag/IPC writes.
+  Malformed records remain unconsumed; no error text or raw FIFO dump logged.
+- Actual helper ASan/UBSan tests passed duplicate/stale ACKs, matched/stale
+  NACKs, incomplete frames, wrap, invalid framing/state/index and exact write
+  footprint.0292/0293/0294 apply sequentially to236a880 source without errors.
+- This changes only response handling for the existing boot owner; it does
+  not send ADSP votes/start the DSP or add PCM. Future shared transport needs
+  channel lock/serialization, TX capacity/ownership and global unique IDs;
+  CX/XO vote ownership still needs explicit policy. WCNSS startup is still
+  allowed to proceed after a failed vote;0294 does not redesign that policy.
+- Next: commit/build combined0294 source, package/verify one temporary image,
+  then boot for Wi-Fi GET preflight, exact RPM ACK and speaker-level register
+  validation after responsive iOS. Physical audio I/O remains the objective.
+
 ## Live audit checks and next audio correction (2026-11-13)
 
 - User confirmed responsive home screen on236a880. SSH agent no longer had

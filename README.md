@@ -199,3 +199,9 @@ completion diagnostics to investigate preflight; it makes no speculative
 ABI or error-mapping change. Patch0293 corrects signed amplifier attenuation
 and verifies the level before unmuting. Both pass host checks and await a
 full build/device run. Physical audio playback/capture remain unimplemented.
+
+The follow-up0292/0293 full kernel build passed. Patch0294 additionally fixes
+RPM response matching after logs demonstrated a duplicate ACK acknowledged
+the wrong request. Its actual receiver passes sanitizer-backed host tests;
+combined full build and device verification are next. This supports future
+ADSP startup but does not yet implement power-vote ownership or PCM transport.

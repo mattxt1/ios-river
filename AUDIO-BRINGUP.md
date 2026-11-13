@@ -22,8 +22,33 @@ uses signed PCM volume at shift3 with mute raw0x4cf. Host tests extract the
 actual baseline and patched helper: baseline wrong-encoding and failed-write
 unmute reproduce; corrected signed levels, preserved fields, range clamp,
 explicit mute, unavailable speaker and injected read/write/readback failures
-pass. No new speaker-output or PCM test has run. Wi-Fi regressions also pass
-with0292/0293 together. Full build and device register verification pending.
+pass. No new speaker-output or PCM test has run. Wi-Fi regressions and the
+full a6de705 kernel build pass with0292/0293 together. Device register
+verification is pending; final image will also include the RPM reply fix below.
+
+## RPM reply prerequisite (2026-11-13)
+
+Patch0294 corrects the boot RPM reply receiver. Live236a880 USB logs showed
+ACK1 consumed for both L19 request1 and L9 request2. The old code accepted
+any received packet as success. The new receiver requires the exact current
+nonzero message ID, V0 service, declared payload length and msg# key/length.
+It consumes valid stale replies without accepting them, identifies matched
+NACKs, waits for complete frames, handles FIFO wrap and rejects malformed
+lengths/indices/states without advancing the RX tail. Error payload text is
+never logged. Polling remains bounded; stale logs are capped.
+
+Actual receiver host tests pass under AddressSanitizer/UndefinedBehaviorSanitizer
+for duplicateACK1→request2, matched/stale NACKs, partial/wrapped/malformed
+frames, invalid states/indices and restricted RX-tail/flag/IPC writes.
+Primary V0 layout: [matching Motorola RPM driver](https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/2dba45b8e247958d5a1b15b33c6064c15af4983e/drivers/soc/qcom/rpm-smd.c).
+Sequential0292→0293→0294 application to the exact236a880 source passed.
+
+This is a reply receiver for the existing boot-only channel owner. It adds
+no ADSP vote, IPC-to-ADSP, DSP startup or PCM path. Before another client uses
+it, shared-channel serialization, TX capacity/ownership, unique request IDs
+and an explicit CX/XO vote policy remain required. It does not make WCNSS
+startup contingent on ACK success; that existing startup policy is separate.
+Full0294 kernel build and hardware ACK validation are pending.
 
 ## Verified progress and remaining work (2026-11-13)
 
