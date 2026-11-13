@@ -1,0 +1,23 @@
+diff --git a/bsd/dev/river_adsp_probe.h b/bsd/dev/river_adsp_probe.h
+--- a/bsd/dev/river_adsp_probe.h
++++ b/bsd/dev/river_adsp_probe.h
+@@ -1,5 +1,4 @@
+-#include <corecrypto/ccdigest.h>
+-#include <corecrypto/ccsha2.h>
++#include <libkern/crypto/sha2.h>
+ #include <kern/kalloc.h>
+ /* Explicit read-only ADSP prerequisites. No LPASS, reset, firmware-memory,
+  * regulator, clock, SMEM state or channel writes. Uses retained SMEM map. */
+diff --git a/bsd/dev/river_adsp_metadata.h b/bsd/dev/river_adsp_metadata.h
+--- a/bsd/dev/river_adsp_metadata.h
++++ b/bsd/dev/river_adsp_metadata.h
+@@ -13,7 +13,8 @@
+  if(ri_adsp_metadata_attempted) return EALREADY;
+  if(length!=7516 || !metadata) return EINVAL;
+  uint8_t digest[32];
+- ccdigest(ccsha256_di(),length,metadata,digest);
++ SHA256_CTX context;
++ SHA256_Init(&context);SHA256_Update(&context,metadata,length);SHA256_Final(digest,&context);
+  if(memcmp(digest,ri_adsp_expected_sha256,sizeof(digest))) {
+   strlcpy(ri_adsp_note,"phase=metadata_digest error=invalid_stock_metadata firmware_start_requested=0 pcm_transport=0",sizeof(ri_adsp_note));
+   return EINVAL;

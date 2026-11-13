@@ -10,7 +10,12 @@ Hexagon metadata and exact River carveout bounds; this is not secure signature
 authentication. Patch0282 adds an explicit read-only PAS1/retained-SMEM survey
 (`river-adsp-status --probe`); the passive command reads its last result.
 No ADSP firmware has been started, no physical PCM path is advertised, and
-its hardware probe result is pending. Next is source-derived secure startup,
+the hardware probe passed: PAS1 supported, init/mem/auth calls available,
+valid retained SMEM, and no ADSP/APR channels in the checked legacy tables.
+Those empty tables do not establish DSP power state. Patch0283 prepares an
+exact-stock-MDT, one-shot INIT_IMAGE-only test with kernel-RAM/digest/crypto
+guards; no executable load, DSP reset/start or power/clock vote. Its result is
+pending. Subsequent work is source-derived secure startup,
 SMP2P readiness, APR/QMI and Q6AFE/Q6ASM/SLIMbus buffer transport.
 
 **Latest live result, 2026-11-12:** the muted codec-to-amplifier I2S clock test

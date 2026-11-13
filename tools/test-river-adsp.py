@@ -14,8 +14,8 @@ with tempfile.TemporaryDirectory() as d:
     code='\n'.join(x[1:] for x in patch.splitlines() if x.startswith('+') and not x.startswith('+++'))
     dev=root/'bsd/dev';dev.mkdir(parents=True)
     (dev/'river_adsp_probe.h').write_text(code+'\n')
-    subprocess.run(['git','apply','--include=bsd/dev/river_adsp_probe.h',
-                    str(r/'xnu/patches/0283-river-adsp-metadata-auth.patch')],cwd=root,check=True)
+    subprocess.run(['git','apply',str(r/'xnu/patches/0283-river-adsp-metadata-auth.patch')],cwd=root,check=True)
+    subprocess.run(['git','apply',str(r/'xnu/patches/0284-river-adsp-builtin-sha256.patch')],cwd=root,check=True)
     code=(dev/'river_adsp_probe.h').read_text()
     code='\n'.join(x for x in code.splitlines() if not x.startswith('#include <'))
     code=code.split('#include "river_adsp_metadata.h"',1)[0]
@@ -23,8 +23,7 @@ with tempfile.TemporaryDirectory() as d:
     binary=root/'probe'
     subprocess.run(['cc','-O2','-Wall','-Wextra','-Werror','-Wno-unused-function','-I',d,str(r/'tools/tests/river-adsp-probe-host.c'),'-o',str(binary)],check=True)
     subprocess.run([str(binary)],check=True)
-    patch=(r/'xnu/patches/0283-river-adsp-metadata-auth.patch').read_text().split('diff --git a/bsd/dev/river_adsp_metadata.h',1)[1]
-    metadata='\n'.join(x[1:] for x in patch.splitlines() if x.startswith('+') and not x.startswith('+++'))
+    metadata=(dev/'river_adsp_metadata.h').read_text()
     metadata=metadata.split('static int\nriver_adsp_metadata_sysctl',1)[0]
     # The private stock MDT is deliberately absent from the source tree.
     # Substitute only its expected digest with a reproducible fixture digest.

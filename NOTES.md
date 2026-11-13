@@ -22,7 +22,7 @@
   No ADSP executable carveout writes, MEM_SETUP, AUTH_AND_RESET, LPASS MMIO,
   clock/power votes or PCM. ADSP CX/XO proxy startup still remains future work.
 - SYSCTL input is length-bounded, copied to temporary kernel heap and checked
-  with corecrypto SHA256. Only then allocates a contiguous zeroed metadata
+  with the kernel SHA256 API. Only then allocates a contiguous zeroed metadata
   page within normal XNU-owned RAM0x18000000..0x81800000, copies and cleans it.
   Keeps that page permanently after the first secure attempt, including SCM
   errors; further attempts fail before touching it. Unknown or active channel
@@ -34,7 +34,16 @@
   channels, failed allocation, forbidden physical memory, cache-clean order,
   only INIT_IMAGE allowed, and retained one-shot state on secure error.
   Probe, firmware validation and repacker tests also passed. Helper compiled
-  iOS arm64 with warnings-as-errors and ad-hoc signed. Build/boot pending.
+  iOS arm64 with warnings-as-errors and ad-hoc signed.
+- Staged MDT at /private/var/tmp/river-adsp-3aae7a57.mdt, mode0600, 7516bytes.
+  Read it back using rget; exact size and full SHA256 matched whitelist.
+  No secure loading was invoked. Recheck availability on next boot.
+- Committed source4f0aab4bea145c70d64938fb096a6d1ad83a15d3; local build
+  failed at final link: missing `_ccdigest`. This port intentionally supplies
+  built-in SHA256_Init/Update/Final (patch0023), not one-shot ccdigest.
+  Patch0284 switches to that existing code-signing SHA256 API. Host checks
+  rerun against the full0282→0283→0284 patch chain. No metadata secure call
+  or new image boot occurred; rebuilding corrected committed source next.
 
 ## Physical PCM transport: stock ADSP firmware recovered (2026-11-12)
 

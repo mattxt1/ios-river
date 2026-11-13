@@ -29,10 +29,12 @@ static uint8_t page[PAGE_SIZE] __attribute__((aligned(PAGE_SIZE)));
 static bool gpu_ready,alloc_fail;
 static uint32_t physical;
 static bool river_gpu_pas_ready(void) {return gpu_ready;}
-static void *ccsha256_di(void) {return NULL;}
-static void ccdigest(void *di,size_t len,const void *data,void *out) {
- (void)di;assert(len==7516);CC_SHA256(data,(CC_LONG)len,out);
+typedef CC_SHA256_CTX SHA256_CTX;
+static void SHA256_Init(SHA256_CTX *ctx) {assert(CC_SHA256_Init(ctx));}
+static void SHA256_Update(SHA256_CTX *ctx,const void *data,size_t length) {
+ assert(length==7516);assert(CC_SHA256_Update(ctx,data,(CC_LONG)length));
 }
+static void SHA256_Final(void *out,SHA256_CTX *ctx) {assert(CC_SHA256_Final(out,ctx));}
 static int kmem_alloc_contig(void *map,vm_offset_t *out,size_t size,unsigned mask,unsigned a,unsigned b,unsigned flags,unsigned tag) {
  assert(map==kernel_map&&size==PAGE_SIZE&&mask==PAGE_MASK&&!a&&!b&&flags==7&&tag==1);
  allocations++;if(alloc_fail)return 1;memset(page,0,sizeof(page));*out=(uintptr_t)page;return 0;
