@@ -59,10 +59,36 @@ A timeout after sending means the remote outcome is unknown.
 Actual-code sanitizer tests pass for exact packet bytes, one/two/three KVPs,
 wrap, full/exact-capacity rings, delayed drain/replies, stale/NACK/timeout,
 invalid layouts/states/indices, ID exhaustion and the audio readiness gate.
-Full kernel build and device validation of0298 are pending. It issues the
+The full678e917 kernel build passed. Its temporary image packaged with all
+kernel segments verified (26,697,728 bytes,577 command-line bytes,1MiB
+retained log); device validation of0298 is pending. It issues the
 same existing L19/L9 votes and adds no ADSP votes or DSP startup. WCNSS startup
 still follows its existing policy even when boot votes fail. CX/XO shared
 ownership policy and authenticated startup remain the next audio work.
+
+## Power policy for the next startup change
+
+The stock MSM8953 ADSP node uses PAS1, an80MHz crypto source, XO and CX at
+TURBO level384 with100000uA proxy load. CX is RPM `smpa` resource2; this is a
+voltage-level request, not384 microvolts. XO is the shared `clk0` resource0
+branch, `Enab=1`, shared by LPASS, USB and WLAN voters. The stock clock driver
+aggregates active/sleep peers and assumes clocks enabled at handoff; it does
+not recover the inherited APPS vote from an RPM readback.
+
+The stock regulator exposes separate `vlvl` and `vfl` (floor-level) keys and
+an S2 floor regulator, each constrained through TURBO. A persistent TURBO
+floor is a possible bring-up policy that avoids replacing an unknown normal
+`vlvl` request. This is a design candidate, not a tested hardware policy.
+Before enabling it, confirm firmware semantics and all required enable/load
+fields; do not assume the floor alone starts the rail. Likewise, enabling XO
+must retain active/sleep requirements for existing USB/WLAN users. Do not
+unvote either shared resource to zero as cleanup without known ownership.
+Any retained floor must be explicitly reported as a power/suspend limitation,
+not described as restored state. No CX/XO vote was added by0298.
+
+Source evidence is in the pinned Motorola kernel's `msm8953.dtsi`,
+`msm8953-regulator.dtsi`, `pm8953-rpm-regulator.dtsi`, `rpm-smd-regulator.c`,
+`clock-gcc-8953.c` and `clock-rpm.c` (revision2dba45b8e247958d5a1b15b33c6064c15af4983e).
 
 ## Verified progress and remaining work (2026-11-13)
 

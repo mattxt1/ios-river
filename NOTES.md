@@ -25,10 +25,26 @@ future audio requests until both existing boot votes receive exact ACKs.
 Actual-code ASan/UBSan transport and prior reply tests pass. The host model
 covers packets, wrap, full/exact-capacity, delayed TX drain/ACK, stale/NACK,
 timeout, invalid input and readiness/ownership assertions. No ADSP vote/start,
-physical PCM or microphone input has been implemented. Full build and device
-validation pending; commit0298 before invoking the build. Current phone image
-remains outputs/river-wifi-scan-c3d9af8.img. Next: full build/package0298, then
-validate exact boot ACKs before implementing shared CX/XO power policy/startup.
+physical PCM or microphone input has been implemented.
+
+Source678e917b86ebf8f5ace0979e4d6e2ffd92468bab is committed through0298.
+Full build work/build/river-678e917b86eb-HFwxjB passed with no numbered
+patches skipped. Kernel SHA256:
+`a7d1ba38c5134f65d5f3f81e043c43e27374c5e149fcb9d723aacf6637d140fa`.
+Verified temporary image: `outputs/river-audio-rpm-678e917.img`,26,697,728
+bytes,577 command-line bytes,1MiB retained log. Image SHA256:
+`f0c575df91aafdd11503f5eaae343da4f4363643c561674418e519997c8c738c`.
+Manifest: `outputs/audio-rpm-build-manifest.json`. All kernel segments verified;
+base c3d9af8 image and helper hashes matched. No flash/device boot yet.
+The phone remains on the responsive c3d9af8 image. Next physical step is
+fastboot for temporary boot of678e917, followed by home-screen confirmation,
+retained-log checks for IDs0x52490001/2, exact ACK result1 for both requests
+and shared transport ready1/mask3. Decimal IDs are1380515841/1380515842.
+Do not interpret a build/package pass as device validation or physical audio.
+Then implement shared CX/XO power policy and authenticated ADSP startup.
+The power-policy source review is in AUDIO-BRINGUP.md; candidate floor policy
+has not been implemented or tested. No extra Wi-Fi join is needed for this
+transport prerequisite test.
 
 ## Current handoff: scan fix booted, UI confirmation pending (2026-11-13)
 
