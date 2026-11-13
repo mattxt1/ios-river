@@ -32,6 +32,9 @@ static void kev_post_msg(const struct kev_msg *msg) {assert(msg->event_code);eve
 #define KERNEL 1
 #include "river-wifi-abi.h"
 void river_pbkdf2_pmk(const char *pass,const char *ssid,size_t len,uint8_t pmk[32]) {(void)pass;(void)ssid;(void)len;memset(pmk,7,32);}
+static uint64_t host_now_ms=1000;
+static void clock_get_uptime(uint64_t *ticks){*ticks=host_now_ms*1000000;}
+static void absolutetime_to_nanoseconds(uint64_t ticks,uint64_t *ns){*ns=ticks;}
 #include "river-wifi-engine.h"
 #ifdef HOST_RESULT_ABI
 #define HOST_JOIN_SUCCESS 1
@@ -84,6 +87,21 @@ static void river_wpa_run(vm_offset_t smem,uint32_t info,uint32_t fifo,vm_offset
  if(inject_new_join){inject_new_join=false;queue_join("two",NULL);}
  if(river_wpa.associated&&wpa_success){river_wpa.stage=2;river_wpa.keys_installed=true;}
 }
+#ifdef HOST_FRESH_SCAN
+static unsigned probe_len,directed_scans;
+static uint8_t probe_frame[68];
+static bool discover_named,scan_cancel,scan_new_join;
+static bool river_mgmt_tx(const uint8_t *frame,unsigned n,bool wait) {
+ assert(wait&&n<=sizeof(probe_frame));probe_len=n;memcpy(probe_frame,frame,n);return true;
+}
+#include "river-wifi-probe.h"
+static void river_passive_scan(vm_offset_t smem,uint32_t info,uint32_t fifo,vm_offset_t ipc,const struct river_apple80211_join_req *req) {
+ assert(smem&&info&&fifo&&ipc&&req);directed_scans++;river_apple80211_scan_begin(req);
+ if(scan_cancel){scan_cancel=false;struct apple80211req stop={.req_type=22};assert(!set(&stop));}
+ if(scan_new_join){scan_new_join=false;queue_join("two",NULL);}
+ if(discover_named){uint8_t bssid[6]={2,9,9,9,9,9};river_apple80211_add_bss(bssid,req->ssid,req->ssid_len,2462,-40,100,0,NULL,0);}
+}
+#endif
 #include "river-wifi-rx.h"
 #ifdef HOST_LINK_EVENTS
 /* kern_event_msg deliberately has a trailing word: payload must begin at
@@ -131,6 +149,9 @@ static void queue_join(const char *ssid,const uint8_t *bssid) {
  struct apple80211req request={.req_type=20,.req_len=sizeof(asked),.req_data=(uintptr_t)&asked};assert(!set(&request));
 }
 static void setup(void) {
+#ifdef HOST_FRESH_SCAN
+ scan_running=false;scan_result_count=scan_ssid_len=0;memset(scan_bssid,0,6);host_now_ms=1000;directed_scans=0;discover_named=scan_cancel=scan_new_join=false;
+#endif
  river_bss_count=scan_result_idx=0;scan_pending_flag=join_pending_flag=stop_pending_flag=false;
  join_result=0;join_generation=0;river_power_state=1;active_phase=PHASE_IDLE;events=0;
  memset(&pending_join,0,sizeof(pending_join));memset(&active_bss,0,sizeof(active_bss));
@@ -149,7 +170,95 @@ static void deauth(void) {
  uint8_t frame[26]={0xc0};memcpy(frame+4,river_test_mac,6);memcpy(frame+10,river_target.bssid,6);frame[24]=4;
  in_rx=true;river_target_rx(frame,sizeof(frame),24,0xc0);in_rx=false;
 }
+#ifdef HOST_FRESH_SCAN
+static void fresh_scan_tests(void) {
+ setup();river_apple80211_scan_begin(NULL);
+ for(unsigned i=0;i<100;i++) {
+  uint8_t b[6]={2,3,0,0,0,(uint8_t)i};
+  river_apple80211_add_bss(b,(const uint8_t*)"busy",4,2412,-90,100,0,NULL,0);
+ }
+ assert(river_bss_count==RIVER_MAX_BSS);
+ uint8_t late[6]={2,4,4,4,4,4};
+ river_apple80211_add_bss(late,(const uint8_t*)"late",4,2462,-30,100,0,NULL,0);
+ struct river_apple80211_join_req wanted={.ssid_len=4};memcpy(wanted.ssid,"late",4);
+ struct river_apple80211_target_info info;assert(river_apple80211_find_target(&wanted,&info)&&info.channel==11);
+ river_apple80211_scan_done(0);assert(scan_result_count==RIVER_MAX_BSS);
+ struct apple80211_scan_result result={0};struct apple80211req get_scan={.req_type=11,.req_len=sizeof(result),.req_data=(uintptr_t)&result};
+ uint8_t first[6];memcpy(first,scan_results[0].bssid,6);
+ river_apple80211_scan_begin(&wanted); /* next scan leaves old enumeration intact */
+ river_apple80211_add_bss(late,(const uint8_t*)"late",4,2462,-95,100,0,NULL,0);
+ assert(!get(&get_scan)&&!memcmp(result.bssid,first,6));
+ for(unsigned i=0;i<100;i++) {
+  uint8_t b[6]={2,5,0,0,0,(uint8_t)i};
+  river_apple80211_add_bss(b,(const uint8_t*)"busy",4,2412,-20,100,0,NULL,0);
+ }
+ assert(river_apple80211_find_target(&wanted,&info)&&!memcmp(info.bssid,late,6));
+ river_apple80211_scan_done(0);assert(scan_result_idx==0&&scan_result_count==RIVER_MAX_BSS);
+ /* A physical scan drops entries no longer observed; aging rejects old joins. */
+ river_apple80211_scan_begin(NULL);river_apple80211_scan_done(0);
+ assert(!river_bss_count&&!scan_result_count&&!river_apple80211_find_target(&wanted,&info));
+ river_apple80211_add_bss(late,(const uint8_t*)"late",4,2462,-30,100,0,NULL,0);
+ host_now_ms+=RIVER_BSS_MAX_AGE_MS+1;
+ assert(!river_apple80211_find_target(&wanted,&info));river_apple80211_scan_done(0);assert(!scan_result_count);
+ /* Stale entries have priority over fresh weak victims. */
+ setup();river_apple80211_scan_begin(NULL);
+ for(unsigned i=0;i<RIVER_MAX_BSS;i++) {
+  uint8_t b[6]={2,6,0,0,0,(uint8_t)i};
+  river_apple80211_add_bss(b,(const uint8_t*)"busy",4,2412,i?-80:-20,100,0,NULL,0);
+ }
+ host_now_ms+=RIVER_BSS_MAX_AGE_MS+1;
+ for(unsigned i=1;i<RIVER_MAX_BSS;i++)river_bss_table[i].seen_ms=host_now_ms;
+ river_apple80211_add_bss(late,(const uint8_t*)"late",4,2462,-95,100,0,NULL,0);
+ assert(river_apple80211_find_target(&wanted,&info));
+ /* Hidden beacons preserve a known name only for the same BSSID; malformed
+  * IEs must not mutate that name or its last-seen timestamp. */
+ setup();river_apple80211_scan_begin(NULL);
+ river_apple80211_add_bss(late,(const uint8_t*)"late",4,2462,-30,100,0,NULL,0);
+ river_apple80211_scan_done(0);river_apple80211_scan_begin(NULL);
+ river_apple80211_add_bss(late,NULL,0,2462,-31,100,0,NULL,0);
+ assert(river_apple80211_find_target(&wanted,&info));
+ uint8_t malformed[]={0,8,'x'};uint64_t seen=river_bss_table[0].seen_ms;host_now_ms++;
+ river_apple80211_add_bss(late,(const uint8_t*)"x",1,2462,-10,100,0,malformed,sizeof(malformed));
+ assert(river_bss_table[0].seen_ms==seen&&river_apple80211_find_target(&wanted,&info));
+ uint8_t zero_name[8]={0};river_apple80211_add_bss(late,zero_name,8,2462,-31,100,0,NULL,0);
+ assert(river_apple80211_find_target(&wanted,&info));
+ uint8_t other[6]={2,7,7,7,7,7};river_apple80211_add_bss(other,NULL,0,2412,-10,100,0,NULL,0);
+ assert(river_apple80211_find_target(&wanted,&info)&&!memcmp(info.bssid,late,6));
+ memcpy(wanted.bssid,other,6);assert(!river_apple80211_find_target(&wanted,&info));memset(wanted.bssid,0,6);
+ /* Same named APs select strongest; explicit BSSID remains exact. */
+ river_apple80211_add_bss(other,(const uint8_t*)"late",4,2412,-10,100,0,NULL,0);
+ assert(river_apple80211_find_target(&wanted,&info)&&!memcmp(info.bssid,other,6));
+ memcpy(wanted.bssid,late,6);assert(river_apple80211_find_target(&wanted,&info)&&!memcmp(info.bssid,late,6));
+ /* Exact probe bytes and bounds: wildcard remains the original 36 bytes. */
+ assert(river_probe_tx(NULL)&&probe_len==36&&probe_frame[24]==0&&probe_frame[25]==0&&probe_frame[26]==1);
+ assert(river_probe_tx(&wanted)&&probe_len==40&&probe_frame[25]==4&&!memcmp(probe_frame+26,"late",4)&&probe_frame[30]==1);
+ wanted.ssid_len=32;memset(wanted.ssid,'x',32);assert(river_probe_tx(&wanted)&&probe_len==68);
+ wanted.ssid_len=33;assert(!river_probe_tx(&wanted));
+ /* A queued scan arriving during physical scan survives the completion. */
+ setup();river_apple80211_scan_begin(NULL);
+ struct river_apple80211_scan_name scan={.version=1,.ssid_length=4};memcpy(scan.ssid,"late",4);
+ struct apple80211req scan_req={.req_type=10,.req_len=sizeof(scan),.req_data=(uintptr_t)&scan};
+ assert(!set(&scan_req));river_apple80211_scan_done(0);assert(scan_pending_flag);
+ struct river_apple80211_join_req name;assert(river_apple80211_scan_name(&name)&&name.ssid_len==4);
+ scan_req.req_len--;assert(set(&scan_req)==EINVAL);scan_req.req_len=sizeof(scan);
+ scan.version=2;assert(set(&scan_req)==EINVAL);scan.version=1;scan.ssid_length=33;assert(set(&scan_req)==EINVAL);
+ /* Other-name join gets one fresh named pass; missing target never loops. */
+ setup();discover_named=true;queue_join("hidden",NULL);service();assert(directed_scans==1&&river_net_live);
+ setup();queue_join("absent",NULL);service();assert(directed_scans==1&&!river_net_live);service();assert(directed_scans==1);
+ setup();discover_named=true;scan_cancel=true;queue_join("hidden",NULL);service();
+ assert(directed_scans==1&&!river_net_live&&active_phase==PHASE_IDLE);
+ setup();discover_named=true;scan_new_join=true;queue_join("hidden",NULL);service();
+ assert(directed_scans==1&&!river_net_live&&join_pending_flag&&active_phase==PHASE_JOINING);
+ service();assert(river_net_live&&active_phase==PHASE_JOINED&&directed_scans==2);
+ setup();discover_named=true;uint8_t wrong_bssid[6]={2,8,8,8,8,8};queue_join("hidden",wrong_bssid);service();
+ assert(directed_scans==1&&!river_net_live);
+ setup();
+}
+#endif
 int main(void) {
+#ifdef HOST_FRESH_SCAN
+ fresh_scan_tests();
+#endif
  setup();memcpy(river_target.ssid,"one",3);river_target.ssid_len=3;memcpy(river_target.bssid,ap_a,6);
  river_target.enabled=river_target.found=true;river_wpa.pmk_ready=true;memset(river_wpa.pmk,5,32);
  river_connection_boot();assert(river_net_live&&river_connection_saved&&active_phase==PHASE_JOINED&&assoc_calls==1&&join_result==HOST_JOIN_SUCCESS);

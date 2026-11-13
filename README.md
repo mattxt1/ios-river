@@ -213,3 +213,10 @@ events with passing host coverage; full build and packaging pass; device validat
 The diagnostic-only DHCP observer retains existing configuration operations;
 its original on-phone binary is backed up. This is partial networking success,
 not a DNS/TLS or long-term reliability milestone.
+
+The dbf26b6 test boot exposed a full lifetime32-entry scan cache: repeated
+physical scans completed but newly discovered APs were discarded.0297 adds
+bounded fresh working/results caches, strongest/target-priority retention,
+and one named scan for an uncached requested network. Actual-code tests pass;
+full build and device validation are next. The previous working Settings and
+numeric HTTP results were on bb395d6; DNS remains unresolved.

@@ -5,6 +5,50 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+##0297 scan cache/directed-discovery fix host-verified (2026-11-13)
+
+- Agent0297 and rootreviewfoundlifetime32entrycache,undefinedrefreshlifecycle,
+  noevictionandnoactualnamedscanforOther. New64entryworkingcacheiscleared
+  perphysicalscanandretainsstrongestfreshBSSwithdirectedtargetpriority;
+  completed64entrysnapshotisstablewhileRXupdatesworkingdata. Monotonic30s
+  expiryandwholeIEvalidationpreventstale/truncateddatafrombecomingtargets.
+- SameBSSIDhiddenbeaconpreservesknownname;selectedBSSIDstrict,otherwise
+  strongestmatchingAPchosen. ValidatedSET10prefixcarriesdirectedSSID;
+  missingjoinrunsoneboundednamedallchannelpass,publishesresults,rechecks
+  generationbeforeassociation. Physicalscanconsumespendingatstartandretains
+  anotherqueuedscanatcompletion. ValidselfstationIDreusedinsteadduplicateADD.
+- Earlierlogwarning'sselfstationunavailabledidnotproveprobeTXfailed:
+  exactlogcounts924probesubmitted924DMAcomplete270responses. DuplicateADD
+  status31wasloggedaswithheldwhileoldvalidIDstillused;0297fixeshandling.
+- Rootactualcombined0289+0292through0297 regressionspassed,including100AP
+  crowdedlateentry,stalevictimpriority,TTL,stableGET11snapshot,hiddenname,
+  malformedIE/prefixbounds,0/32byteprobeframes,exactBSSIDandcancel/newjoin
+  duringdirectedfallback. Priorbaselinealsoagentverified. Rootprivateoutput
+  work/network-config/wifi-0297-root-tests.log. Fullkernelbuildnext.
+- Limitsremainfixed64working+64snapshot,onesharedGET11cursor,channels1–11
+  only(no5GHz/12–14);atmostonenamedpass,notguaranteedhiddenSSIDcompatibility
+  orreceiptofuserAP. No0297deviceclaimyet;0296targetmissingpreventedjoin.
+
+##0296 join blocked by lifetime scan cache;0297 in progress (2026-11-13)
+
+- UserreportedmanyvisibleAPsbutusualnetworkmissing;manualOtherSSIDattempt
+  reportsnotfound. No0296join/checkmark/link/DNSsuccessclaimedonthisboot.
+- Retainedlogwork/network-config/kernel-missing-target-dbf26b6.logcontains
+ 84completedscansat32BSSlimit. Lastphysicalscanfinish1,RX6482/bad0/beacons6482,
+  allchannels1–11completed. EngineRIVER_MAX_BSS32,newentriesdroppedwhenfull;
+  clear_scanhasnocallersandlifetimecachepersistsacrossallscans. Thisproves
+  cachediscoverydefectbutdoesnotproveaspecificAPframewasreceived/dropped.
+- Wi-Fisubagentpreparing0297boundedfreshscanwork/strongest-retention,
+  completedenumerationsnapshot,targetpinningandoneboundednamedscanfor
+  missingOtherjoin. Needtestsforcrowding/latechannels,refresh,hiddenSSID,
+  generationcancellation,exactBSSIDandstableGET11enumeration. Nosourcebuild
+  ordeviceclaimfor0297yet. Do notrequestanotheridenticalmanualjoinuntilfix.
+- Existing0296imagehasverifiedresponsiveUIandRPMexactACKs;missingphysical
+  linkON/OFFandDNSresultsremainpendingbecausejoinnotreached. Currentphone
+  staysrunning;nextreturntofastbootonlyafterconcretenewimageisready.
+- Primaryaudioobjectiveunchanged: ADSPstartup/physicalPCMthenmicrophone.
+  Networkfixisuser-requestedparallelwork;noaudibleaudioorinputclaim.
+
 ##0296 responsive iOS; manual Wi-Fi join pending (2026-11-13)
 
 - Userconfirmedresponsivehome screenon0296/dbf26b6. Approved-keySSH andUSB

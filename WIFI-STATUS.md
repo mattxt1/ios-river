@@ -65,7 +65,7 @@ Coverage includes stale completion and stale link-loss rejection; exact BSSID se
 ## Still unresolved
 
 - Full bb395d6 build through0295 passed. Temporarily boot the prepared image; confirm successful GET21 result1, Settings checkmark and a real configured DHCP lease. Patch0292 device validation already proved WPA/protected-packet success. Reconnect under AP loss, wrong credentials, repeated Settings joins, radio toggles and UI error reporting remain unverified.
-- The fixed-size 32-entry BSS cache has no expiry/replacement policy. Target lookup/recovery uses cached records; fresh scan scheduling and channel changes are not solved by this patch.
+- Patch0297 prepares bounded fresh-scan cache/snapshot and directed missing-target discovery changes; hardware validation remains pending. General off-channel scanning while joined and roaming/channel changes remain outside this fix.
 - The UI target path synthesizes a WPA2 RSN choice and marks rates/security accepted. It needs capability validation comparable to the strict beacon-selection path. Current support remains narrow WPA2 PSK/CCMP; this is not WPA3/enterprise/roaming support.
 - A stuck TX DMA ring still needs explicit, verified recovery. Clearing its stalled flag during a new join is insufficient.
 - Suspend/resume, firmware-reset recovery, long-running packet loss and broader network compatibility need hardware coverage.
@@ -146,3 +146,21 @@ packaged and verified (26,697,728 bytes,577-byte command line,1MiB retained
 log). Device event/rank/DNS validation is pending. The latest phone result
 remains Settings checkmark and Wi-Fi-bound numeric HTTP success on bb395d6,
 with ordinary DNS unresolved; no rank assertion has been forcibly cleared.
+
+
+## dbf26b6 discovery regression and patch0297
+
+After temporary booting0296, the user's usual target was absent from Settings and Other-name entry could not find it. The retained log shows84 completed physical scans with the BSS count stuck at32,6482 received beacons and zero reported bad RX frames. Source proves the lifetime cache accepts only its first32 distinct BSSIDs; `clear_scan()` was never called by the physical scan. Repeating a scan therefore cannot admit later-channel/new APs after crowding. This is a source-proven discovery failure, not evidence that the user's AP stopped transmitting.
+
+Prepared0297 uses fixed64-entry working and64-entry completed-result arrays. Each actual physical scan clears the working cache, strongest-RSSI replacement admits later strong APs while evicting stale entries first, and a requested SSID/BSSID is retained despite unrelated crowding. Entries older than30 seconds are rejected for lookup/publication. GET11 enumerates the completed snapshot, independent of live RX updates; each completed physical scan publishes a new snapshot and resets enumeration. As with the existing API, multiple simultaneous consumers share an enumeration cursor; the fix does not claim independent per-client scan sessions.
+
+Scan request10 now validates and copies only its fixed version1/name prefix, checks SSID length, and uses that name in probe requests. A missing Other-name join performs one bounded11-channel directed pass, publishes its scan results, then rechecks request ownership and exact BSSID before association. The wildcard probe remains36 bytes; a maximum32-byte SSID uses68 bytes. Actual physical scan completion preserves a scan request queued while that pass was running. Off-channel physical scans remain withheld while the keyed connection is live. Boot-profile reload is restricted to initial startup rather than overwriting a UI-directed target.
+
+Hidden beacons do not erase a name learned for the same BSSID; no name is borrowed from another BSSID. Complete IE validation precedes cache mutation, and stored IEs end on an element boundary. RSN/rate data remain those of the received record. The valid existing self-station is reused on later scans rather than sending duplicate ADD_STA_SELF. The old log saying probes were withheld after duplicate status31 was misleading: source retained the previously valid self ID, and924 probe submissions/DMA completions and270 probe responses confirm TX continued.0297 does not reinterpret duplicate status31 as success or reset a valid station ID.
+
+Actual-code host regressions pass with0289/0292/0295/0296/0297 applied and in the original baseline mode. Coverage includes100 early crowded records plus a strong late-channel AP, weak directed-target retention, stale-first eviction, disappearance on refresh,30-second aging, snapshot stability while RX updates the next scan, same-BSSID hidden name preservation, malformed IE rejection, strongest/exact-BSSID selection, wildcard/max-name probe byte layout, malformed scan prefix/version/name length, a request arriving during a physical pass, one-pass missing-target discovery, cancellation/new join during that pass and no stale completion. Full0297 kernel build/device validation remains pending; no route, DNS, rank or credentials workaround was added.
+
+The three other Scoped service UUIDs in the rank dump map to IPv6 utun interfaces, not competing conventional Wi-Fi services. The helper's en0 service remains First, and configd's interface Never assertion is the remaining primary-election evidence. The discovery repair does not claim to clear that policy.
+
+
+Discovery limitations remain explicit: the bounded list retains at most64 records with strongest-RSSI selection and directed-target priority; it cannot show every AP in an arbitrarily dense environment. Radio scanning still covers2.4GHz channels1–11 only, with no5GHz or channels12–14 support. A missing target gets at most one pass, which cannot guarantee that an AP transmits/responds during the bounded dwell. Named probes and same-BSSID name preservation improve this path; they do not establish general hidden-SSID compatibility. GET11 retains its one shared ioctl enumeration cursor.

@@ -28,10 +28,18 @@ with tempfile.TemporaryDirectory(prefix='river-wifi-state-') as tmp:
     has_result_abi='RIVER_ASSOC_SUCCESS' in engine
     if has_result_abi:
         engine='#define HOST_RESULT_ABI 1\n'+engine
+    if 'RIVER_BSS_MAX_AGE_MS' in engine:
+        engine='#define HOST_FRESH_SCAN 1\n'+engine
     if 'river_network_link_events(' in (d/'bsd/dev/sweet_keys.c').read_text():
         engine='#define HOST_LINK_EVENTS 1\n'+engine
     (d/'river-wifi-engine.h').write_text(engine)
     driver=(d/'bsd/dev/sweet_keys.c').read_text()
+    if 'river_probe_tx(const struct river_apple80211_join_req *name)' in driver:
+        start=driver.index('static bool\nriver_probe_tx(');end=driver.index('/* Single outstanding HAL',start)
+        (d/'river-wifi-probe.h').write_text(driver[start:end])
+        scan=driver[driver.index('static void\nriver_passive_scan('):driver.index('static void\nriver_wcnss_probe(')]
+        assert scan.index('if (river_wpa.stage == 2 && river_target.found) return;')<scan.index('river_apple80211_scan_begin(')
+        assert 'river_probe_tx(directed)' in scan and 'ch <= 11' in scan
     start=driver.index('static void\nriver_target_rx(');end=driver.index('static uint32_t\nriver_bd_word',start)
     rx=driver[start:end]
     assert 'river_scan_xact(' not in rx and 'river_dxe_poll(' not in rx

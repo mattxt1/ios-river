@@ -1,0 +1,350 @@
+diff --git a/bsd/dev/river_apple80211.c b/bsd/dev/river_apple80211.c
+--- a/bsd/dev/river_apple80211.c
++++ b/bsd/dev/river_apple80211.c
+@@ -13,6 +13,7 @@
+ #include <sys/river_apple80211.h>
+ #include <sys/sockio.h>
+ #include <sys/systm.h>
++#include <kern/clock.h>
+ 
+ static LCK_GRP_DECLARE(river_apple80211_lck_grp, "river-apple80211");
+ static LCK_MTX_DECLARE(river_apple80211_mtx, &river_apple80211_lck_grp);
+@@ -20,7 +21,8 @@
+ static const char interface_name[16] = "en0";
+ static const uint8_t river_test_mac[6] = {0x02, 0, 0, 0x36, 0x60, 1};
+ 
+-#define RIVER_MAX_BSS 32
++#define RIVER_MAX_BSS 64
++#define RIVER_BSS_MAX_AGE_MS 30000
+ struct river_apple80211_bss {
+ 	uint8_t bssid[6];
+ 	uint8_t ssid[32];
+@@ -31,13 +33,33 @@
+ 	uint16_t beacon_int;
+ 	uint16_t caps;
+ 	uint32_t age_ms;
++	uint64_t seen_ms;
+ 	uint16_t ies_len;
+ 	uint8_t ies[768];
+ };
+ 
+ static struct river_apple80211_bss river_bss_table[RIVER_MAX_BSS];
+ static unsigned river_bss_count = 0;
++/* Completed results are immutable during ioctl enumeration while RX refreshes
++ * the working cache. Both arrays have a fixed bound. */
++static struct river_apple80211_bss scan_results[RIVER_MAX_BSS];
++static unsigned scan_result_count;
++static bool scan_running;
++static uint8_t scan_ssid[32],scan_ssid_len,scan_bssid[6];
+ static unsigned scan_result_idx = 0;
++static uint64_t
++river_bss_now_ms(void)
++{
++ uint64_t ticks,ns;clock_get_uptime(&ticks);absolutetime_to_nanoseconds(ticks,&ns);
++ return ns/1000000;
++}
++static bool
++river_bss_directed(const uint8_t *ssid,unsigned len,const uint8_t *bssid)
++{
++ bool specified=false;for(unsigned k=0;k<6;k++)specified|=scan_bssid[k]!=0;
++ return scan_ssid_len && len==scan_ssid_len && !memcmp(ssid,scan_ssid,len) &&
++     (!specified || !memcmp(bssid,scan_bssid,6));
++}
+ static bool scan_pending_flag = false;
+ 
+ static struct river_apple80211_join_req pending_join;
+@@ -293,8 +315,8 @@
+ 		error = 0;
+ 		break;
+ 	case 11: {
+-		if (scan_result_idx < river_bss_count) {
+-			error = give_network(request, &river_bss_table[scan_result_idx++]);
++		if (scan_result_idx < scan_result_count) {
++			error = give_network(request, &scan_results[scan_result_idx++]);
+ 		} else {
+ 			error = EIO;
+ 		}
+@@ -366,6 +388,13 @@
+ 
+ 	switch (request->req_type) {
+ 	case 10: {
++  struct river_apple80211_scan_name asked={0};
++  if(request->req_data) {
++   if(request->req_len<sizeof(asked))return EINVAL;
++   if(copyin(request->req_data,&asked,sizeof(asked)))return EFAULT;
++   if(asked.version!=1)return EINVAL;
++  }
++  if(asked.ssid_length>32)return EINVAL;
+ 		lck_mtx_lock(&river_apple80211_mtx);
+ 		if (active_phase == PHASE_JOINED) {
+ 			scan_pending_flag = false;
+@@ -374,6 +403,8 @@
+ 			river_apple80211_scan_done(0);
+ 			break;
+ 		}
++  scan_ssid_len=(uint8_t)asked.ssid_length;memcpy(scan_ssid,asked.ssid,scan_ssid_len);
++  memcpy(scan_bssid,asked.bssid,6);
+ 		scan_pending_flag = true;
+ 		scan_result_idx = 0;
+ 		active_phase = PHASE_SCANNING;
+@@ -486,6 +517,20 @@
+     uint16_t freq, int16_t rssi, uint16_t beacon_int, uint16_t caps,
+     const uint8_t *ies, uint16_t ies_len)
+ {
++ if(!bssid || ssid_len>32 || (ssid_len&&!ssid) || (ies_len&&!ies))return;
++ unsigned kept=0;bool have_ssid=false;
++ for(unsigned off=0;off<ies_len;) {
++  if(ies_len-off<2)return;
++  unsigned id=ies[off],n=ies[off+1];if(n>ies_len-off-2)return;
++  if(id==0) {
++   if(have_ssid || n>32 || n!=ssid_len || (n&&memcmp(ies+off+2,ssid,n)))return;
++   have_ssid=true;
++  }
++  off+=2+n;if(off<=sizeof(river_bss_table[0].ies))kept=off;
++ }
++ ies_len=(uint16_t)kept;
++ bool hidden=true;for(unsigned k=0;k<ssid_len;k++)if(ssid[k])hidden=false;
++ if(hidden)ssid_len=0;
+ 	lck_mtx_lock(&river_apple80211_mtx);
+ 	unsigned i;
+ 	for (i = 0; i < river_bss_count; i++) {
+@@ -493,19 +538,44 @@
+ 			break;
+ 		}
+ 	}
+-	if (i == river_bss_count && i < RIVER_MAX_BSS) {
+-		river_bss_count++;
+-	}
++ uint64_t now=river_bss_now_ms();
++ if(i==river_bss_count) {
++  if(i<RIVER_MAX_BSS){bzero(&river_bss_table[i],sizeof(river_bss_table[i]));river_bss_count++;}
++  else {
++   unsigned victim=RIVER_MAX_BSS;
++   for(unsigned k=0;k<river_bss_count;k++) {
++    struct river_apple80211_bss *b=&river_bss_table[k];
++    if(river_bss_directed(b->ssid,b->ssid_len,b->bssid))continue;
++    bool stale=now-b->seen_ms>RIVER_BSS_MAX_AGE_MS;
++    bool old_stale=victim!=RIVER_MAX_BSS && now-river_bss_table[victim].seen_ms>RIVER_BSS_MAX_AGE_MS;
++    if(victim==RIVER_MAX_BSS || (stale&&!old_stale) ||
++       (stale==old_stale && b->rssi<river_bss_table[victim].rssi))victim=k;
++   }
++   if(victim==RIVER_MAX_BSS || (!river_bss_directed(ssid,ssid_len,bssid) &&
++      river_bss_table[victim].seen_ms+RIVER_BSS_MAX_AGE_MS>=now &&
++      rssi<=river_bss_table[victim].rssi)) {lck_mtx_unlock(&river_apple80211_mtx);return;}
++   i=victim;bzero(&river_bss_table[i],sizeof(river_bss_table[i]));
++  }
++ }
+ 	if (i < RIVER_MAX_BSS) {
+ 		memcpy(river_bss_table[i].bssid, bssid, 6);
+-		river_bss_table[i].ssid_len = ssid_len < 32 ? ssid_len : 32;
+-		memcpy(river_bss_table[i].ssid, ssid, river_bss_table[i].ssid_len);
++  /* A hidden beacon cannot erase a name learned from a probe response. */
++  if(ssid_len) {
++   river_bss_table[i].ssid_len=ssid_len<32?ssid_len:32;
++   memcpy(river_bss_table[i].ssid,ssid,river_bss_table[i].ssid_len);
++  } else if(!river_bss_table[i].ssid_len) {
++   for(unsigned k=0;k<scan_result_count;k++)if(!memcmp(scan_results[k].bssid,bssid,6)) {
++    river_bss_table[i].ssid_len=scan_results[k].ssid_len;
++    memcpy(river_bss_table[i].ssid,scan_results[k].ssid,scan_results[k].ssid_len);break;
++   }
++  }
+ 		river_bss_table[i].freq = freq;
+ 		river_bss_table[i].channel = freq == 2484 ? 14 : (freq < 4000 ? (freq - 2407) / 5 : (freq - 5000) / 5);
+ 		river_bss_table[i].rssi = rssi;
+ 		river_bss_table[i].beacon_int = beacon_int;
+ 		river_bss_table[i].caps = caps;
+ 		river_bss_table[i].age_ms = 0;
++  river_bss_table[i].seen_ms=now;
+ 		river_bss_table[i].ies_len = ies_len < sizeof(river_bss_table[i].ies) ? ies_len : sizeof(river_bss_table[i].ies);
+ 		if (river_bss_table[i].ies_len > 0 && ies != NULL) {
+ 			memcpy(river_bss_table[i].ies, ies, river_bss_table[i].ies_len);
+@@ -515,10 +585,32 @@
+ }
+ 
+ void
++river_apple80211_scan_begin(const struct river_apple80211_join_req *directed)
++{
++ lck_mtx_lock(&river_apple80211_mtx);
++ river_bss_count=0;bzero(river_bss_table,sizeof(river_bss_table));
++ scan_running=true;scan_pending_flag=false;
++ if(directed && directed->ssid_len<=32) {
++  scan_ssid_len=directed->ssid_len;memcpy(scan_ssid,directed->ssid,scan_ssid_len);
++  memcpy(scan_bssid,directed->bssid,6);
++ }
++ lck_mtx_unlock(&river_apple80211_mtx);
++}
++bool
++river_apple80211_scan_name(struct river_apple80211_join_req *name)
++{
++ lck_mtx_lock(&river_apple80211_mtx);
++ bzero(name,sizeof(*name));name->ssid_len=scan_ssid_len;
++ memcpy(name->ssid,scan_ssid,scan_ssid_len);memcpy(name->bssid,scan_bssid,6);
++ lck_mtx_unlock(&river_apple80211_mtx);
++ return name->ssid_len!=0;
++}
++
++void
+ river_apple80211_clear_scan(void)
+ {
+ 	lck_mtx_lock(&river_apple80211_mtx);
+-	river_bss_count = 0;
++	river_bss_count = scan_result_count = 0;
+ 	scan_result_idx = 0;
+ 	lck_mtx_unlock(&river_apple80211_mtx);
+ }
+@@ -532,13 +624,13 @@
+ 	    river_bss_count);
+ 	const struct river_apple80211_bss *target = NULL;
+ 	for (unsigned i = 0; i < river_bss_count; i++) {
+-		if (river_bss_table[i].ssid_len == req->ssid_len &&
++		if (river_bss_now_ms()-river_bss_table[i].seen_ms<=RIVER_BSS_MAX_AGE_MS &&
++      river_bss_table[i].ssid_len == req->ssid_len &&
+ 		    memcmp(river_bss_table[i].ssid, req->ssid, req->ssid_len) == 0) {
+ 			bool bssid_zero = true;
+ 			for (unsigned k = 0; k < 6; k++) if (req->bssid[k]) bssid_zero = false;
+ 			if (bssid_zero || memcmp(river_bss_table[i].bssid, req->bssid, 6) == 0) {
+-				target = &river_bss_table[i];
+-				break;
++				if(!target || river_bss_table[i].rssi>target->rssi)target = &river_bss_table[i];
+ 			}
+ 		}
+ 	}
+@@ -600,8 +692,16 @@
+ {
+ 	(void)status;
+ 	lck_mtx_lock(&river_apple80211_mtx);
++ scan_result_count=0;uint64_t now=river_bss_now_ms();
++ bool completed_physical=scan_running;scan_running=false;
++ for(unsigned i=0;i<river_bss_count;i++) {
++  uint64_t age=now-river_bss_table[i].seen_ms;
++  if(age>RIVER_BSS_MAX_AGE_MS)continue;
++  scan_results[scan_result_count]=river_bss_table[i];
++  scan_results[scan_result_count++].age_ms=(uint32_t)age;
++ }
+ 	scan_result_idx = 0;
+-	scan_pending_flag = false;
++ if(!completed_physical)scan_pending_flag=false;
+ 	if (active_phase == PHASE_SCANNING) {
+ 		active_phase = PHASE_IDLE;
+ 	}
+diff --git a/bsd/sys/river_apple80211.h b/bsd/sys/river_apple80211.h
+--- a/bsd/sys/river_apple80211.h
++++ b/bsd/sys/river_apple80211.h
+@@ -53,6 +53,11 @@
+ 	uint8_t unknown_3[3600];
+ } __attribute__((packed));
+ 
++/* Prefix shared by scan request ABI; copying the full request is unnecessary. */
++struct river_apple80211_scan_name {
++ uint32_t version,bss_type;uint8_t bssid[6],reserved[2];
++ uint32_t ssid_length;uint8_t ssid[32];
++};
+ struct apple80211_scan_request {
+ 	uint32_t version, bss_type;
+ 	uint8_t bssid[6], unused_0[2];
+@@ -151,6 +156,8 @@
+     uint16_t freq, int16_t rssi, uint16_t beacon_int, uint16_t caps,
+     const uint8_t *ies, uint16_t ies_len);
+ void river_apple80211_clear_scan(void);
++void river_apple80211_scan_begin(const struct river_apple80211_join_req *);
++bool river_apple80211_scan_name(struct river_apple80211_join_req *);
+ void river_apple80211_scan_done(int status);
+ void river_apple80211_assoc_done(int status);
+ void river_apple80211_link_changed(bool up, int16_t rssi);
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -1181,14 +1181,16 @@
+ }
+ 
+ static bool
+-river_probe_tx(void)
+-{
+- uint8_t f[36] = {0}; f[0] = 0x40;
+- for (unsigned k = 0; k < 6; k++) { f[4+k] = f[16+k] = 255; f[10+k] = river_test_mac[k]; }
+- f[26] = 1; f[27] = 8;
+- static const uint8_t rates[] = {0x82,0x84,0x8b,0x96,12,18,24,36};
+- memcpy(f+28, rates, sizeof(rates));
+- return river_mgmt_tx(f, sizeof(f), true);
++river_probe_tx(const struct river_apple80211_join_req *name)
++{
++ uint8_t f[68]={0};f[0]=0x40;
++ for(unsigned k=0;k<6;k++){f[4+k]=f[16+k]=255;f[10+k]=river_test_mac[k];}
++ unsigned n=name?name->ssid_len:0;if(n>32)return false;
++ f[24]=0;f[25]=(uint8_t)n;if(n)memcpy(f+26,name->ssid,n);
++ f[26+n]=1;f[27+n]=8;
++ static const uint8_t rates[]={0x82,0x84,0x8b,0x96,12,18,24,36};
++ memcpy(f+28+n,rates,sizeof(rates));
++ return river_mgmt_tx(f,36+n,true);
+ }
+ 
+ /* Single outstanding HAL request, using byte-exact SMD packet lengths.
+@@ -1774,25 +1776,26 @@
+ }
+ 
+ static void
+-river_passive_scan(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t ipc)
++river_passive_scan(vm_offset_t smem, uint32_t info, uint32_t fifo, vm_offset_t ipc,
++    const struct river_apple80211_join_req *directed)
+ {
+  if (river_wpa.stage == 2 && river_target.found) return;
+- river_target_config();
+- river_wpa_load();
++ if(!river_smd_smem){river_target_config();river_wpa_load();}
+  uint8_t self[18] = {0}; /* packed add_sta_self_req */
+  for (unsigned k = 0; k < 6; k++) self[8 + k] = river_test_mac[k];
+- if (!river_scan_xact(smem, info, fifo, ipc, 125, self, sizeof(self)) || !river_self_ready) {
++ if (!river_self_ready && (!river_scan_xact(smem, info, fifo, ipc, 125, self, sizeof(self)) || !river_self_ready)) {
+   printf("RIVER TX: self station unavailable; probe TX withheld\n");
+  }
+  uint8_t init[48] = {0}; /* hal.h init_scan_req, sizeof=48 */
+  init[8] = 2; /* HAL_SYS_MODE_SCAN, no active BSS to notify */
+  if (!river_scan_xact(smem, info, fifo, ipc, 4, init, sizeof(init))) return;
++ river_apple80211_scan_begin(directed);
+  for (unsigned ch = 1; ch <= 11 && river_dxe_ready; ch++) {
+   uint8_t channel[9] = {0};
+   channel[8] = ch;
+   river_scan_channel = ch;
+   if (!river_scan_xact(smem, info, fifo, ipc, 6, channel, sizeof(channel))) break;
+-  (void)river_probe_tx();
++  (void)river_probe_tx(directed);
+   for (unsigned dwell = 0; dwell < 25; dwell++) { river_dxe_poll(); ri_wait(10); }
+   if (!river_scan_xact(smem, info, fifo, ipc, 8, channel, sizeof(channel))) break;
+  }
+@@ -2896,7 +2899,7 @@
+     }
+     if (!scan_attempted && wlan_start_acked && river_dxe_ready && wcnss_wlan_info && wcnss_wlan_fifo) {
+      scan_attempted = true;
+-     river_passive_scan(smem, wcnss_wlan_info, wcnss_wlan_fifo, ipc_reg2);
++     river_passive_scan(smem, wcnss_wlan_info, wcnss_wlan_fifo, ipc_reg2,NULL);
+      river_apple80211_scan_done(0);
+      river_smd_smem = smem; river_smd_ipc = ipc_reg2;
+      river_smd_wlan_info = wcnss_wlan_info; river_smd_wlan_fifo = wcnss_wlan_fifo;
+@@ -3146,7 +3149,15 @@
+    river_connection_abandon();
+    __atomic_store_n(&river_connection_generation,req.generation,__ATOMIC_RELEASE);
+    struct river_apple80211_target_info info;
+-   if(!river_apple80211_find_target(&req,&info) || (info.rsn_len && !req.has_pmk)) {
++   bool found=river_apple80211_find_target(&req,&info);
++   if(!found && river_apple80211_join_current(req.generation)) {
++    /* One bounded named-probe pass permits Other/hidden SSID discovery. */
++    river_passive_scan(river_smd_smem,river_smd_wlan_info,river_smd_wlan_fifo,river_smd_ipc,&req);
++    river_apple80211_scan_done(0);
++    found=river_apple80211_find_target(&req,&info);
++   }
++   if(!river_apple80211_join_current(req.generation)) {river_secret_clear(&req,sizeof(req));return;}
++   if(!found || (info.rsn_len && !req.has_pmk)) {
+     (void)river_apple80211_join_complete(&req,NULL,1);
+    } else {
+     memcpy(&river_connection_req,&req,sizeof(req));memcpy(&river_connection_info,&info,sizeof(info));
+@@ -3203,7 +3214,9 @@
+    if (!river_wifi_ifp) river_network_create();
+    if (river_apple80211_scan_pending() && river_smd_smem && river_smd_wlan_info) {
+     if (river_wpa.stage == 2) river_wpa.stage = 0;
+-    river_passive_scan(river_smd_smem, river_smd_wlan_info, river_smd_wlan_fifo, river_smd_ipc);
++    struct river_apple80211_join_req name;
++    bool directed=river_apple80211_scan_name(&name);
++    river_passive_scan(river_smd_smem,river_smd_wlan_info,river_smd_wlan_fifo,river_smd_ipc,directed?&name:NULL);
+     river_apple80211_scan_done(0);
+    }
+    river_connection_service();
