@@ -29,7 +29,22 @@
   This protocol has not been exercised on hardware in our driver.
 - Host tests passed valid partitioned SMP2P429, wrong table bounds,
   oversized record size, excessive partition count, and all existing ADSP
-  probe/metadata/staging/firmware/repacker tests. Build/hardware pending.
+  probe/metadata/staging/firmware/repacker tests. Committed source
+  f5bdc45e2110fb83f7f815584e7d2d7443dcd03d. Standard build running in
+  work/build/river-f5bdc45e2110-9K7RJu with per-command Git URL override
+  to local pinned XNU checkout (no persistent Git/network configuration
+  changed). Build succeeded, kernel SHA256
+  867c1e124c2fbb3d4114074ec8948f035328c6f511014019b0c0464f2824b840.
+- Packaged outputs/river-adsp-partition-f5bdc45.img:26695680bytes,
+  cmdline562, SHA256
+  f1a26b6a4c5cf91a8ffc33cd51d804d8afbb9a61bbfa7f822c8de4e0b99f73b2.
+  Payload checks passed. Repacker was initially stalled importing offloaded
+  mkpayload.py. Extracted exact committed adt.py/mkpayload.py/repacker into
+  work/packaging-tools and recovered unchanged clock helper from verified
+  base image; helper SHA256 matched manifest. Rerun succeeded immediately.
+  Use these hydrated packaging copies if cloud eviction recurs.
+- Awaiting fastboot then responsive iOS for --probe only. Do not infer
+  missing global records imply no partition records. New survey pending.
 
 ## Startup survey: no existing ADSP handshake blocks (2026-11-12)
 

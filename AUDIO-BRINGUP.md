@@ -4,6 +4,19 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+**Startup ownership audit:** the global startup survey passed and found RPM
+auxiliary descriptors, with global SMP2P429/443 unallocated. The vendor driver
+can instead use an APPS↔ADSP SMEM partition; global absence does not establish
+that the handshake is missing. Patch0287 adds a bounded read-only partition
+survey before any allocator, power votes or DSP-start call is implemented.
+
+**ADSP image staging live result:** PAS1 memory setup succeeded and the full
+17 MiB image copy completed with matching stock input-stream SHA256. iOS
+remained responsive. No DSP startup was requested; target-memory readback,
+executable authentication and physical PCM transport remain unverified.
+Next is CX/XO vote ownership and SMP2P handshake readiness. Patch0286 adds a
+read-only survey of those legacy descriptors before implementing startup.
+
 **ADSP metadata live result:** the exact recovered stock MDT was accepted by
 TrustZone PAS1 INIT_IMAGE (`status=0 result=0`), and iOS stayed responsive.
 No executable firmware was loaded or started in that test. Patch0285 adds a
