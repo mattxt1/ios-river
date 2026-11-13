@@ -164,3 +164,13 @@ The three other Scoped service UUIDs in the rank dump map to IPv6 utun interface
 
 
 Discovery limitations remain explicit: the bounded list retains at most64 records with strongest-RSSI selection and directed-target priority; it cannot show every AP in an arbitrarily dense environment. Radio scanning still covers2.4GHz channels1–11 only, with no5GHz or channels12–14 support. A missing target gets at most one pass, which cannot guarantee that an AP transmits/responds during the bounded dwell. Named probes and same-BSSID name preservation improve this path; they do not establish general hidden-SSID compatibility. GET11 retains its one shared ioctl enumeration cursor.
+
+## Patch0297 build and boot handoff
+
+The full c3d9af8 kernel build passed. Its temporary image passed all payload,
+size and command-line checks and was accepted by fastboot on River. Responsive
+iOS confirmation and actual scan/join validation are pending. No claim is
+made yet that the user's AP appears or that native primary selection/DNS is
+fixed. The image preserves the original verified base network helper; the
+earlier diagnostic observer is not embedded. See NOTES.md for hashes and
+exact artifact paths.

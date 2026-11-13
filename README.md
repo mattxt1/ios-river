@@ -217,6 +217,6 @@ not a DNS/TLS or long-term reliability milestone.
 The dbf26b6 test boot exposed a full lifetime32-entry scan cache: repeated
 physical scans completed but newly discovered APs were discarded.0297 adds
 bounded fresh working/results caches, strongest/target-priority retention,
-and one named scan for an uncached requested network. Actual-code tests pass;
-full build and device validation are next. The previous working Settings and
+and one named scan for an uncached requested network. Actual-code tests and the full kernel build pass. The verified temporary image
+was accepted by fastboot; responsive UI and scan/join validation are pending. The previous working Settings and
 numeric HTTP results were on bb395d6; DNS remains unresolved.

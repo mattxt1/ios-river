@@ -5,6 +5,63 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Current handoff: scan fix booted, UI confirmation pending (2026-11-13)
+
+Source `c3d9af8179c470e08a028d33ee51e885458d8255` includes patch0297.
+The full kernel build passed in `work/build/river-c3d9af8179c4-P42wL2`.
+Kernel SHA256: `f42c3f424cc99210f84ba3246e5e1e83d83f7343c686f7e8fcdb24b9145fb5ad`.
+
+The verified temporary image is `outputs/river-wifi-scan-c3d9af8.img`:
+26,697,728 bytes, 577 command-line bytes, 1 MiB retained kernel log.
+Image SHA256: `02324ff9aee70581b1eb254de64f19a373394fef5713f0d686d5c61d7fead1c5`.
+All packaged kernel segments verified. The manifest is
+`outputs/wifi-scan-build-manifest.json`. The image retains the original
+verified network helper, not the later diagnostic-only observer.
+
+The user returned River to fastboot. Product and image hash were checked;
+`fastboot boot` transfer and boot both returned OKAY. No partition was flashed.
+USB-only logging started at `work/audit-device-validation/boot-c3d9af8-usb.log`
+with bounded capture session32977. A question is pending for a responsive iOS
+home screen. Initial USB logs show a completed scan with17 BSS and exact RPM replies;
+this is not proof the target AP is present. Once responsive, check
+fresh scan results and ask the user to join their usual network once. Then
+read association state/result, retained logs, native link/rank state, ordinary
+DNS and an HTTP socket bound to en0. Do not ask for credentials or repeat an
+identical join on a known-broken image.
+
+Previous verified network progress was on bb395d6: Settings checkmark,
+association result1 and numeric Apple HTTP200 through en0. General DNS still
+failed because configd held a Never-primary interface assertion. On dbf26b6,
+the user's AP was missing from the lifetime32-entry cache, so joined link/DNS
+validation could not proceed. Patch0297 has actual-code host coverage for
+freshness, crowding, stable enumeration and a bounded named-scan fallback;
+its success on the actual AP remains to be tested.
+
+Audio remains the principal milestone. Codec/amplifier clock lock, stock ADSP
+metadata acceptance, firmware staging, outbound handshake initialization,
+exact RPM reply handling and amplifier attenuation readbacks have passed
+bounded tests. DSP startup and real PCM transport, followed by physical
+microphone capture through iOS, remain unimplemented. Battery publication
+checks passed; load, cable transitions and charging policy remain unverified.
+
+##0297 full build running; helper provenance check pending (2026-11-13)
+
+- Committedc3d9af8179c470e08a028d33ee51e885458d8255through0297andstarted
+  fullbuildwork/build/river-c3d9af8179c4-P42wL2(session18639). Actualhost
+  integrationtestsrootpassedbeforecommit;compilererrors0atlastlogcheck.
+- BaseimageRiverFilescontainsoriginalriver-net71728bytes/hash807a0190...
+  fromprivatebackup,notmetadata-onlyobserver. Newtemporarybootsmayrestore
+  thatpackagedhelper;do notassumeobserverpersists. Attempttoreadcurrentphone
+  helperforhashhasnotcompleted(session17189,emptyoutputatlastcheck),so
+  currenton-phonehelperversionunverified. Originalbackupretainedunchanged.
+- Macen6disappearedwhilewaitingforbuild. Nophonestatechangeassumed. SSH
+  publiccompanionagaincompressed/dataless;requestedmacOSdownloadwithout
+  reading/displayingkeymaterial. Noadditionalcredentialpermissionsrequested.
+  Do nottreatemptyunfinishedrgetoutputasactualzero-lengthphonebinary.
+- Finishkernelbuild/packagebeforeanotherphysicalactionrequest;currentknown
+  devicefailureisusualnetworkabsentfullscanlist. DNS/link0296joinedchecks
+  remainunverified. PrincipalphysicalaudioI/Oobjectivecontinuesafterthisfix.
+
 ##0297 scan cache/directed-discovery fix host-verified (2026-11-13)
 
 - Agent0297 and rootreviewfoundlifetime32entrycache,undefinedrefreshlifecycle,
