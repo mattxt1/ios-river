@@ -4,120 +4,38 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
-**Outbound handshake live result:** patch0288 acquired/released remote lockS:3,
-initialized record429 and verified the full block. An independent partition
-scan found one valid340-byte SMP2P item at0x86030, new uncachedfree0x188,
-with no malformed records. No IPC, power vote or DSP start was requested.
-Next is acknowledged CX/XO votes and authenticated startup/readiness.
+## Verified progress and remaining work (2026-11-13)
 
-**Partition live result:** the APPS↔ADSP partition at SMEM+0x86000 is valid
-and empty (uncached free0x20, cached free0x24000 equals size). Patch0288 adds
-an explicit, bounded outbound429 initialization under vendor remote lockS:3,
-with complete readback and no IPC/power/DSP-start operation. Its hardware
-result is pending. Startup still needs correctly acknowledged CX/XO votes,
-remote negotiation and bounded authenticated reset before APR/Q6 transport.
+- CS47L35 identity is verified as `0x6360`, revision1, over SPI7 at
+  `0x07af7000`; all temporary SPI pin changes restored.
+- The muted codec AIF1→CS35L41 clock test passed through patch0281. Codec
+  FLL locked and amplifier PLL-unlock cleared twice. Codec, amplifier,
+  PMIC reference route and SPI restoration verified; iOS stayed responsive.
+  Requested clocks are48kHz stereo S16 /1.536MHz BCLK. Frequencies and
+  LRCLK waveforms were not measured, and no PCM or analog path was enabled.
+- TrustZone PAS1 accepted the exact stock ADSP metadata. Memory setup and
+  the full17MiB firmware staging test then passed with matching input hashes.
+  Physical destination readback and executable authentication remain unverified.
+- Partition surveys found an empty APPS↔ADSP partition at SMEM+0x86000.
+  Patch0288 then acquired/released remote lockS:3, initialized outbound
+  SMP2P item429 and verified the complete block. An independent scan found
+  one valid340-byte record at0x86030 and uncachedfree0x188, with no malformed
+  records. No IPC, power vote or DSP start was requested. iOS stayed responsive.
 
-**Startup ownership audit:** the global startup survey passed and found RPM
-auxiliary descriptors, with global SMP2P429/443 unallocated. The vendor driver
-can instead use an APPS↔ADSP SMEM partition; global absence does not establish
-that the handshake is missing. Patch0287 adds a bounded read-only partition
-survey before any allocator, power votes or DSP-start call is implemented.
+The next audio step is correctly acknowledged RPM CX/XO votes with shared
+ownership preserved, followed by authenticated PAS1 startup and remote SMP2P
+negotiation/readiness. APR/QMI, Q6AFE/Q6ASM/SLIMbus PCM transport, codec routing
+and physical microphone capture remain to be implemented. Output is currently
+discarded and input is synthetic; endpoint counters and successful iOS API
+calls establish only the existing software plumbing.
 
-**ADSP image staging live result:** PAS1 memory setup succeeded and the full
-17 MiB image copy completed with matching stock input-stream SHA256. iOS
-remained responsive. No DSP startup was requested; target-memory readback,
-executable authentication and physical PCM transport remain unverified.
-Next is CX/XO vote ownership and SMP2P handshake readiness. Patch0286 adds a
-read-only survey of those legacy descriptors before implementing startup.
-
-**ADSP metadata live result:** the exact recovered stock MDT was accepted by
-TrustZone PAS1 INIT_IMAGE (`status=0 result=0`), and iOS stayed responsive.
-No executable firmware was loaded or started in that test. Patch0285 adds a
-separate exact-carveout MEM_SETUP and bounded image staging step, with stock
-input hashes verified before setup and at completion; it cannot start the DSP.
-Destination-memory readback and full executable authentication remain unverified.
-
-**PCM transport work:** stock ADSP firmware has been extracted read-only and
-its embedded per-file SHA256 hashes verified. `tools/river-adsp-fw.py` checks
-Hexagon metadata and exact River carveout bounds; this is not secure signature
-authentication. Patch0282 adds an explicit read-only PAS1/retained-SMEM survey
-(`river-adsp-status --probe`); the passive command reads its last result.
-No ADSP firmware has been started, no physical PCM path is advertised, and
-the hardware probe passed: PAS1 supported, init/mem/auth calls available,
-valid retained SMEM, and no ADSP/APR channels in the checked legacy tables.
-Those empty tables do not establish DSP power state. Patch0283 prepares an
-exact-stock-MDT, one-shot INIT_IMAGE-only test with kernel-RAM/digest/crypto
-guards; no executable load, DSP reset/start or power/clock vote. Its result is
-pending. Subsequent work is source-derived secure startup,
-SMP2P readiness, APR/QMI and Q6AFE/Q6ASM/SLIMbus buffer transport.
-
-**Latest live result, 2026-11-12:** the muted codec-to-amplifier I2S clock test
-passed on source `fa7283f` (through patch0281). Codec FLL locked (`raw=0x100`)
-and amplifier raw PLL-unlock cleared twice (`0x20000010`→`0x2000000a`) with
-mute, Class-D disable and slave mode verified. Codec/AIF, amplifier, PMIC
-reference route and SPI restoration all passed. A usable clock path to the
-amplifier is verified; clock frequencies/LRCLK waveform were not measured.
-No PCM channels or analog outputs were enabled. Next is real PCM transport
-and controlled data-path validation, followed by physical microphone capture.
-
-**Verified on the phone, 2026-11-12:** CS47L35 identity `0x6360` on two SPI
-reads, revision `0x1`, and restoration of all four SPI pin states. The explicit
-probe returned success on the temporarily booted 0274 kernel. No codec register
-was written. The amplifier still reports PLL unlock and no real PCM transport
-exists. See NOTES.md for image/build hashes and exact readbacks.
-
-**0276 live result:** FLL lock still times out, but FLL shutdown, complete clock
-register restoration and SPI pin restoration all verified. PM8953 GPIO6 reads
-as input mode 0; the Android overlay specifies DTEST3 clock output. Trace that
-reference source before changing PMIC routing. Physical audio remains absent.
-
-Patch 0277 adds `river-codec-clock --route-test`: a separately requested,
-one-shot GPIO6 DTEST3 route test around the isolated FLL experiment. It applies
-only the pinned board mux/pull configuration and restores the PMIC mode/pull,
-all observed GPIO6 fields, codec clocks and SPI pins afterward. It refuses
-missing APIDs or changed/non-idle state. The internal DTEST3 producer is left
-unchanged and its availability is unknown; this is not a generic PMIC writer.
-The source-derived values are mode `0x1c` and pull-disable `0x5`. Waits/retries
-are bounded and cleanup failures are reported. No audio output is enabled.
-
-**0277 live result:** enabling the pinned GPIO6 DTEST3 route allowed codec
-FLL1 to lock (`raw=0x100`). The test exited successfully and verified PMIC
-route, codec clock and SPI pin restoration afterward. This establishes a
-usable reference path, without measuring frequency. The amplifier still
-reports PLL unlock because its ASP clocks were not enabled; PCM input/output
-remain placeholders. Next is a bounded AIF1 clock test with the amplifier
-muted and verified in slave mode before codec clocks drive the shared lines.
-
-Patch 0278 adds `--i2s-snapshot` and a one-shot `--i2s-test`. The test keeps
-the CS35L41 muted with its Class-D output stage disabled and its ASP in slave
-mode before the CS47L35 drives native AIF1 BCLK/LRCLK. It requests 48 kHz
-stereo S16 I2S clocks (1.536 MHz BCLK), while TXDATA is tri-stated and PCM
-channels stay disabled. Raw amplifier PLL-unlock must clear twice to pass.
-Codec, PMIC and amplifier registers are restored afterward; a cleanup failure
-retains protective amplifier mute/output-disable/slave settings. The volume
-helper now uses the actual CS35L41 mute bit4 (`0x10`) and shares a control mutex
-with the test so an iOS volume command cannot override its mute mid-test.
-Run the snapshot before the test, and do not consume the shared one-shot with
-`--test` or `--route-test` first. This is a clock-path test, not audible audio.
-
-**0278 live baseline:** temporary boot succeeded, but `--i2s-snapshot`
-repeatedly returned `phase=i2s_snapshot error=5 attempted=0` with SPI pins
-restored. The amplifier survey retained expected ID and idle register values.
-No clock test was triggered. Patch0279 reports the precise failing snapshot
-stage/register/values without relaxing guards; on hardware it captured GPIO CTRL1 changing0xa001→0x2001 (only live
-GP_LVL bit15). Patch0280 excludes that live bit from configuration comparisons
-and explicitly selects native AIF1 mux from the observed GPIO-input defaults.
-It still rejects active interfaces, GPIO outputs and other pin functions.
-That comparison/mux correction is included in the later successful0281 run.
-
-**0280 live attempt:** baseline succeeded and the one-shot test ran, but stopped
-with `phase=amp_prepare error=5` before PMIC reference routing or I2S clocks.
-Codec/AIF, amplifier, PMIC and SPI restoration all verified. iOS home screen
-became responsive afterward. Patch0281 corrects SP_TX_WL to0x4830, uses the
-PCM attenuation field correctly, and reports the first failed amplifier
-write/readback/quiet check. Next attempt must wait for responsive iOS before
-running the one-shot test. The corrected0281 run subsequently passed; the earlier
-failed register was not captured, so its exact cause remains unproven.
+The Wi-Fi/battery audit fixes through patch0291 are committed in `236a880`.
+Their host regressions passed, but the full build is waiting for macOS to
+make the offloaded KDK directory available. They have not been deployed.
+See [WIFI-STATUS.md](WIFI-STATUS.md), [BATTERY-STATUS.md](BATTERY-STATUS.md)
+and [NOTES.md](NOTES.md) for results and artifact hashes. Audio milestones
+above were verified on earlier temporary images; they do not establish a
+physical playback or capture milestone.
 
 ## Current continuation
 

@@ -5,6 +5,30 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Local build recovery and current continuation (2026-11-13)
+
+- Kernel source commit236a88093fe4c0792afc424086e0603ae0ea90c6 contains
+  integrated0289–0291 and completed audit docs/tests. Full build has not
+  started compilation: KDK.pkg is currently macOS compressed/dataless and
+  accessing its Payload/KernelSupport path stalls. User has enabled Keep
+  Downloaded for the Codex folder; waiting for that to take effect.
+- Recovered294 exact committed build inputs into
+  work/audit-fixes-build-minimal. Four offloaded loose Git blobs for0287's
+  predecessors (patches0278–0281) were restored from the prior verified b90
+  build inputs with Git blob SHA1 checks. Original offloaded objects retained
+  under work/git-pack-hydration, as are offloaded packed-refs and info/exclude.
+  Existing branch tip remains236a880. Use core.commitGraph=false and
+  core.attributesFile=/dev/null with GIT_CONFIG_GLOBAL=/dev/null and
+  GIT_CONFIG_NOSYSTEM=1 during recovery; preserve original metadata.
+- Build attempt is blocked before compilation at the KDK library existence
+  check. No new image has been packaged or booted, and no additional device
+  experiment has run. Phone's last user-confirmed state was responsive iOS
+  after the verified0288 outbound-handshake test.
+- AUDIO-BRINGUP.md now consolidates the latest verified audio milestones and
+  removes superseded pending-result claims from its status summary. Next:
+  full0291 build and temporary-boot audit validation, then source-derived RPM
+  vote acknowledgement/ownership and authenticated ADSP startup/readiness.
+
 ## Wi-Fi/battery audits integrated for full build (2026-11-12)
 
 - Both requested subagents completed their audits, prepared focused patches

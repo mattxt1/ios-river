@@ -56,3 +56,17 @@ control. Phone images also need device-specific private inputs described in
 The setup does not install a GitHub self-hosted runner. If one is added later,
 its access to this Mac, repository secrets and untrusted pull-request code must
 be considered before registration. A manual local build is the current path.
+
+## macOS offloaded files
+
+The Codex folder and the KDK/source directories must be available locally.
+Finder's **Keep Downloaded** can prevent iCloud from evicting them. A file
+marked `compressed,dataless` by `ls -lO` may block Git, Python reads or even
+KDK path checks while macOS fetches it. A stalled preflight is not a compiler
+failure. Wait for download to finish before starting another build.
+
+Preserve offloaded Git metadata before recovery. Restore an object from a
+previous verified build only after its Git object hash matches the committed
+object ID. Keep firmware, KDK files, private logs and local recovery backups
+out of Git. Recheck the committed patch inputs, then use the normal isolated
+build; do not report the kernel built or deployed until those steps pass.
