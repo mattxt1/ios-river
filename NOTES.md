@@ -34,8 +34,11 @@ Ledger work/slim-control/incremental-provenance.json.
 Image outputs/river-slim-control-6548eec.img: 26802176bytes,
 577cmdline, SHA99543b45acf277028410fa17ee6283edd77037b25912104e30e3dd51452fcc84.
 Kernel SHA9a651590f85e64f2b08845051fbe1d92aa413b82359bfd9b4ba3ac3707354256.
-Fastboot requested; no0309 hardware test yet. After temporary boot and
-responsive-home confirmation inspect passive baseline, then run once
+User confirmed fastboot readiness. Exact image SHA/productriver verified;
+temporary transfer OKAY0.611s, boot OKAY0.216s; no flash.0309 accepted.
+Responsive-home confirmation pending; no DSP/PCM/SLIM controls run. USB-only
+capture session25059 writes work/slim-control/boot-6548eec-usb.log.
+After responsive-home confirmation inspect passive baseline, then run once
 work/slim-control/run-device.py. It repeats0308 PCM and requires clean exact
 completion before discovery; successful service discovery gates QMI power.
 Wi-Fi reader is included; current0308 passive snapshot is unassociated.
