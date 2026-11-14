@@ -81,3 +81,15 @@ record plus available bounds, preserving exact IDs/reserved/config checks.
 Known field diagnostics distinguish future length and value mismatches.
 Additional transport tail is ignored within the already bounded APR reply.
 Synthetic padded fixtures are host tests, not recovered device payloads.
+
+##0306 zero-only completion test
+
+After all0305 prerequisites pass cleanly on a fresh responsive boot,
+`--pcm-silence` maps its own permanent16KiB zero-filled page, opens session4,
+routes the muted AFE/ADM path, RUNs, and submits four disjoint4096byte buffers
+sequentially. `--stream-status` reports actual WRITE_DONE counts, bytes,
+ownership, DSP errors and cleanup. Exact completion identity and status are
+required; unknown ownership retains memory/mapping until reboot. The test
+never unmutes or connects the iOS /dev writer to DSP. Host tests pass;
+hardware result remains pending. SLIMbus/Madera connection is still required
+before physical sound, even if all four buffers complete.

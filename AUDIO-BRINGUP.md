@@ -4,6 +4,14 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+##0306 muted PCM DMA/completion candidate ready
+
+Source98dcdb1 and the verified temporary image add four zero-only mapped
+PCM writes after ASM RUN, exact WRITE_DONE ownership checks, and bounded
+teardown. Host sanitizer tests and native kernel/helper builds pass.
+Hardware validation is pending.0305 remained responsive after all routes.
+The amplifier stays muted; physical playback and capture remain pending.
+
 ## AFE readback, ADM routing and AFE start/stop verified on0305
 
 The0305 boot verified exact mono48k/16-bit/channel144 AFE configuration,

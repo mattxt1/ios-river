@@ -258,3 +258,13 @@ snapshot; it cannot be treated as an immediate post-event capture.0305 is
 temporarily booted with home confirmation pending. The persistent log reader
 can compare new bytes against the earlier16,086byte snapshot, while retaining
 the lack of native per-entry timestamps as a limitation.
+
+##2026-11-14 audio-boot observation window
+
+The0304 post-join log body (16,086bytes) exactly prefixes the0305 reader's
+16,788bytes. The702new bytes contain associatedSTATE4, accepted DHCP ACK,
+existing service rank0 and helper SC DNS/IPv4 publication, then a monitor
+startup. This bounds the new log window but supplies no entry timestamps or
+immediate native DNS snapshot. It spans reboot and does not prove working
+Internet or resolve the latest user report, checkmark then spinner.
+0306 retains the read-only reader for combined audio/Wi-Fi observations.

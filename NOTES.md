@@ -5,7 +5,47 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0305 AFE/ADM routes and cleanup passed (2026-11-14)
+## Active handoff:0306 muted PCM completion candidate ready (2026-11-14)
+
+The user confirmed0305 remains responsive after full AFE/ADM routing and
+teardown. Current phone still runs0305; no active controls repeated.
+Committed0306 source98dcdb122b0296f7859a344962bb2fd749822e6e adds
+--pcm-silence and --stream-status. It allocates a dedicated permanent16KiB
+contiguous region, verifies physical range/contiguity/non-aliasing, zeros and
+cleans it, maps it, then repeats muted AFE/ASM/ADM setup with session4.
+ASM RUN precedes four sequential4096-byte zero-only WRITE_V2 requests.
+Each WRITE_DONE must match dispatcher token/services/ports and exact address,
+map handle, payload length and status. Four completions mean16,384bytes /
+4096stereo frames consumed by DSP; this does not establish physical sound.
+PAUSE/CLOSE/COPP close/AFE stop precede unmap. Unknown completion ownership,
+poisoned transport or failed cleanup retains the mapping/page until reboot.
+The amplifier remains muted. No iOS PCM backend or physical capture added.
+
+Actual-code ASan/UBSan tests cover success, malformed/mismatched completions,
+DSP errors, allocation/range/alias checks, timeout/NACK, RUN failure and
+PAUSE/stream/device/AFE/unmap teardown failures. Native helper compile/sign
+passed. Only0306 was applied with fuzz0 to the preserved verified0305 build;
+its prior kernel is saved separately. Compile/link passed; sandbox /dev/fd
+process substitution blocked DSYMUTIL. The unchanged native install resumed
+outside sandbox and exited0. See work/pcm-stream/incremental-provenance.json.
+New kernel SHA44a2e945a00b4ca6b7658cb40dd904ec82482d7c3009231ed37155d2f85fd5ec.
+Verified outputs/river-pcm-stream-98dcdb1.img is26,802,176bytes/577cmdline,
+SHA3b28bb3e9e62321e2db20bf7ba6095204d9f808a76eda92844c33dcca394a359.
+Temporary boot only. Fastboot readiness requested; no0306 hardware test yet.
+After responsive-home confirmation inspect passive baseline and run
+work/pcm-stream/run-device.py once; exact successful clean routes gate PCM.
+
+Wi-Fi: compared exact log bodies from0304 post-join reader and0305 reader:
+old16,086bytes is an exact prefix of new16,788bytes. The702appended bytes
+record associatedSTATE4, DHCP ACK, existing service rank0 and helper SC DNS/
+IPv4 publication, then another monitor startup. There are no entry timestamps;
+the window spans a reboot and does not prove fresh0305 association or native
+DNS/Internet success. User's most recent join report remains checkmark then
+spinner. Read-only Wi-Fi diagnostics remain bundled; no rank/DNS override.
+SLIMbus QMI/IPC protocol research is staged privately, not implemented or
+included in0306. Prioritize PCM result before subsequent controller work.
+
+##0305 AFE/ADM routes and cleanup passed (2026-11-14)
 
 User confirmed responsive0305 home. Passive baseline and full exact stock
 startup/CORE/map-unmap/ASM format-close prerequisites passed. --afe-config
