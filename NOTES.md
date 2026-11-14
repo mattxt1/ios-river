@@ -5,15 +5,20 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0299 startup image ready; fastboot requested (2026-11-13)
+## Active handoff:0299 temporarily booted; home confirmation pending (2026-11-13)
 
 The user confirmed the home screen is responsive on678e917. Read-only SSH
 baseline work/rpm-transport/baseline-678e917.txt shows amplifier identity and
 baseline format/PLL/power unchanged, no physical audio transport and flags3.
 work/rpm-transport/adsp-prereq-678e917.txt verifies PAS1 support/capabilities,
 zero ADSP legacy channels and an empty valid uncached partition at0x86000.
-Both exact boot RPM ACKs and ready1/mask3 already passed. Current phone stays
-on this responsive image; no new device writes were issued this turn.
+Both exact boot RPM ACKs and ready1/mask3 passed on that image. The user
+then returned River to fastboot for0299. Image SHA and productriver verified;
+fastboot transfer and temporary boot returned OKAY. No partition flashed.
+A home-screen confirmation is pending before firmware staging/start controls.
+Current capture: work/audit-device-validation/boot-6ac8fd5-usb.log, bounded
+session16082; both exact boot ACKs and transport ready1/mask3 are already
+visible again. No0299 metadata/stage/handshake/start request has run yet.
 
 Patch0299 adds explicit one-shot authenticated startup after existing metadata,
 stage and handshake gates. It adopts retained active/sleep CX384/swen1/ma100
@@ -43,15 +48,18 @@ verified. Image SHA256:
 7490a8e9e7b3985205d433d59f319d69e802a5d3d76b132a8a6fd5e94b45f433.
 Manifest outputs/adsp-start-build-manifest.json includes new helper hash
 (e39ae8eadf524170ce851e6d7c50e35dde09dbc0d311fea3b0d0d8afb7ac279f).
-No0299 device boot/start yet. A fastboot request is pending with the user.
-Next physical step: fastboot for temporary boot,
-then home responsiveness confirmation, read-only baseline and exact metadata
+0299 temporary boot is accepted; a home-screen confirmation is pending.
+Next: responsive-home confirmation, read-only baseline and exact metadata
 /stage/handshake/start sequence. Do not run --start until each prior operation
 reports success. Read --start-status and --probe afterward; startup may retain
 DSP running on success or report one shutdown attempt on failure. Keep power
-policy and actual PAS/remote outcomes explicit. Source review for future APR
-transport fetched directory metadata only; guessed source paths404, no new
-APR implementation or verified transport finding yet.
+policy and actual PAS/remote outcomes explicit. Pinned APR sources are now located and downloaded privately from
+techpack/audio/ipc/apr.c, apr_tal.c and apr_tal_glink.c. ipc/Kbuild has separate
+SMD and GLINK variants; do not assume the selected transport from mere legacy
+channel absence. GLINK candidate opens apr_audio_svc on edge lpass/transport
+smem. GLINK native source and interface are also private under
+work/pcm-transport. No APR transport code or device finding is added yet.
+
 
 
 ##0298 boot evidence before UI confirmation (2026-11-13)

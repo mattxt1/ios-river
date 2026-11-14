@@ -111,7 +111,9 @@ is signed ad hoc with its existing privilege model. Patch application passes.
 Full6ac8fd5 kernel build passed, with no numbered project patches skipped.
 The verified temporary image is26,716,160 bytes with577 command-line bytes
 and1MiB retained log; all kernel segments verify against the new kernel.
-Device startup validation remains pending. See the local manifest
+Fastboot accepted its verified temporary boot; a responsive-home confirmation
+is pending before staging or startup controls. Device startup validation
+remains pending. See the local manifest
 `outputs/adsp-start-build-manifest.json` for artifact hashes.
 
 The stock driver uses PAS1, an80MHz crypto source and the same CX/XO proxy
