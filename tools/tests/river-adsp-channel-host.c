@@ -150,6 +150,10 @@ int main(void)
  channel_reset(0,0);callback_count=0;callback_error=0;ri_channel_active_test=active_callback;assert(!ri_channel_test() && callback_count==1 && ri_channel.complete);
  channel_reset(0,0);callback_count=0;callback_error=EIO;ri_channel_active_test=active_callback;assert(ri_channel_test()==EIO && callback_count==1 && !ri_channel.connected && !ri_channel.defined && !ri_channel.active && !ri_channel.cleanup_error);
  channel_reset(0,0);ri_channel_active_test=uncertain_callback;assert(ri_channel_test()==ETIMEDOUT && ri_channel.uncertain && ri_channel.active && ri_channel.connected && channel_sends==3);
+ channel_reset(0,0);ri_channel_active_test=NULL;raw(0x14,0x10000000);assert(!ri_channel_test() && ri_channel.complete && ri_channel.initial_interrupts==0x10000000 && ri_channel.preflight_polls==2);
+ channel_reset(0,0);raw(0x14,0x04000000);assert(ri_channel_test()==EBUSY && !channel_sends && !ri_channel.attempted && ri_channel.initial_interrupts==0x04000000 && ri_channel.interrupts==0x04000000);
+ channel_reset(0,0);raw(0,3);assert(ri_channel_test()==EBUSY && !channel_sends && ri_channel.initial_cfg==3 && ri_channel.cfg==3);
+ channel_reset(0,0);raw(4,0x40f);assert(ri_channel_test()==EBUSY && !channel_sends && ri_channel.preflight_polls==8);
  ri_channel_active_test=NULL;
  puts("actual-code codec sink/connect activate/reconfigure/remove/disconnect and ACK ownership/failure tests passed");
  return 0;

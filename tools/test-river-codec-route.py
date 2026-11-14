@@ -21,6 +21,9 @@ with tempfile.TemporaryDirectory(prefix='river-codec-path-') as d:
  sections=['diff --git '+x for x in (repo/'xnu/patches/0318-river-prepare-afe-before-codec-channel.patch').read_text().split('diff --git ')[1:]]
  text=''.join(x for x in sections if x.splitlines()[0].split()[2] in ['a/bsd/dev/river_adsp_codec_route.h'])
  subprocess.run(['patch','--batch','--silent','--fuzz=0','-p1','-d',str(source)],input=text.encode(),check=True)
+ sections=['diff --git '+x for x in (repo/'xnu/patches/0319-river-ngd-post-afe-preflight-readbacks.patch').read_text().split('diff --git ')[1:]]
+ text=''.join(x for x in sections if x.splitlines()[0].split()[2]=='a/bsd/dev/river_adsp_codec_route.h')
+ subprocess.run(['patch','--batch','--silent','--fuzz=0','-p1','-d',str(source)],input=text.encode(),check=True)
  probe=(source/'bsd/dev/river_codec_probe.h').read_text().split('static int\nriver_codec_probe_sysctl',1)[0]
  clock=(source/'bsd/dev/river_codec_clock.h').read_text().split('static int\nriver_codec_clock_sysctl',1)[0]
  route=(source/'bsd/dev/river_adsp_codec_route.h').read_text().split('static int\nriver_adsp_codec_path_sysctl',1)[0]

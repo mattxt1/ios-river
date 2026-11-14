@@ -1,0 +1,80 @@
+diff --git a/bsd/dev/river_adsp_channel.h b/bsd/dev/river_adsp_channel.h
+--- a/bsd/dev/river_adsp_channel.h
++++ b/bsd/dev/river_adsp_channel.h
+@@ -6,19 +6,24 @@
+  bool attempted,connected,defined,active,uncertain,complete;
+  unsigned tid,commands,acks,failed_opcode,failed_tid,failed_status,cleanup_error;
+  uint32_t last_opcode,last_tid,last_ack,cfg,status,interrupts;
++ uint32_t hw_version,initial_cfg,initial_status,initial_int_en,initial_interrupts,initial_ie,initial_ve;
++ unsigned preflight_polls;
+ } ri_channel;
+ static char ri_channel_note[1536]="not requested; physical playback/capture pending";
+ static int
+ ri_channel_result(const char *phase,int error)
+ {
+  snprintf(ri_channel_note,sizeof(ri_channel_note),
+-  "phase=%s error=%d attempted=%u complete=%u connected=%u defined=%u active=%u uncertain=%u channel=144 codec_address=%#x codec_sink_port=0 sample_rate=48000 sample_bits=16 commands=%u acks=%u last_opcode=%#x last_tid=%#x last_ack=%#x failed_opcode=%#x failed_tid=%#x failed_status=%#x cleanup_error=%u cfg=%#x status=%#x interrupts=%#x dma=0 irq_enable=0 afe_started=%u codec_aif_route=callback_owned amp_unmuted=0",
++  "phase=%s error=%d attempted=%u complete=%u connected=%u defined=%u active=%u uncertain=%u channel=144 codec_address=%#x codec_sink_port=0 sample_rate=48000 sample_bits=16 commands=%u acks=%u last_opcode=%#x last_tid=%#x last_ack=%#x failed_opcode=%#x failed_tid=%#x failed_status=%#x cleanup_error=%u cfg=%#x status=%#x interrupts=%#x hw_version=%#x initial_cfg=%#x initial_status=%#x initial_int_en=%#x initial_interrupts=%#x initial_ie=%#x initial_ve=%#x preflight_polls=%u dma=0 irq_enable=0 afe_started=%u codec_aif_route=callback_owned amp_unmuted=0",
+   phase,error,ri_channel.attempted,ri_channel.complete,ri_channel.connected,
+   ri_channel.defined,ri_channel.active,ri_channel.uncertain,ri_ngd.codec_address,
+   ri_channel.commands,ri_channel.acks,ri_channel.last_opcode,ri_channel.last_tid,
+   ri_channel.last_ack,ri_channel.failed_opcode,ri_channel.failed_tid,
+   ri_channel.failed_status,ri_channel.cleanup_error,ri_channel.cfg,
+-  ri_channel.status,ri_channel.interrupts,ri_route.afe_started);
++  ri_channel.status,ri_channel.interrupts,ri_channel.hw_version,
++  ri_channel.initial_cfg,ri_channel.initial_status,ri_channel.initial_int_en,
++  ri_channel.initial_interrupts,ri_channel.initial_ie,ri_channel.initial_ve,
++  ri_channel.preflight_polls,ri_route.afe_started);
+  printf("RIVER CHANNEL: %s\n",ri_channel_note);return error;
+ }
+ static int
+@@ -78,8 +83,26 @@
+  vm_offset_t mmio=ml_io_map_unmappable(0x0c140000,0x4000,VM_WIMG_IO);
+  if(!mmio)return ri_channel_result("map",ENOMEM);
+  vm_offset_t base=mmio+0x1000;
+- if(!ri_ngd_live() || ri_rd(mmio,0)!=0x01050000 || ri_rd(base,0)!=1 ||
+-    ri_rd(base,0x10) || ri_rd(base,0x14) || !(ri_rd(base,4)&2) || (ri_rd(base,4)&1)) {
++ ri_channel.hw_version=ri_rd(mmio,0);
++ ri_channel.initial_cfg=ri_rd(base,0);ri_channel.initial_status=ri_rd(base,4);
++ ri_channel.initial_int_en=ri_rd(base,0x10);ri_channel.initial_interrupts=ri_rd(base,0x14);
++ ri_channel.initial_ie=ri_rd(base,0xf0);ri_channel.initial_ve=ri_rd(base,0x100);
++ /* AFE start may leave a documented IE/VE/reconfiguration notification.
++  * Never change CFG/IRQ_EN, consume an unsolicited RX frame, or clear an
++  * error to pass ownership. Only settle busy status and known W1C notices. */
++ bool ready=false;
++ for(unsigned i=0;i<8;i++) {
++  ri_channel.preflight_polls++;
++  ri_channel.cfg=ri_rd(base,0);ri_channel.status=ri_rd(base,4);ri_channel.interrupts=ri_rd(base,0x14);
++  if(!ri_ngd_live() || ri_channel.hw_version!=0x01050000 || ri_rd(mmio,0)!=ri_channel.hw_version ||
++     ri_channel.cfg!=1 || ri_rd(base,0x10) || !(ri_channel.status&2) ||
++     (ri_channel.interrupts&~0x11000000u))break;
++  if(ri_channel.interrupts) {
++   ri_wr(base,0x18,ri_channel.interrupts);ri_ngd_barrier();
++  } else if(!(ri_channel.status&1)) {ready=true;break;}
++  ri_wait(5);
++ }
++ if(!ready) {
+   ml_io_unmap(mmio,0x4000);return ri_channel_result("ownership",EBUSY);
+  }
+  ri_channel.attempted=true;ri_channel.tid=0x71;
+diff --git a/bsd/dev/river_adsp_codec_route.h b/bsd/dev/river_adsp_codec_route.h
+--- a/bsd/dev/river_adsp_codec_route.h
++++ b/bsd/dev/river_adsp_codec_route.h
+@@ -176,14 +176,15 @@
+   ri_channel.complete && ri_i2s_codec_restored && ri_i2s_amp_restored;
+  if(!error && !ri_codec_path.complete)error=EIO;
+  snprintf(ri_codec_path_note,sizeof(ri_codec_path_note),
+-  "phase=%s error=%d attempted=%u complete=%u route_seen=%u touched=%u route_restored=%u bad_reg=%#x port_map=%#x port_before=%#x port_live=%#x rate=%#x fll=%#x amp_irq=%#x clock_error=%d channel_error=%d channel_complete=%u connected=%u defined=%u active=%u uncertain=%u aif_restored=%u amp_restored=%u amp_locked=%u amp_mute_retained=%u amp_output_stage_test_policy=disabled active_route_pcm=%u dsp_samples_submitted=%u ios_backend=discarded capture=synthetic live_pcm={%s} last_native_clock={%s}",
++  "phase=%s error=%d attempted=%u complete=%u route_seen=%u touched=%u route_restored=%u bad_reg=%#x port_map=%#x port_before=%#x port_live=%#x rate=%#x fll=%#x amp_irq=%#x clock_error=%d channel_error=%d channel_complete=%u connected=%u defined=%u active=%u uncertain=%u aif_restored=%u amp_restored=%u amp_locked=%u amp_mute_retained=%u afe_started=%u dsp_cleanup_error=%d live_mapped=%u live_in_flight=%u amp_output_stage_test_policy=disabled active_route_pcm=%u dsp_samples_submitted=%u ios_backend=discarded capture=synthetic live_pcm={%s} last_native_clock={%s}",
+   ri_codec_path.complete?(with_pcm?"muted_codec_pcm_complete":"muted_codec_route_complete"):"muted_codec_route_stopped",error,
+   ri_codec_path.attempted,ri_codec_path.complete,ri_codec_path.seen,ri_codec_path.touched,
+   ri_codec_path.restored,ri_codec_path.bad_reg,ri_codec_path.port_map,ri_codec_path.port_before,
+   ri_codec_path.port_live,ri_codec_path.rate,ri_codec_path.fll,ri_codec_path.amp_irq,
+   ri_codec_path.clock_error,ri_codec_path.channel_error,ri_channel.complete,ri_channel.connected,
+   ri_channel.defined,ri_channel.active,ri_channel.uncertain,ri_i2s_codec_restored,
+-  ri_i2s_amp_restored,ri_i2s_amp_locked,ri_route.muted,with_pcm,
++  ri_i2s_amp_restored,ri_i2s_amp_locked,ri_route.muted,ri_route.afe_started,
++  ri_route.cleanup_error,ri_live_stream.mapped,ri_live_stream.in_flight,with_pcm,
+   ri_live_stream.submitted,ri_live_stream.note,ri_clock_note);
+  printf("RIVER CODEC PATH: %s\n",ri_codec_path_note);return error;
+ }
