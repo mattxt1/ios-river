@@ -18,6 +18,7 @@ with tempfile.TemporaryDirectory(prefix='river-adsp-route-') as directory:
  stream=stream.split('static int\nriver_adsp_stream_sysctl',1)[0].replace('__asm__ volatile("dmb sy" ::: "memory");','host_barrier();')
  stream_target=root/'source/bsd/dev/river_adsp_stream.h';stream_target.write_text(stream)
  subprocess.run(['patch','--batch','--silent','-p1','-d',str(root/'source')],input=(repo/'xnu/patches/0307-river-afe-reconfigure-before-pcm-start.patch').read_bytes(),check=True)
+ subprocess.run(['patch','--batch','--silent','-p1','-d',str(root/'source')],input=(repo/'xnu/patches/0308-river-combine-first-afe-start-with-pcm.patch').read_bytes(),check=True)
  (root/'route-actual.h').write_text(target.read_text())
  (root/'stream-actual.h').write_text(stream_target.read_text())
  binary=root/'route'

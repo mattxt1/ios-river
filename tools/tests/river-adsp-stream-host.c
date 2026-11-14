@@ -177,13 +177,14 @@ static void stream_reset(unsigned scenario)
  reset(scenario);memset(&ri_stream,0,sizeof(ri_stream));
  ri_pcm.physical=0x50000000;write_count=cleaned=barriers=0;
  assert(ri_route_config()==0 && ri_route.config_readback);
- assert(ri_route_test(true)==0);
+ assert(ri_route_test(false)==0);
+ assert(!ri_route.hot_attempted && ri_route.cold_attempted);
  commands=0;ri_pcm.transactions=0;
 }
 int main(void)
 {
  route_baseline_main();
- stream_reset(2);assert(!afe_config_live);assert(ri_stream_test()==0);
+ stream_reset(2);assert(afe_config_live);assert(ri_stream_test()==0);
  assert(ops[0]==0x10d92 && ops[1]==0x100ef && ops[2]==0x100f0 && ops[3]==0x100e5);
  assert(ri_stream.complete && ri_stream.completed==4 && ri_stream.submitted==4 && ri_stream.bytes_completed==16384);
  assert(!ri_stream.mapped && !ri_stream.in_flight && !ri_stream.running && !ri_route.afe_started && !ri_route.asm_open && !ri_route.adm_open);
@@ -202,6 +203,8 @@ int main(void)
  assert(!ri_pcm.poisoned && ri_stream.in_flight && ri_stream.mapped && !ri_route.asm_open && !ri_route.adm_open && !ri_route.afe_started);
  stream_reset(2);fail_opcode=0x10dab;timeout_failure=true;assert(ri_stream_test()==ETIMEDOUT && ri_pcm.poisoned && ri_stream.in_flight);
  stream_reset(2);fail_opcode=0x10daa;assert(ri_stream_test()==EREMOTE && !ri_stream.mapped && !ri_route.afe_started);
+ stream_reset(2);afe_config_live=false;assert(ri_stream_test()==0 && ri_stream.complete);
+ stream_reset(2);ri_route.cold_attempted=false;assert(ri_stream_test()==EBUSY && !ri_stream.attempted);
  stream_reset(2);fail_opcode=0x100e5;assert(ri_stream_test()==EREMOTE);
  assert(ri_stream.failed_opcode==0x100e5 && ri_stream.failed_status==7 && !ri_stream.mapped && !ri_route.afe_started && !ri_stream.submitted);
  stream_reset(2);fail_opcode=0x100ef;assert(ri_stream_test()==EREMOTE && !ri_stream.mapped && !ri_route.afe_started && !ri_route.configured);

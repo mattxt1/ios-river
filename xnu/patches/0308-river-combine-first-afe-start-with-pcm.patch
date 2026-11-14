@@ -1,0 +1,12 @@
+diff --git a/bsd/dev/river_adsp_stream.h b/bsd/dev/river_adsp_stream.h
+--- a/bsd/dev/river_adsp_stream.h
++++ b/bsd/dev/river_adsp_stream.h
+@@ -64,7 +64,7 @@
+ ri_stream_test(void)
+ {
+  if(ri_stream.attempted)return EALREADY;
+- if(!ri_route_ready() || !ri_route.config_readback || !ri_route.hot_attempted ||
++ if(!ri_route_ready() || !ri_route.config_readback || !ri_route.cold_attempted ||
+     ri_route.cleanup_error || ri_route.failed_opcode || !ri_route.asm_format || !ri_route.muted)return ri_stream_result("prerequisite",EBUSY);
+  ri_stream.attempted=true;
+  ri_route.failed_opcode=ri_route.failed_status=ri_route.cleanup_opcode=ri_route.cleanup_status=0;
