@@ -620,3 +620,56 @@ mute/output disable/locks afterward. Physical playback/capture remain pending.
 Wi-Fi0315 spinner join diagnostics preserved before reboot; current0316
 monitor is historical, no new UI join result. Keep Wi-Fi secondary.
 
+
+##0317 active-route PCM image ready (2026-11-14)
+
+0316 muted codec route PASSED with full restoration and user-confirmed
+post-test responsive iOS. Phone remains0316, amplifier muted, QMIpower/NGD
+retained, PCM mappings/streams and data channel closed. No retries this boot.
+0317 sourceb9fe8ea021eb3036f3ac9ee0b03184488acc1e9b committed before build.
+Same zeroPCM engine now accepts explicit state/session; original session4
+state/evidence remains intact. Separate permanent16KiB allocation/session5
+runs inside active SLIMbus/codec/AIF/FLL route through --codec-pcm. Requires
+prior PCM PASS and all existing gates. Physical pages checked disjoint from
+map-test and first stream. Each start reapplies AFESET/GET before START.
+Exact completion/address/handle checks and cleanup preserved. No tone/unmute.
+
+ADSP+codec locks retain ownership; speaker lock released only during APR
+engine and reacquired before SPI/amp checks/restoration. All amplifier I2C
+transfers retain existing QUP2 serialization. AFE mute policy keeps volume
+changes muted; legacy speaker tone helper now refuses while AFE owns mute.
+Recheck actual mute/AMP_EN0, FLL/ampPLL, mixer sources/status and active port
+after PCM. If mapping/inflight/poison/openDSP/cleanup ownership unresolved,
+retain NGD channel as uncertain until reboot; codec clocks/pins/data still
+restore and hardware mute remains. State/status report real AFE ownership.
+
+Actual-code ASan/UBSan tests passed original engine regressions plus separate
+session5 allocation/completion and timeout ownership preservation, actual
+codec callback lock handoff/restore (modeled APR), and actual channel retained
+ownership on callback uncertainty. Missing mixer-status and every ignored
+route write/restore fault regressions pass. Helper compiled/signed cleanly.
+Native incremental0317 exit0, exact four modified sources and new linked
+string verified. KDKROOT=/private/tmp/river-kdk-22G74-qq2pjbum/expanded/KDK.pkg/Payload.
+Ledger work/codec-pcm/incremental-provenance.json; prior0316 kernel preserved
+work/codec-route-fix/kernel-91e8fac.verified. Existing isolated incremental
+job work/build/river-3fc706c1db3d-TK5NtT; directoryname is not source identity.
+Image outputs/river-codec-pcm-b9fe8ea.img:26820608bytes,577cmdline,
+SHAef320c4243c5f8f867d6a7f0d1f68ba74b7a783c86a69cc5ee950bad07a94df4.
+Kernel SHAc858038ec1b4ee5a19a02173de746f5fffb7f37e3d6d0bc4f250c956b41acd31.
+Payload segments verified, native helperb9fe8ea and existing WiFireader.
+Fastboot readiness requested; no0317 boot yet. Temporary boot only/no flash.
+
+Next: verify productriver/hash, USBcapture work/codec-pcm/capture-boot.py,
+boot exact image, ask home responsiveness, inspect passive baseline via
+work/codec-pcm/passive-baseline.py, then run work/codec-pcm/run-device.py ONCE.
+Do not run --codec-route or --channel-test before --codec-pcm (same one-shot
+lifetime). Capture route/status and post-state/WiFi; ask post responsiveness.
+After active-route zeroPCM PASS: bounded quiet tone and real completion-driven
+iOS audio backend; physical microphone separate. Audible playback/capture pending.
+Wi-Fi fresh0315 spinner/no-error logs preserved before reboot. Associated4/
+result1 and DHCPACK but native interface rankNever/NWI absent/empty resolvers.
+No new0316 join; retained monitor history is not current association proof.
+No Wi-Fi override or code change in0317. Source audit still points toward
+native configd/IPConfiguration service lifetime after association; owner
+unresolved. Keep secondary, retain private diagnostics outside Git.
+
