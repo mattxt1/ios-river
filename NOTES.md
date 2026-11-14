@@ -5,7 +5,14 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0316 mixer-status correction ready (2026-11-14)
+## Active handoff:0316 temporarily booted; home check pending (2026-11-14)
+
+User confirmed fastboot ready. Exact0316 image SHA and productriver verified.
+Temporary fastboot boot accepted: transfer0.610s, boot0.216s; no flash.
+USB-only capture session91728,work/codec-route-fix/boot-91e8fac-usb.log.
+Home responsiveness asked; no active0316 controls run. Prior0315 Wi-Fi logs
+were captured in full before reboot; user confirmed post-audio responsive.
+Current phone0316; older0315 device-state paragraphs are historical.
 
 Source91e8fac1403fe251e8b5eda0623efbb31f974d62 committed before native build.
 Patch0316 handles digital mixer source bit15 x_STSn as live enable status,
@@ -22,8 +29,8 @@ Image outputs/river-codec-route-fix-91e8fac.img:26820608bytes,577cmdline,
 SHA56890ade85bcdf267747f95154b395534892e823f2366a9592d8dda5e028578f.
 Kernel SHA6641561cb1480523bd7f67eeae1719924dae72cca9e2c045ae4ddec194f9e8a1.
 Existing helperc305b28 unchanged; payload segments verified. Prior kernel
-preserved work/codec-route/kernel-c305b28.verified. Fastboot requested after
-Wi-Fi attempt; no0316 boot yet. User confirmed0315 post-test responsive.
+preserved work/codec-route/kernel-c305b28.verified. 0316 temporary boot accepted; see current state above.
+ User confirmed0315 post-test responsive.
 Fresh spinner/no-error Wi-Fi join logs captured successfully before reboot;
 state4/result1 and DHCPACK but native rankNever/NWI absent/empty resolvers.
 User notified capture complete; awaiting fastboot readiness.
