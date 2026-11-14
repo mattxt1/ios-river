@@ -268,3 +268,17 @@ startup. This bounds the new log window but supplies no entry timestamps or
 immediate native DNS snapshot. It spans reboot and does not prove working
 Internet or resolve the latest user report, checkmark then spinner.
 0306 retains the read-only reader for combined audio/Wi-Fi observations.
+
+##0306 same-boot associated follow-up (2026-11-14)
+
+0306 Wi-Fi follow-up now independently confirms state4/result1 (earlier
+baseline0/0). Native route dump contains en0 default route but no connected
+local-subnet/own-address route; configd still asserts interface rank3Never.
+NWI en0 and general IPv4 remain absent. Global SC DNS has ServerAddresses,
+but native dnsinfo has seven default resolvers with zero nameservers/A/AAAA
+and no scoped/service resolvers. Interface IPv4 and Link Active are present;
+no State service IPv4 entity appears in the enumerated native snapshot.
+Evidence work/pcm-stream/{wifi-followup,network-followup,dns-followup,
+wifi-monitor-followup}-98dcdb1.txt. This is a fresh same-boot associated
+snapshot, but the user's UI result is still pending. No workaround applied.
+Next image ready; fastboot requested after user's Wi-Fi attempt.

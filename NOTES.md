@@ -36,6 +36,19 @@ home confirmation, manual passive baseline, then run once
 work/pcm-restart/run-device.py. Never flash. Reboot before repeated controls.
 Physical playback, microphone capture and SLIMbus/Madera stream remain pending.
 
+
+0306 Wi-Fi follow-up now independently confirms state4/result1 (earlier
+baseline0/0). Native route dump contains en0 default route but no connected
+local-subnet/own-address route; configd still asserts interface rank3Never.
+NWI en0 and general IPv4 remain absent. Global SC DNS has ServerAddresses,
+but native dnsinfo has seven default resolvers with zero nameservers/A/AAAA
+and no scoped/service resolvers. Interface IPv4 and Link Active are present;
+no State service IPv4 entity appears in the enumerated native snapshot.
+Evidence work/pcm-stream/{wifi-followup,network-followup,dns-followup,
+wifi-monitor-followup}-98dcdb1.txt. This is a fresh same-boot associated
+snapshot, but the user's UI result is still pending. No workaround applied.
+Next image ready; fastboot requested after user's Wi-Fi attempt.
+
 ##0306 stopped cleanly at second AFE start (2026-11-14)
 
 User confirmed0306 home responsive. Passive baseline matched prior amplifier
