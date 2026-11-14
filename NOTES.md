@@ -5,7 +5,52 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0303 PCM map/unmap and ASM format passed on hardware (2026-11-13)
+## Active handoff:0303 hardware passed;0304 routing candidate building (2026-11-13)
+
+Kernel source3fc706c1db3d2dd8a57a3ef9454a13ea042b2cb6 adds0304;
+helper source3eee0a6a5da0439bd83a198b55d84b67cfeb152c adds a bounded
+read-only Wi-Fi monitor/hash reader and optional RiverFiles packaging.
+Build work/build/river-3fc706c1db3d-TK5NtT is running in the continuation
+workspace with the verified local KDK. No0304 image is packaged/booted yet.
+Current phone remains user-confirmed responsive on0303 after PCM/ASM success.
+No more0303 active commands are needed; its operations are one-shot.
+
+0304 batches three explicit operations after repeated0303 prerequisites:
+--afe-config sends source-defined mono48k/16-bit shared-channel144 config to
+SLIM0RX0x4000, then optionally GETs it. Exact GET status2/3 rejection remains
+separate from an accepted SET; it is not a positive readback. --adm-route
+opens ASM session2, sets stereo format, opens a mono/null-topology ADM COPP,
+maps the RX matrix, and closes ASM/COPP. --afe-route first verifies and
+retains amplifier mute, starts AFE, tests session3 routing, closes resources
+and stops AFE. No ASM RUN/WRITE, samples or microphone capture is included.
+These are incremental device-route tests, not a SLIMbus host-controller
+implementation. Physical streaming still needs QMI power/SLIMbus channel
+setup, codec routing and completion-driven PCM.
+
+Every resource flag clears only on successful exact teardown. Failed/NACKed
+cleanup remains reported; uncertain APR ownership poisons further controls.
+COPP0 is valid. Malformed/missing COPP ownership forces reboot. Mute is held
+until reboot, and normal volume updates enforce it without holding the
+speaker/QUP locks through APR waits. A failed mute read/write/readback blocks
+AFE start. No baseline restore/unmute is guessed after a hardware-facing test.
+New generic RX header/service/port/token/opcode diagnostics aid failure review.
+
+Actual-code sanitizer route tests pass for accepted config, exact/rejected
+GETs, format/open/map NACKs, malformed COPP, timeout/poison, failed COPP/AFE
+teardown, failed mute I/O and prerequisite/repeat gates. Complete0304 patch
+application, real speaker-helper failure/volume guard tests and PCM/SMD/APR
+regressions with0304 all pass. Updated arm64 iOS16 helper compiles Werror.
+Read-only Wi-Fi reader is compiled/signed; RiverFiles append/replace/default
+preservation and duplicate-rejection tests pass. Its three fixed targets are
+the installed helper hash, org.river.net job plist and bounded monitor log;
+no DHCP, SC, routes, resolvers or credentials are changed.
+
+Boot/test runner work/pcm-routing/run-device.py is PREPARED, not executed.
+After new build/package validation, ask for fastboot readiness, temporary boot,
+then user responsive-home confirmation and inspect passive baseline. Run once,
+stop dependent controls on uncertain resources. Preserve private captures.
+
+##0303 PCM map/unmap and ASM format passed on hardware (2026-11-13)
 
 User confirmed responsive home before the gated sequence and again after all
 tests. Baseline, exact stock metadata/staging/handshake/start and passive CID6

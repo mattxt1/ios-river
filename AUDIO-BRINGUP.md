@@ -4,6 +4,14 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+## AFE/ADM candidate0304 building
+
+0303 hardware mapping/session prerequisites passed.0304 batches AFE port
+configuration, inactive ADM RX matrix mapping/teardown, and a muted AFE
+start/routing/stop sequence. Host sanitizer/regression tests pass; kernel
+build and device results are pending. Amplifier mute is retained until reboot
+for the hardware-facing test. No sample streaming/capture backend is added.
+
 ## Shared PCM map/unmap and ASM setup verified on0303
 
 The responsive0303 boot passed exact retained16KiB-page ASM mapping and

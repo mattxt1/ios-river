@@ -220,3 +220,13 @@ investigating native configuration after keyed association; it does not
 prove which configd policy/cleanup caused the failure. Captures stay private.
 The0303 image passes full build and packaging, batching audio prerequisite
 tests with existing Wi-Fi patches; it introduces no rank/DNS workaround.
+
+
+## Bounded monitor reader prepared alongside0304
+
+Reading the existing monitor log through a bounded SSH shell command timed
+out without output. No daemon was restarted. A small read-only native helper
+now reports the installed river-net hash, fixed job plist and last64KiB of
+its log, with stage markers and regular-file/size checks. It is included in
+the0304 image without another kernel build. Execution/evidence remain pending;
+no configuration or rank workaround is added.
