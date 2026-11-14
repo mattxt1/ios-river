@@ -5,7 +5,7 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0320 corrected48k channel image ready (2026-11-14)
+## Active handoff:0320 temporarily booted; home check pending (2026-11-14)
 
 User confirmed0319 post-sequence iOS responsive. Current phone0319; prior
 standalone PCM4/4/AFEstart passed; codec sink reconfiguration NACK0x0a, then
@@ -36,7 +36,10 @@ no duplicate build. Do not mistake host file stalls for phone failure.
 Kernel SHA5ca2143ef2e62fc6870a39516c7232d029ccddf2f2b87bfb297bee7e1d1b8f69.
 Image outputs/river-codec-pcm-rate-b4c6d67.img:26890240bytes,577cmdline,
 SHAfc239223856132fdec69295bd73812031ad596c1e789d44d34cbf0f932674c20.
-Fastboot requested; no0320 boot yet. Temporary boot only; never flash.
+User confirmed fastboot ready. Exact image hash/productriver verified.
+Temporary transfer OKAY0.613s, boot OKAY0.216s; no flash.
+Current phone0320; home responsiveness asked, no active0320 controls run.
+USB-only capture session20839:work/codec-pcm-rate/boot-b4c6d67-usb.log.
 
 Wi-Fi secondary in SAME image: commitc88a84269df28d8201bc5ce8f9b7c8fd8bd0280b
 adds bounded read-only getifaddrs observations of actual kernel en0/ue0
