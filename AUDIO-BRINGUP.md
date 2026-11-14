@@ -599,3 +599,24 @@ removed/disconnected, mute retained. No active-route DSPPCM submitted.
 Cirrus DS1085F2 Table4-7 bit15 is x_STSn enable status;0316 corrects only
 status handling and adds explicit mixer-enabled observation and host tests.
 Physical playback and capture remain pending. User confirmed post-test iOS responsive.
+
+##0316 codec route PASS and responsive (2026-11-14)
+
+User confirmed home and post-sequence iOS responsive. Full prerequisite
+DSP/CORE/map/ASM/config/ADM/zeroPCM4/4/QMI/enum sequence passed again.
+--codec-route: phase=muted_codec_route_complete error0 complete1 route_seen1,
+route_restored1 bad_reg0 port_map0x100 port_before/live1 rate0 FLL0x100,
+amp_irq0x2000000a,clock/channel_error0,channel_complete1. Both mixers enabled;
+AIF/amp/clock/pin state restored. Channel6/6ACKs, connected/defined/active0,
+uncertain0,cleanup_error0. Amp mute held. No samples submitted while codec
+route was active. Current phone0316, QMIpower/NGD retained; PCM closed/unmapped,
+channel removed/disconnected. Do not retry active controls. Evidence private
+work/codec-route-fix/*-91e8fac.txt. Initial passive SSH timeout was followed
+by complete confirmed-baseline statuses and full passing sequence.
+Next0317: separate session5/permanent PCM state using shared tested engine,
+run zeroPCM while verified channel/codec/AIF/clock route is active. Release
+speaker lock around APR waits while retaining ADSP/codec ownership; recheck
+mute/output disable/locks afterward. Physical playback/capture remain pending.
+Wi-Fi0315 spinner join diagnostics preserved before reboot; current0316
+monitor is historical, no new UI join result. Keep Wi-Fi secondary.
+
