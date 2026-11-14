@@ -5,7 +5,73 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff: APR CORE exchange passed; shared PCM buffers next (2026-11-13)
+## Active handoff: shared PCM/ASM/AFE candidate building (2026-11-13)
+
+Continuation workspace:
+/Users/matttyson/Documents/Codex/2026-11-13/apr-communication-now-passes-the-dsp
+Existing source checkout remains this repository. Kernel source commit
+3ca804be7f578c552c9cae2ba24ef6f35bd30a68 adds0303. User priorities: audio
+first, batch compatible tests into each build/boot, Wi-Fi secondary.
+
+0303 adds serialized bounded APR transactions after the proven one-shot CORE
+exchange. Exact service/domain/port/token/opcode matching, V0/V1 declared
+headers, ring bounds, bounded unrelated notification consumption and separate
+map-handle responses are checked. The channel is not reopened or reset. An
+uncertain transaction after TX publication poisons this dispatcher until
+reboot. Exact basic NACKs are reported separately. This is a prerequisite test
+transport, not a streaming RX worker or completion-driven physical backend.
+
+--pcm-map allocates a dedicated permanent zeroed contiguous XNU page,
+validates its exact physical range and4KiB subdivisions, cleans cache and
+requests ASM map(pool3/property0/one exact region), then unmaps only the
+matching nonzero handle. The page remains retained for the whole boot even
+on a successful unmap. No firmware/TZ metadata buffer is reused. Failure or
+uncertain ownership is not permission to free/reuse a page or guess a handle.
+--asm-test requires verified map/unmap and tests session1/stream1
+OPEN_WRITE_V3 -> signed stereo48kHz/16-bit format -> CLOSE. It issues no RUN,
+WRITE or hardware route. A format NACK still attempts CLOSE; uncertainty
+blocks further commands. --afe-probe performs only in-band GET_PARAM_V2 for
+SLIMbus0RX(0x4000); an unconfigured port may reject it. No AFE port starts,
+ADM route, SLIMbus channel activation or codec register changes are included.
+Each operation is one-shot per boot; --pcm-status is passive.
+
+Actual-code ASan/UBSan tests pass: exact map fields/handle/unmap, separate
+ACK/handle, extended headers, wrong ports/services/tokens/opcodes, malformed
+responses, timeout, ACK without handle, NACK, failed unmap, invalid handle,
+ASM format NACK followed by CLOSE, prerequisite rejection and wrapped TX/RX.
+The original APR tests also run and pass. Updated helper builds arm64 iOS16
+with Wall/Wextra/Werror and ad-hoc signing. No new commands have run on device.
+
+Full isolated kernel build in progress:
+work/build/river-3ca804be7f57-SvUHwO (under continuation workspace).
+Original KDK/worktree metadata were iCloud-offloaded. A standalone minimal
+build checkout uses the same committed tree and original object store. Exact
+KDK22G74 downloaded anew, verified SHA256
+29866842eef039812888daea4176ce493be153b0d6d1b88f90753d69ea51b7d4
+and Apple Software package signature, expanded locally without installation
+at work/pcm-mapping/kdk-local/KDK.pkg/Payload. Original blocked build resumed
+when hydration finished; its duplicate LxsjE0 process tree was explicitly
+stopped. Use SvUHwO only. No new image has been packaged or booted yet.
+
+Read-only device check still returns the exact successful CORE state1 on
+1334e8c. Passive Wi-Fi route/SC/DNS snapshot shows configd Never on en0, no
+en0 IPv4 routes/NWI state or usable general resolver on this current boot.
+This snapshot is not a joined-state regression test. Kernel logs show scans
+continuing to refresh. The scalar Wi-Fi state helper did not complete within
+20seconds; shell-only SSH, passive APR and kernel-log reads do work. Do not
+call it an SSH outage or assume a demonstrated lock defect. No network/rank,
+route, resolver, credentials or preferences changes were made.
+
+Stock routing evidence was retrieved for the next stage: River's exact audio
+overlay configures Madera SLIMbus elemental address00:00:60:63:fa:01 and
+Cirrus playback AFE port16384. Stock msm8952-slimbus.c uses RX channels144/145
+and TX128+ for slim1; machine DAI code couples Madera AIF1 to CS35L41 at
+48kHz/stereo16-bit with1.536MHz BCLK. Physical path still needs ADM device
+open/matrix mapping, AFE configuration/start, SLIMbus enumeration/channel
+activation, codec routing and completion-driven samples. Capture remains
+synthetic; playback discarded. Do not claim physical audio from these tests.
+
+## Prior handoff: APR CORE exchange passed; shared PCM buffers next (2026-11-13)
 
 The user confirmed responsive home on1334e8c. Baseline, exact metadata,
 17MiB staging, handshake, ADSP startup and pre-query closed/empty CID6 check

@@ -192,3 +192,16 @@ The user now sees the usual target under My Networks, confirming the refreshed d
 Source inspection finds no demonstrated cross-generation PMK/SNonce carryover: each worker attempt clears WPA state and copies the current request PMK; unchanged ANonce reuses the same SNonce/PTK, lower replay counters for that ANonce are rejected, and M2 echoes the received replay. A new ANonce before key installation derives fresh SNonce/PTK. The existing comment saying only identical nonce/replay is accepted is stricter than the implementation, which allows an increased replay counter and a new ANonce before keys. The captured logs contain no nonce/replay-change metadata, so the first failure cannot be attributed to that policy. DMA completion alone is not an AP acknowledgment or proof that the AP accepted M2's MIC. Wrong credentials, packet delivery and AP handshake behavior remain hypotheses; no request for secrets or unsupported explanation is warranted.
 
 The standard DL event payload remains source-correct: exact event-data offset/size, interface family/base-name/unit, worker delivery outside locks and success-based link readiness. Included code and absence of a logged event error do not independently prove native consumers completed configuration or cleared their rank policy. No further patch is justified by these captures; review of the existing helper's process/log and native configuration owner remains the next bounded evidence path.
+
+
+## Audio continuation passive snapshot on1334e8c
+
+The next candidate0303 batches audio mapping/session/AFE tests. No additional
+Wi-Fi patch is justified by the passive current-boot snapshot: configd still
+owns en0 Never, and no en0 IPv4 routes/NWI/general resolver are present, but
+this is not a confirmed joined-state test. Retained kernel logs show refreshed
+scans. A bounded scalar state helper timed out while shell-only SSH, APR
+status and kernel-log reads worked; no specific kernel lock defect is proven.
+Evidence is private under the2026-11-13 continuation work/pcm-mapping folder.
+No rank, resolver, route or credentials workaround was applied. Wi-Fi remains
+secondary to audio, with native primary election/DNS still unresolved.

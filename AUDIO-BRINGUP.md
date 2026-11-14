@@ -4,6 +4,16 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+## Shared PCM/ASM/AFE prerequisite candidate0303
+
+Source3ca804be adds dedicated retained-page ASM map/unmap, an ASM session
+open/PCM-format/close test, and an AFE SLIMbus0RX read-only parameter query.
+All run explicitly after the successful CORE query and are batched into one
+kernel candidate. Host sanitizer tests pass; full build/device testing is
+pending. No actual PCM buffer submission, ADM route, AFE port start,
+SLIMbus activation, codec stream route or physical microphone capture exists
+yet. See the active NOTES.md handoff for exact commands and ownership rules.
+
 ## Attenuation correction verified (2026-11-13)
 
 Patch0293 fixes the runtime CS35L41 volume helper before physical playback.
