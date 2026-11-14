@@ -11,7 +11,7 @@ struct ri_adsp_transport_records {struct ri_adsp_record table[2],info[64],fifo[6
 static struct {bool complete;} ri_stream;
 static struct {bool muted;} ri_route;
 static struct {bool ready,authenticated;} ri_adsp_start;
-static uint8_t mem[0x100000],ipc_mem[0x4000];
+static uint8_t mem[0x100000],ipc_mem[0x4000],ngd_mem[0x4000];
 static vm_offset_t river_smd_smem;
 static unsigned scenario,waits,tx_count,flow_acks,unmaps;
 static bool route_ready;
@@ -22,8 +22,8 @@ static bool ri_adsp_transport_collect(vm_offset_t p,struct ri_adsp_transport_rec
 static bool ri_apr_dsp_ready(vm_offset_t p){return p==river_smd_smem;}
 static bool ri_route_ready(void){return route_ready;}
 #define VM_WIMG_IO 1
-static vm_offset_t ml_io_map_unmappable(unsigned p,unsigned n,unsigned attr){assert(p==0xb010000 && n==0x4000 && attr==1);return scenario==2?0:(vm_offset_t)ipc_mem;}
-static void ml_io_unmap(vm_offset_t p,unsigned n){assert(p==(vm_offset_t)ipc_mem && n==0x4000);unmaps++;}
+static vm_offset_t ml_io_map_unmappable(unsigned p,unsigned n,unsigned attr){assert((p==0xb010000 || p==0xc140000) && n==0x4000 && attr==1);if(p==0xc140000)return scenario==15?0:(vm_offset_t)ngd_mem;return scenario==2?0:(vm_offset_t)ipc_mem;}
+static void ml_io_unmap(vm_offset_t p,unsigned n){assert((p==(vm_offset_t)ipc_mem || p==(vm_offset_t)ngd_mem) && n==0x4000);unmaps++;}
 static void ri_apr_write8(vm_offset_t p,uint8_t v){*(uint8_t*)p=v;}
 static void ri_apr_ack_flags(const struct ri_apr_channel *c){for(unsigned i=28;i<=30;i++)ri_apr_write8(c->info+i,0);}
 static bool ri_apr_indices(const struct ri_apr_channel *c){uint32_t a=ri_rd(c->info,16),b=ri_rd(c->info,12),d=ri_rd(c->info,36),e=ri_rd(c->info,32);return (a|b|d|e)<8192 && !((a|b|d|e)&3);}
@@ -71,6 +71,7 @@ static void response_to_tx(const uint32_t *f)
 }
 static void reset(unsigned s)
 {
+ memset(ngd_mem,0,sizeof(ngd_mem));raw((vm_offset_t)ngd_mem,0,0x10000);raw((vm_offset_t)ngd_mem,0x1000,1);raw((vm_offset_t)ngd_mem,0x1004,2);
  memset(mem,0,sizeof(mem));memset(&ri_slim,0,sizeof(ri_slim));memset(&ri_slim_channel,0,sizeof(ri_slim_channel));
  scenario=s;waits=tx_count=flow_acks=unmaps=0;route_ready=true;
  river_smd_smem=(vm_offset_t)mem;ri_stream.complete=ri_route.muted=ri_adsp_start.ready=ri_adsp_start.authenticated=true;
@@ -105,6 +106,12 @@ int main(void)
  reset(0);raw(river_smd_smem,0x86300+64+24,0x101);assert(ri_slim_discover()==EBUSY);
  reset(0);assert(ri_slim_discover()==0);unsigned offset=8180;raw(ri_slim_channel.info,16,offset);raw(ri_slim_channel.info,12,offset);raw(ri_slim_channel.info,36,offset);raw(ri_slim_channel.info,32,offset);assert(ri_slim_power()==0 && ri_slim.active);
  reset(0);assert(ri_slim_discover()==0);ri_slim.service=false;assert(ri_slim_power()==EBUSY && !ri_slim.power_attempted);
+ reset(0);assert(ri_slim_ngd_snapshot()==EBUSY && !ri_slim.ngd_attempted);
+ reset(0);assert(!ri_slim_discover() && !ri_slim_power());assert(ri_slim_ngd_snapshot()==0 && ri_slim.ngd_read && ri_slim.ngd_offset==0x1000 && ri_slim.ngd_cfg==1 && ri_slim.ngd_status==2);assert(ri_slim_ngd_snapshot()==EALREADY);
+ reset(0);assert(!ri_slim_discover() && !ri_slim_power());raw((vm_offset_t)ngd_mem,0,0);assert(!ri_slim_ngd_snapshot() && ri_slim.ngd_offset==0x800);
+ reset(0);assert(!ri_slim_discover() && !ri_slim_power());raw((vm_offset_t)ngd_mem,0,0xffffffff);assert(ri_slim_ngd_snapshot()==EIO && !ri_slim.ngd_read);
+ reset(15);assert(!ri_slim_discover() && !ri_slim_power());assert(ri_slim_ngd_snapshot()==ENOMEM && !ri_slim.ngd_attempted);
+ reset(0);assert(!ri_slim_discover() && !ri_slim_power());ri_slim.uncertain=true;assert(ri_slim_ngd_snapshot()==EBUSY && !ri_slim.ngd_attempted);
  puts("actual-code IPCRTR HELLO/service, QMI select/power, flow ACK, wrap and failure tests passed");
  return 0;
 }

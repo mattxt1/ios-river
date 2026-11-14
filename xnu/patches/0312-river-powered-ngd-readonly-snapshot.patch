@@ -1,0 +1,81 @@
+diff --git a/bsd/dev/river_adsp_slim.h b/bsd/dev/river_adsp_slim.h
+--- a/bsd/dev/river_adsp_slim.h
++++ b/bsd/dev/river_adsp_slim.h
+@@ -4,7 +4,8 @@
+  * codec routing or unmute. ri_adsp_lock owns CID2; no peer index resets. */
+ static struct {
+  bool attempted,owned,opened,hello,service,power_attempted,selected,active,uncertain;
+- bool close_requested,close_observed;
++ bool close_requested,close_observed,ngd_attempted,ngd_read;
++ uint32_t hw_version,ngd_offset,ngd_cfg,ngd_status,ngd_int_en,ngd_int_stat,ngd_ie,ngd_ve;
+  uint32_t info_offset,fifo_offset,peer,node,port,versions,capability;
+  uint32_t seen_instance,seen_node,seen_port,last_type,last_source,last_destination,last_size;
+  uint32_t qmi_message,qmi_txn,qmi_result,qmi_error;
+@@ -17,7 +18,7 @@
+ ri_slim_result(const char *phase,int error)
+ {
+  snprintf(ri_slim_note,sizeof(ri_slim_note),
+-  "phase=%s error=%d attempted=%u owned=%u opened=%u cid=2 info=%#x fifo=%#x hello=%u peer=%u versions=%#x capability=%#x service=%u service_id=0x301 instance=1 node=%u port=%u seen_instance=%#x seen_node=%u seen_port=%u power_attempted=%u selected=%u power_active_retained=%u uncertain=%u qmi_message=%#x qmi_txn=%u qmi_result=%u qmi_error=%u frames=%u servers=%u tx_bytes=%u rx_bytes=%u open_polls=%u rx_polls=%u last_type=%u last_source=%u last_destination=%u last_size=%u last_source_port=%#x last_destination_port=%#x last_flags=%#x last_control=%#x,%#x,%#x,%#x,%#x close_requested=%u close_observed=%u mmio_accessed=0 codec_stream=0 amp_unmuted=0",
++  "phase=%s error=%d attempted=%u owned=%u opened=%u cid=2 info=%#x fifo=%#x hello=%u peer=%u versions=%#x capability=%#x service=%u service_id=0x301 instance=1 node=%u port=%u seen_instance=%#x seen_node=%u seen_port=%u power_attempted=%u selected=%u power_active_retained=%u uncertain=%u qmi_message=%#x qmi_txn=%u qmi_result=%u qmi_error=%u frames=%u servers=%u tx_bytes=%u rx_bytes=%u open_polls=%u rx_polls=%u last_type=%u last_source=%u last_destination=%u last_size=%u last_source_port=%#x last_destination_port=%#x last_flags=%#x last_control=%#x,%#x,%#x,%#x,%#x close_requested=%u close_observed=%u mmio_accessed=%u hw_version=%#x ngd_offset=%#x ngd_cfg=%#x ngd_status=%#x ngd_int_en=%#x ngd_int_stat=%#x ngd_ie=%#x ngd_ve=%#x codec_stream=0 amp_unmuted=0",
+   phase,error,ri_slim.attempted,ri_slim.owned,ri_slim.opened,ri_slim.info_offset,
+   ri_slim.fifo_offset,ri_slim.hello,ri_slim.peer,ri_slim.versions,ri_slim.capability,
+   ri_slim.service,ri_slim.node,ri_slim.port,ri_slim.seen_instance,ri_slim.seen_node,
+@@ -27,7 +28,9 @@
+   ri_slim.rx_polls,ri_slim.last_type,ri_slim.last_source,ri_slim.last_destination,
+   ri_slim.last_size,ri_slim.last_source_port,ri_slim.last_destination_port,ri_slim.last_flags,
+   ri_slim.last_control[0],ri_slim.last_control[1],ri_slim.last_control[2],ri_slim.last_control[3],
+-  ri_slim.last_control[4],ri_slim.close_requested,ri_slim.close_observed);
++  ri_slim.last_control[4],ri_slim.close_requested,ri_slim.close_observed,
++  ri_slim.ngd_attempted,ri_slim.hw_version,ri_slim.ngd_offset,ri_slim.ngd_cfg,
++  ri_slim.ngd_status,ri_slim.ngd_int_en,ri_slim.ngd_int_stat,ri_slim.ngd_ie,ri_slim.ngd_ve);
+  printf("RIVER SLIM: %s\n",ri_slim_note);return error;
+ }
+ static bool
+@@ -269,13 +272,45 @@
+  if(error && error!=EREMOTE)ri_slim.uncertain=true;
+  return ri_slim_result(phase,error);
+ }
++/* Stock ngd_slim_power_up reads base version then NGD status immediately
++ * after an acknowledged QMI ACTIVE response. Snapshot only; no RX consumption,
++ * interrupt clearing, reset, DMA/BAM setup, or controller configuration. */
++static int
++ri_slim_ngd_snapshot(void)
++{
++ if(ri_slim.ngd_attempted)return EALREADY;
++ if(!ri_slim.active || !ri_slim.selected || !ri_slim_live() ||
++    !ri_stream.complete || !ri_route_ready() || !ri_route.muted)
++  return ri_slim_result("ngd_prerequisite",EBUSY);
++ vm_offset_t mmio=ml_io_map_unmappable(0x0c140000,0x4000,VM_WIMG_IO);
++ if(!mmio)return ri_slim_result("ngd_map",ENOMEM);
++ if(!ri_slim_live() || !ri_slim.active || !ri_route_ready()) {
++  ml_io_unmap(mmio,0x4000);return ri_slim_result("ngd_recheck",EBUSY);
++ }
++ ri_slim.ngd_attempted=true;
++ ri_slim.hw_version=ri_rd(mmio,0);
++ __asm__ volatile("dmb sy" ::: "memory");
++ int error=0;
++ if(ri_slim.hw_version==0xffffffff || ri_rd(mmio,0)!=ri_slim.hw_version)error=EIO;
++ else {
++  /* Stock cell-index1: upper16 version zero uses V1 offset0x800,
++   * otherwise V2 offset0x1000. Both lie within the owned mapping. */
++  unsigned offset=(ri_slim.hw_version>>16)?0x1000:0x800;
++  ri_slim.ngd_offset=offset;ri_slim.ngd_cfg=ri_rd(mmio,offset);
++  ri_slim.ngd_status=ri_rd(mmio,offset+4);ri_slim.ngd_int_en=ri_rd(mmio,offset+0x10);
++  ri_slim.ngd_int_stat=ri_rd(mmio,offset+0x14);ri_slim.ngd_ie=ri_rd(mmio,offset+0xf0);
++  ri_slim.ngd_ve=ri_rd(mmio,offset+0x100);ri_slim.ngd_read=true;
++ }
++ ml_io_unmap(mmio,0x4000);
++ return ri_slim_result(error?"ngd_version_invalid":"ngd_readonly_complete",error);
++}
+ static int
+ river_adsp_slim_sysctl SYSCTL_HANDLER_ARGS
+ {
+  int value=0,error=sysctl_handle_int(oidp,&value,0,req);
+  if(error || !req->newptr)return error;
+- if(value!=1 && value!=2)return EINVAL;
+- lck_mtx_lock(&ri_adsp_lock);error=value==1?ri_slim_discover():ri_slim_power();lck_mtx_unlock(&ri_adsp_lock);return error;
++ if(value<1 || value>3)return EINVAL;
++ lck_mtx_lock(&ri_adsp_lock);error=value==1?ri_slim_discover():value==2?ri_slim_power():ri_slim_ngd_snapshot();lck_mtx_unlock(&ri_adsp_lock);return error;
+ }
+ static int
+ river_adsp_slim_status_sysctl SYSCTL_HANDLER_ARGS
