@@ -31,7 +31,11 @@ outside sandbox and exited0. See work/pcm-stream/incremental-provenance.json.
 New kernel SHA44a2e945a00b4ca6b7658cb40dd904ec82482d7c3009231ed37155d2f85fd5ec.
 Verified outputs/river-pcm-stream-98dcdb1.img is26,802,176bytes/577cmdline,
 SHA3b28bb3e9e62321e2db20bf7ba6095204d9f808a76eda92844c33dcca394a359.
-Temporary boot only. Fastboot readiness requested; no0306 hardware test yet.
+User confirmed fastboot readiness. Productriver and exact image SHA verified.
+Temporary fastboot boot transfer OKAY0.609s, boot OKAY0.216s; no flash.
+Current phone has accepted0306. Responsive-home confirmation is pending;
+no DSP or PCM controls have run. USB-only capture session4071 writes
+work/pcm-stream/boot-98dcdb1-usb.log.
 After responsive-home confirmation inspect passive baseline and run
 work/pcm-stream/run-device.py once; exact successful clean routes gate PCM.
 
