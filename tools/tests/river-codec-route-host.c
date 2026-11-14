@@ -109,6 +109,8 @@ static void ri_wr(vm_offset_t p, unsigned off, uint32_t v) {
      if(((reg==0x1710||reg==0x1714)&&!(value&0x1ff)) || (reg==0x500&&(value&0x40)) || (reg==0x101&&(value&0x40)))
       assert(amp_quiet());
      if (reg == 0x172 && (value & 0x8000)) active_n = value & 0x3ff;
+     /* Hardware sets read-only x_STSn when a source is selected. */
+     if(reg>=0x700 && reg<=0x70e && !(reg&1))value=(value&0x7fff)|((value&255)&&mode!=52?0x8000:0);
      regs[reg] = reg == 0x172 && mode != 26 ? value & 0x7fff : value;
     }
    } else assert(tx[0] == 0x80 && tx[6] == 0 && tx[7] == 0);
@@ -314,6 +316,7 @@ int main(void)
  check_restore();assert(!memcmp(amp,amp_initial,sizeof(amp)) && !codec_held && !speaker_held && ri_channel.complete);
  assert(ri_codec_path_run()==EALREADY);
  unsigned total_writes=writes;
+ path_reset(52);assert(ri_codec_path_run()==ETIMEDOUT && !ri_codec_path.complete && ri_codec_path.restored);check_restore();
  path_reset(50);assert(ri_codec_path_run()==ENXIO && !ri_codec_path.complete && ri_codec_path.restored);check_restore();
  path_reset(0);regs[0x5e5]=8;memcpy(initial,regs,sizeof(regs));assert(ri_codec_path_run()==EBUSY && !ri_codec_path.touched && !writes && !amp_writes);check_pins();assert(!memcmp(regs,initial,sizeof(regs)));
  path_reset(0);regs[0x5d2]=1;memcpy(initial,regs,sizeof(regs));assert(ri_codec_path_run()==EBUSY && !writes && !amp_writes);check_pins();assert(!memcmp(regs,initial,sizeof(regs)));

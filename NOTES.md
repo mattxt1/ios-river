@@ -5,7 +5,34 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0315 muted codec route image ready (2026-11-14)
+## Active handoff:0315 mixer status mismatch, clean restoration (2026-11-14)
+
+User replied ready to responsive-home question; full gated sequence ran once.
+DSP/CORE/map/ASM/config/ADM/zeroPCM all passed;4 completions/16384bytes,
+full teardown/unmap. QMI/discovery/power/enum/channel activation all passed.
+--codec-route stopped error5 at source register0x700: write0x0038 read0x8038.
+Both FLL and ampPLL locked. route_seen0,touched1,route_restored1,
+aif_restored1,amp_restored1,amp_mute_retained1; clocks and pins restored.
+All six channel ACKs passed including cleanup, connected/defined/active0,
+uncertain0,cleanup_error0. No samples submitted while codec route active.
+Current phone0315; do not repeat one-shots. Post-test responsiveness asked,
+awaiting reply. Native evidence work/codec-route/*-c305b28.txt.
+Initial combined passive SSH timed out after2 statuses; subsequent separate
+passive statuses and full active sequence succeeded; no phone-hang inference.
+
+Cirrus CS47L35 DS1085F2 Table4-7 p43 defines bit15 x_STSn as live mixer
+input-enabled status; source remains low8bits. Thus exact fullword compare
+incorrectly rejected enabled mixer. Preparing0316 to exclude live bit15 from
+configuration readback/snapshots/restoration, require both mixer enable
+statuses separately within bounded observation, and model hardware status
+in actual-code host tests. Include GP10_LVL bit15 in existing GPIO readback
+mask (GP9/11 already handled). No change to route, mute, channel or PCM policy.
+Primary reference https://statics.cirrus.com/pubs/proDatasheet/CS47L35_F2.pdf.
+Wi-Fi reader completed; retained log includes historical associated/DHCP/
+publication entries, not sufficient to claim association on current boot.
+Native current scalar/config/DNS follow-up pending while audio rebuild runs.
+
+##0315 muted codec route image ready (2026-11-14)
 
 0314 channel lifetime passed with clean teardown; user confirmed iOS STILL
 RESPONSIVE afterward. Phone remains0314; do not repeat one-shot controls.
