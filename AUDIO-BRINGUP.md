@@ -4,6 +4,13 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+##0313 capability exchange and Madera logical address verified
+
+The polled controller exchanged capabilities and queried the exact codec
+address successfully: Madera logical0x8a. No DMA, IRQ enable or data-channel
+routing. PCM/QMI passed again; user confirmed responsive iOS. Next is codec
+sink/channel activation and the remaining codec/AIF physical route.
+
 ##0313 controller capability/codec address candidate ready
 
 The verified next image batches polled NGD enable, master capability,

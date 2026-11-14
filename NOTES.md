@@ -5,7 +5,27 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0313 polled capability/codec address image ready (2026-11-14)
+## Active handoff:0313 controller capability and codec address PASS (2026-11-14)
+
+User confirmed0313 home and post-test iOS STILL RESPONSIVE. All previous
+PCM/QMI/readback stages passed. --ngd-enumerate passed source-defined
+polled enable/capability/report/query: phase=codec_address_verified error0,
+master_capability1,satellite_reported1, exact Madera elemental address reply
+returned logical0x8a, no uncertainty. CFG1/status0x1a40e, INT_STAT0,
+IE0x10000/VE0, RX2/TX2,polls6, no DMA/message queues/IRQ enable/data channels.
+Amp remains muted, PCM resources/mapping closed. Controller and QMI power
+intentionally retained until reboot for continuation. Do not repeat controls.
+Evidence work/slim-enumerate/{baseline,metadata,stage,handshake,start,
+pre-query,core,map,asm,afe,post-query,afe-config,adm-route,pcm-silence,
+post-stream,slim-discover,slim-power,slim-ngd,ngd-enumerate,ngd-status,
+post-slim,wifi-monitor}-6f78bfc.txt. Native --slim-status remains its last
+read-only snapshot; --ngd-status records current controller experiment.
+Next source-defined stage: mono48k/16-bit shared channel144, codec sink
+port0, acknowledged connection/define-activate/reconfigure and teardown.
+No physical data stream, AIF routing, audible playback or microphone capture
+yet. Wi-Fi remains secondary; no new UI success or override applied.
+
+##0313 polled capability/codec address image ready (2026-11-14)
 
 0312 passed PCM, QMI SELECT/ACTIVE and powered NGD readback; user confirmed
 responsive iOS. Current phone remains0312 with controller disabled/power

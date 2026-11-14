@@ -74,3 +74,10 @@ No BAM/DMA, message queues, data channel, codec or AIF routing. Successful
 controller is retained; on error only own CFG transition is disabled.
 Malformed receive messages are not acknowledged. Host tests/build pass;
 actual capability exchange and codec address are pending hardware validation.
+
+##0313 hardware verified
+
+Capability/report/query passed. Exact codec elemental address returned
+logical0x8a; CFG1/status0x1a40e, INT_STAT0, IE0x10000, VE0. Two RX and two
+TX messages, no DMA/IRQ enable/data channels. User confirmed responsive iOS.
+Controller/power retained until reboot. Physical routing still pending.
