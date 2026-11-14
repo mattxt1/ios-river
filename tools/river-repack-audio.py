@@ -29,13 +29,14 @@ def require(condition, message):
         raise ValueError(message)
 
 
-def replace_helper(blob, replacement, adsp=None):
+def replace_helper(blob, replacement, adsp=None, wifi_monitor=None):
     require(blob[:8] == b'RIVFILES', 'Invalid RiverFiles magic')
     count, = struct.unpack_from('<I', blob, 8)
     require(count <= 64 and 12 + count * 128 <= len(blob), 'Invalid file table')
     entries = []
     found = 0
     adsp_found = 0
+    wifi_found = 0
     for i in range(count):
         name, mode, off, size, reserved = struct.unpack_from('<112sIIII', blob, 12 + 128 * i)
         require(off + size <= len(blob), 'File outside container')
@@ -47,11 +48,18 @@ def replace_helper(blob, replacement, adsp=None):
             adsp_found += 1
             if adsp is not None:
                 data = adsp
+        if name.split(b'\0')[0] == b'/usr/local/bin/river-wifi-monitor-state':
+            wifi_found += 1
+            if wifi_monitor is not None:
+                data = wifi_monitor
         entries.append((name, mode, data, reserved))
     require(found == 1, 'Expected exactly one existing clock helper')
     require(adsp_found <= 1, 'Duplicate ADSP helper')
     if adsp is not None and not adsp_found:
         entries.append((b'/usr/local/bin/river-adsp-status', 0o755, adsp, 0))
+    require(wifi_found <= 1, 'Duplicate Wi-Fi monitor helper')
+    if wifi_monitor is not None and not wifi_found:
+        entries.append((b'/usr/local/bin/river-wifi-monitor-state', 0o755, wifi_monitor, 0))
     count = len(entries)
     require(count <= 64, 'Too many RiverFiles entries')
     offset = (12 + count * 128 + 15) & ~15
@@ -69,6 +77,7 @@ def main():
     ap.add_argument('--kernel', type=Path, required=True)
     ap.add_argument('--clock-helper', type=Path, required=True)
     ap.add_argument('--adsp-helper', type=Path)
+    ap.add_argument('--wifi-monitor-helper', type=Path, help='Optional bounded read-only Wi-Fi monitor diagnostics')
     ap.add_argument('--msgbuf-bytes', type=int, choices=(131072, 262144, 1048576),
                     help='Optional bounded kernel log buffer for temporary diagnostics')
     ap.add_argument('--output', type=Path, required=True)
@@ -129,7 +138,10 @@ def main():
     adsp_helper = args.adsp_helper.read_bytes() if args.adsp_helper else None
     if adsp_helper is not None:
         require(adsp_helper[:4] == b'\xcf\xfa\xed\xfe', 'Expected Mach-O ADSP helper')
-    blobs['RiverFiles'] = replace_helper(blobs['RiverFiles'], replacement, adsp_helper)
+    wifi_helper = args.wifi_monitor_helper.read_bytes() if args.wifi_monitor_helper else None
+    if wifi_helper is not None:
+        require(wifi_helper[:4] == b'\xcf\xfa\xed\xfe', 'Expected Mach-O Wi-Fi monitor helper')
+    blobs['RiverFiles'] = replace_helper(blobs['RiverFiles'], replacement, adsp_helper, wifi_helper)
     mmap.props = [prop for prop in mmap.props if prop[0] not in NAMES]
     with tempfile.TemporaryDirectory(prefix='river-repack-') as tmp:
         folder = Path(tmp)
