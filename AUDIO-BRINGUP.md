@@ -197,7 +197,10 @@ Actual-code sanitizer tests pass for owned discovery and rechecks, exact
 wire command/byte flags, stale/basic/NACK replies, malformed/partial/wrapped
 frames, index races, wait bounds and close failures. The iOS helper compiles
 with Wall/Wextra/Werror and normal ad-hoc signing; patch application passes.
-Full kernel build, packaging and live APR validation remain pending.
+Full3e9f5cd kernel build and packaging passed; no numbered patches skipped,
+all kernel segments verified. Temporary image size26,732,544 bytes with577
+command-line bytes and1MiB retained log. Live APR validation is pending;
+artifact hashes are in `outputs/adsp-apr-build-manifest.json`.
 
 ## Verified progress and remaining work (2026-11-13)
 
@@ -218,8 +221,8 @@ Full kernel build, packaging and live APR validation remain pending.
   one valid340-byte record at0x86030 and uncachedfree0x188, with no malformed
   records. No IPC, power vote or DSP start was requested. iOS stayed responsive.
 
-The next audio step is live private channel discovery, then a bounded APR
-CORE state query over the validated SMD channel. Q6AFE/Q6ASM/SLIMbus PCM
+The next audio step is the bounded APR CORE state query over the now
+validated private SMD channel. Q6AFE/Q6ASM/SLIMbus PCM
 transport, codec routing and physical microphone capture remain to be
 implemented. Output is currently discarded and input is synthetic; endpoint
 counters and successful iOS API calls establish only software plumbing.

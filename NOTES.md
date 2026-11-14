@@ -5,7 +5,7 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff: live APR SMD channel found;0301 query prepared (2026-11-13)
+## Active handoff:0301 APR query image built and verified (2026-11-13)
 
 The user confirmed home responsive on8278313. Baseline, stock metadata,
 17MiB staging and locked handshake passed. Repeated startup passed again:
@@ -38,8 +38,18 @@ Actual-code ASan/UBSan tests combine real private-record lookup, SMP2P reader
 and APR code with hardware models. Ownership gates, exact command, byte flags,
 stale/basic/NACK replies, bounds/partial/wrap/index races, timeouts and close
 failure pass. Helper --apr/--apr-status compiles Wall/Wextra/Werror, signed
-at work/adsp-apr/river-adsp-status. Patch dry-run passes. Commit before full
-build/package. Device test on the next fresh boot repeats startup, confirms
+at work/adsp-apr/river-adsp-status. Patch dry-run passes. Source commit
+3e9f5cd6b98af10db6d9b5ae0c7a7f3ab52ce161 passed the full kernel build in
+work/build/river-3e9f5cd6b98a-ZIoEt9, with no numbered patches skipped.
+Kernel SHA256:958d7ce8400c33481aa08327b199892231f19691499a7f0ccbcca793db254e99.
+Verified temporary image outputs/river-adsp-apr-3e9f5cd.img is26,732,544
+bytes,577 command-line bytes,1MiB retained log; all kernel segments verified.
+Image SHA256:55c7d9667d87a7c2d0420a8a595fed59ffc068b08c865d945515f95b85bd748e.
+Manifest outputs/adsp-apr-build-manifest.json; new helper SHA256
+ab5b8b2465173e84598f6a37f6b0a53b4bb8caae8051eadf2a6a474ebbfbe0c1.
+No0301 device boot/APR query yet. Next physical step: fastboot for temporary
+boot, then responsive home confirmation before controls.
+Device test on the next fresh boot repeats startup, confirms
 live closed/empty APR channel, then --apr once and inspects --apr-status plus
 read-only survey. No physical playback/capture has passed.
 

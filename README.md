@@ -21,7 +21,8 @@ after startup. Shared CX/XO
 requirements remain enabled until reboot. Physical PCM and microphone capture
 remain unimplemented. Private transport discovery passed: apr_audio_svc is CID6 with byte-access
 SMD controls and empty rings. Patch0301 prepares a bounded APR CORE state
-query; full build/device checks are pending. See
+query; host tests, full kernel build and image verification pass, with live
+APR validation pending. See
 [AUDIO-BRINGUP.md](AUDIO-BRINGUP.md).
 
 On c3d9af8, the usual Wi-Fi network was visible and the second join completed
