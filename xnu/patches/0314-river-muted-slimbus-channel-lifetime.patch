@@ -1,0 +1,167 @@
+diff --git a/bsd/dev/river_adsp_ngd.h b/bsd/dev/river_adsp_ngd.h
+--- a/bsd/dev/river_adsp_ngd.h
++++ b/bsd/dev/river_adsp_ngd.h
+@@ -3,6 +3,7 @@
+  * ri_adsp_lock owns this experiment; successful controller/power stay enabled. */
+ static struct {
+  bool attempted,owned,enabled,master,reported,query_sent,address_valid,uncertain,disabled;
++ bool ack_waiting,acked;unsigned ack_tid,ack_status;
+  uint32_t cfg,status,interrupts,ie,ve,rx_first,rx_second,tx_first;
+  unsigned rx_count,tx_count,polls,codec_address,restore_error;
+ } ri_ngd;
+@@ -43,6 +44,11 @@
+   ri_ngd.codec_address=buf[10];ri_ngd.address_valid=true;return 0;
+  }
+  if(code==0x25) {
++  if(ri_ngd.ack_waiting) {
++   if(bytes!=5 || buf[3]!=ri_ngd.ack_tid)return EIO;
++   ri_ngd.ack_status=buf[4];ri_ngd.acked=true;
++   return buf[4]&0x20?0:EREMOTE;
++  }
+   if(!ri_ngd.query_sent || bytes!=5 || buf[3]!=0x71)return EIO;
+   return buf[4]&0x20?0:EREMOTE;
+  }
+diff --git a/bsd/dev/river_adsp_channel.h b/bsd/dev/river_adsp_channel.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/river_adsp_channel.h
+@@ -0,0 +1,128 @@
++/* One acknowledged mono48k/16-bit channel144 lifetime on codec sink port0.
++ * Exact stock Madera/scheduler/NGD parameters. No AFE start, DMA, codec/AIF
++ * writes or unmute. ri_adsp_lock serializes manager transactions. */
++static struct {
++ bool attempted,connected,defined,active,uncertain,complete;
++ unsigned tid,commands,acks,failed_opcode,failed_tid,failed_status,cleanup_error;
++ uint32_t last_opcode,last_tid,last_ack,cfg,status,interrupts;
++} ri_channel;
++static char ri_channel_note[1536]="not requested; physical playback/capture pending";
++static int
++ri_channel_result(const char *phase,int error)
++{
++ snprintf(ri_channel_note,sizeof(ri_channel_note),
++  "phase=%s error=%d attempted=%u complete=%u connected=%u defined=%u active=%u uncertain=%u channel=144 codec_address=%#x codec_sink_port=0 sample_rate=48000 sample_bits=16 commands=%u acks=%u last_opcode=%#x last_tid=%#x last_ack=%#x failed_opcode=%#x failed_tid=%#x failed_status=%#x cleanup_error=%u cfg=%#x status=%#x interrupts=%#x dma=0 irq_enable=0 afe_started=0 codec_aif_route=0 amp_unmuted=0",
++  phase,error,ri_channel.attempted,ri_channel.complete,ri_channel.connected,
++  ri_channel.defined,ri_channel.active,ri_channel.uncertain,ri_ngd.codec_address,
++  ri_channel.commands,ri_channel.acks,ri_channel.last_opcode,ri_channel.last_tid,
++  ri_channel.last_ack,ri_channel.failed_opcode,ri_channel.failed_tid,
++  ri_channel.failed_status,ri_channel.cleanup_error,ri_channel.cfg,
++  ri_channel.status,ri_channel.interrupts);
++ printf("RIVER CHANNEL: %s\n",ri_channel_note);return error;
++}
++static int
++ri_channel_command(vm_offset_t base,unsigned opcode,uint8_t *payload,unsigned bytes,unsigned tid_offset,bool cleanup)
++{
++ if(!bytes || bytes>16 || tid_offset>=bytes || ri_channel.tid>=0xef)return EINVAL;
++ unsigned tid=++ri_channel.tid;payload[tid_offset]=tid;
++ uint32_t words[5]={0};uint8_t *wire=(uint8_t *)words;unsigned total=bytes+3;
++ wire[0]=0x40|total;wire[1]=opcode;wire[2]=0xff;memcpy(wire+3,payload,bytes);
++ ri_channel.last_opcode=opcode;ri_channel.last_tid=tid;ri_channel.last_ack=0;
++ ri_ngd.ack_tid=tid;ri_ngd.ack_status=0;ri_ngd.acked=false;ri_ngd.ack_waiting=true;
++ unsigned before=ri_ngd.tx_count;
++ int error=ri_ngd_send(base,words,total);
++ if(ri_ngd.tx_count!=before)ri_channel.commands++;
++ if(!error) {
++  for(unsigned i=0;i<200 && !ri_ngd.acked;i++) {
++   bool sent=false;error=ri_ngd_poll(base,&sent);if(error)break;
++   if(!ri_ngd.acked)ri_wait(5);
++  }
++  if(!error && !ri_ngd.acked)error=ETIMEDOUT;
++ }
++ if(ri_ngd.acked) {ri_channel.acks++;ri_channel.last_ack=ri_ngd.ack_status;}
++ ri_ngd.ack_waiting=false;
++ if(error) {
++  if(error!=EREMOTE || !ri_ngd.acked)ri_channel.uncertain=true;
++  if(cleanup) {if(!ri_channel.cleanup_error)ri_channel.cleanup_error=error;}
++  else if(!ri_channel.failed_opcode) {
++   ri_channel.failed_opcode=opcode;ri_channel.failed_tid=tid;ri_channel.failed_status=ri_ngd.ack_status;
++  }
++ }
++ return error;
++}
++static void
++ri_channel_cleanup(vm_offset_t base)
++{
++ if(ri_channel.uncertain)return;
++ unsigned la=ri_ngd.codec_address;
++ if(ri_channel.defined) {
++  uint8_t remove[]={0x80|(la&31),0,144};
++  if(ri_channel_command(base,0x23,remove,sizeof(remove),1,true))return;
++  uint8_t commit[]={0,la};
++  if(ri_channel_command(base,0x24,commit,sizeof(commit),0,true))return;
++  ri_channel.defined=ri_channel.active=false;
++ }
++ if(ri_channel.connected) {
++  uint8_t disconnect[]={la,0,0};
++  if(ri_channel_command(base,0x2e,disconnect,sizeof(disconnect),2,true))return;
++  ri_channel.connected=false;
++ }
++}
++static int
++ri_channel_test(void)
++{
++ if(ri_channel.attempted)return EALREADY;
++ if(!ri_ngd_live() || !ri_ngd.address_valid || !ri_ngd.reported || !ri_ngd.enabled ||
++    ri_ngd.uncertain || ri_ngd.codec_address>=0xff)return ri_channel_result("prerequisite",EBUSY);
++ vm_offset_t mmio=ml_io_map_unmappable(0x0c140000,0x4000,VM_WIMG_IO);
++ if(!mmio)return ri_channel_result("map",ENOMEM);
++ vm_offset_t base=mmio+0x1000;
++ if(!ri_ngd_live() || ri_rd(mmio,0)!=0x01050000 || ri_rd(base,0)!=1 ||
++    ri_rd(base,0x10) || ri_rd(base,0x14) || !(ri_rd(base,4)&2) || (ri_rd(base,4)&1)) {
++  ml_io_unmap(mmio,0x4000);return ri_channel_result("ownership",EBUSY);
++ }
++ ri_channel.attempted=true;ri_channel.tid=0x71;
++ unsigned la=ri_ngd.codec_address;int error;const char *phase="connect_sink";
++ uint8_t connect[]={la,0,144,0};
++ error=ri_channel_command(base,0x2d,connect,sizeof(connect),3,false);if(error)goto done;
++ ri_channel.connected=true;
++ /* Stock framer rootfreq=24576000>>3, superframe clocks/8=192.
++  * 48000*192/3072000=3 => coeff3/rootexp0/HARD_ISO0.
++  * 16-bit samples/4=4 plus coeff3 bit5; exact presence rate0x83.
++  * Data-format/aux undefined0, client number is codec LA low5 bits. */
++ uint8_t define[]={la&31,0x24,0,0x83,0,144};phase="define_activate";
++ error=ri_channel_command(base,0x21,define,sizeof(define),4,false);if(error)goto done;
++ ri_channel.defined=true;
++ uint8_t commit[]={0,la};phase="activate_reconfigure";
++ error=ri_channel_command(base,0x24,commit,sizeof(commit),0,false);if(error)goto done;
++ ri_channel.active=true;
++ /* No sample source or AFE port is started by this channel-lifetime test. */
++ ri_wait(5);phase="channel_lifetime_complete";
++done:
++ ri_channel_cleanup(base);
++ ri_channel.cfg=ri_rd(base,0);ri_channel.status=ri_rd(base,4);ri_channel.interrupts=ri_rd(base,0x14);
++ if(!error && ri_channel.cleanup_error) {error=ri_channel.cleanup_error;phase="cleanup";}
++ if(!error && (ri_channel.connected || ri_channel.defined || ri_channel.active || ri_channel.uncertain)) {
++  error=EIO;phase="ownership_retained";
++ }
++ ri_channel.complete=!error;
++ ml_io_unmap(mmio,0x4000);return ri_channel_result(phase,error);
++}
++static int
++river_adsp_channel_sysctl SYSCTL_HANDLER_ARGS
++{
++ int value=0,error=sysctl_handle_int(oidp,&value,0,req);
++ if(error || !req->newptr)return error;
++ if(value!=1)return EINVAL;
++ lck_mtx_lock(&ri_adsp_lock);error=ri_channel_test();lck_mtx_unlock(&ri_adsp_lock);return error;
++}
++static int
++river_adsp_channel_status_sysctl SYSCTL_HANDLER_ARGS
++{
++ lck_mtx_lock(&ri_adsp_lock);int error=sysctl_handle_string(oidp,ri_channel_note,sizeof(ri_channel_note),req);
++ lck_mtx_unlock(&ri_adsp_lock);return error;
++}
++SYSCTL_PROC(_debug,OID_AUTO,river_adsp_channel,CTLTYPE_INT|CTLFLAG_RW|CTLFLAG_LOCKED,
++ NULL,0,river_adsp_channel_sysctl,"I","Explicit muted SLIMbus channel lifetime test");
++SYSCTL_PROC(_debug,OID_AUTO,river_adsp_channel_status,CTLTYPE_STRING|CTLFLAG_RD|CTLFLAG_LOCKED,
++ NULL,0,river_adsp_channel_status_sysctl,"A","Last SLIMbus channel ownership/result");
+diff --git a/bsd/dev/river_adsp_probe.h b/bsd/dev/river_adsp_probe.h
+--- a/bsd/dev/river_adsp_probe.h
++++ b/bsd/dev/river_adsp_probe.h
+@@ -110,6 +110,7 @@
+ #include "river_adsp_stream.h"
+ #include "river_adsp_slim.h"
+ #include "river_adsp_ngd.h"
++#include "river_adsp_channel.h"
+ 
+ static int
+ river_adsp_probe_sysctl SYSCTL_HANDLER_ARGS
