@@ -1,0 +1,298 @@
+diff --git a/bsd/dev/river_adsp_slim.h b/bsd/dev/river_adsp_slim.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/river_adsp_slim.h
+@@ -0,0 +1,282 @@
++/* Explicit stock IPCRTR V1/QMI SLIMbus prerequisite. No SLIMbus MMIO,
++ * codec routing or unmute. ri_adsp_lock owns CID2; no peer index resets. */
++static struct {
++ bool attempted,owned,opened,hello,service,power_attempted,selected,active,uncertain;
++ bool close_requested,close_observed;
++ uint32_t info_offset,fifo_offset,peer,node,port,versions,capability;
++ uint32_t seen_instance,seen_node,seen_port,last_type,last_source,last_destination,last_size;
++ uint32_t qmi_message,qmi_txn,qmi_result,qmi_error;
++ unsigned frames,servers,tx_bytes,rx_bytes,open_polls,rx_polls;
++} ri_slim;
++static struct ri_apr_channel ri_slim_channel;
++static char ri_slim_note[1536]="not requested; physical SLIMbus/audio pending";
++static int
++ri_slim_result(const char *phase,int error)
++{
++ snprintf(ri_slim_note,sizeof(ri_slim_note),
++  "phase=%s error=%d attempted=%u owned=%u opened=%u cid=2 info=%#x fifo=%#x hello=%u peer=%u versions=%#x capability=%#x service=%u service_id=0x301 instance=1 node=%u port=%u seen_instance=%#x seen_node=%u seen_port=%u power_attempted=%u selected=%u power_active_retained=%u uncertain=%u qmi_message=%#x qmi_txn=%u qmi_result=%u qmi_error=%u frames=%u servers=%u tx_bytes=%u rx_bytes=%u open_polls=%u rx_polls=%u last_type=%u last_source=%u last_destination=%u last_size=%u close_requested=%u close_observed=%u mmio_accessed=0 codec_stream=0 amp_unmuted=0",
++  phase,error,ri_slim.attempted,ri_slim.owned,ri_slim.opened,ri_slim.info_offset,
++  ri_slim.fifo_offset,ri_slim.hello,ri_slim.peer,ri_slim.versions,ri_slim.capability,
++  ri_slim.service,ri_slim.node,ri_slim.port,ri_slim.seen_instance,ri_slim.seen_node,
++  ri_slim.seen_port,ri_slim.power_attempted,ri_slim.selected,ri_slim.active,ri_slim.uncertain,
++  ri_slim.qmi_message,ri_slim.qmi_txn,ri_slim.qmi_result,ri_slim.qmi_error,
++  ri_slim.frames,ri_slim.servers,ri_slim.tx_bytes,ri_slim.rx_bytes,ri_slim.open_polls,
++  ri_slim.rx_polls,ri_slim.last_type,ri_slim.last_source,ri_slim.last_destination,
++  ri_slim.last_size,ri_slim.close_requested,ri_slim.close_observed);
++ printf("RIVER SLIM: %s\n",ri_slim_note);return error;
++}
++static bool
++ri_slim_resolve(vm_offset_t smem,struct ri_apr_channel *ch)
++{
++ struct ri_adsp_transport_records r;memset(ch,0,sizeof(*ch));
++ if(!ri_adsp_transport_collect(smem,&r) || r.table[0].bytes!=2048 || r.table[1].offset ||
++    r.info[2].bytes!=40 || r.fifo[2].bytes!=16384)return false;
++ unsigned matches=0;
++ for(unsigned i=0;i<64;i++) {
++  unsigned e=r.table[0].offset+i*32;
++  if(ri_rd(smem,e)!=0x52435049 || ri_rd(smem,e+4)!=0x5254)continue; /* IPCRTR */
++  if(ri_rd(smem,e+8) || ri_rd(smem,e+12) || ri_rd(smem,e+16) ||
++     ri_rd(smem,e+20)!=2 || ri_rd(smem,e+24)!=0x201 || ri_rd(smem,e+28)!=1)return false;
++  matches++;ch->entry=e;
++ }
++ if(matches!=1)return false;
++ __asm__ volatile("dmb sy" ::: "memory");
++ if(ri_rd(smem,0x8600c)!=r.end || ri_rd(smem,0x86010)!=r.cached)return false;
++ ch->info=smem+r.info[2].offset;ch->tx=smem+r.fifo[2].offset;ch->rx=ch->tx+8192;return true;
++}
++static uint32_t
++ri_slim_checksum(const uint32_t *data)
++{
++ uint32_t sum=0;
++ for(unsigned i=0;i<5;i++)sum+=(data[i]&65535)+(data[i]>>16);
++ while(sum>65535)sum=(sum&65535)+(sum>>16);
++ return (~sum)&65535;
++}
++static bool
++ri_slim_live(void)
++{
++ struct ri_apr_channel check;
++ return ri_slim.owned && ri_slim.opened && !ri_slim.uncertain &&
++  ri_apr_dsp_ready(river_smd_smem) && ri_slim_resolve(river_smd_smem,&check) &&
++  check.info==ri_slim_channel.info && check.tx==ri_slim_channel.tx &&
++  ri_rd(check.info,0)==2 && ri_rd(check.info,20)==2 && ri_apr_indices(&check);
++}
++static int
++ri_slim_send(uint32_t type,uint32_t source,uint32_t node,uint32_t port,const void *payload,unsigned bytes)
++{
++ if(!bytes || bytes>128)return EINVAL;
++ struct ri_apr_channel *ch=&ri_slim_channel;
++ unsigned packet_bytes=32+((bytes+3)&~3u),total=20+packet_bytes;
++ uint32_t frame[45]={0};frame[0]=packet_bytes;
++ frame[5]=1;frame[6]=type;frame[7]=1;frame[8]=source;frame[9]=0;
++ frame[10]=bytes;frame[11]=node;frame[12]=port;memcpy(frame+13,payload,bytes);
++ for(unsigned i=0;i<100;i++) {
++  if(!ri_slim_live())return EIO;
++  uint32_t head=ri_rd(ch->info,16),tail=ri_rd(ch->info,12);
++  if(((tail-head-4)&8191)>=total) {
++   for(unsigned j=0;j<total;j+=4)ri_wr(ch->tx,(head+j)&8191,frame[j/4]);
++   __asm__ volatile("dmb sy" ::: "memory");
++   ri_wr(ch->info,16,(head+total)&8191);ri_apr_write8(ch->info+8,1);ri_apr_notify(ch);
++   ri_slim.tx_bytes+=total;return 0;
++  }
++  ri_wait(5);
++ }
++ return ETIMEDOUT;
++}
++/* Header and bounded payload decoder, before consuming any SMD frame. */
++static int
++ri_slim_decode(const uint32_t *packet,unsigned bytes,uint32_t message,uint32_t txn)
++{
++ if(bytes<32 || bytes>512 || (bytes&3) || packet[0]!=1 || packet[4]>1 ||
++    packet[5]>128 || bytes!=32+((packet[5]+3)&~3u))return EIO;
++ uint32_t type=packet[1],src=packet[2],sport=packet[3],dst=packet[6],dport=packet[7];
++ ri_slim.last_type=type;ri_slim.last_source=src;ri_slim.last_destination=dst;ri_slim.last_size=packet[5];
++ const uint32_t *data=packet+8;
++ if(!src || src==1 || src==0xffffffff)return EIO;
++ if(type!=1) {
++  if(packet[4] || sport!=0xffff || dport!=0xffff || packet[5]!=20 || data[0]!=type ||
++     (dst!=1 && !(type==2 && dst==0)))return EIO;
++  if(type==2) {
++   if(ri_slim.hello && ri_slim.peer!=src)return EIO;
++   bool extended=ri_slim_checksum(data)==0xe110;
++   if(extended && !(data[2]&2))return ENOTSUP;
++   ri_slim.peer=src;ri_slim.versions=extended?data[2]:2;
++   ri_slim.capability=extended?data[3]:0;ri_slim.hello=true;return EAGAIN;
++  }
++  if(!ri_slim.hello || src!=ri_slim.peer)return EIO;
++  if(type==4 || type==5) {
++   ri_slim.servers++;
++   if(data[1]==0x301) {
++    ri_slim.seen_instance=data[2];ri_slim.seen_node=data[3];ri_slim.seen_port=data[4];
++    if(data[2]==1 && data[3]==ri_slim.peer && data[4] && data[4]!=0xffff) {
++     if(type==5) {if(ri_slim.node==data[3] && ri_slim.port==data[4])ri_slim.service=false;}
++     else {
++      if(ri_slim.service && (ri_slim.node!=data[3] || ri_slim.port!=data[4]))return EIO;
++      ri_slim.node=data[3];ri_slim.port=data[4];ri_slim.service=true;
++     }
++    }
++   }
++   return EAGAIN;
++  }
++  if(type==6 || type==7)return EAGAIN;
++  return EIO;
++ }
++ if(!message || !ri_slim.service || src!=ri_slim.node || sport!=ri_slim.port ||
++    dst!=1 || dport!=0x52560001)return EIO;
++ const uint8_t *q=(const uint8_t *)data;unsigned n=packet[5];
++ if(n<7)return EIO;
++ unsigned id=q[3]|((unsigned)q[4]<<8),tid=q[1]|((unsigned)q[2]<<8),length=q[5]|((unsigned)q[6]<<8);
++ if(q[0]!=2 || id!=message || tid!=txn || length!=n-7)return EIO;
++ bool result=false;
++ for(unsigned pos=7;pos<n;) {
++  if(n-pos<3)return EIO;
++  unsigned tag=q[pos],len=q[pos+1]|((unsigned)q[pos+2]<<8);pos+=3;
++  if(len>n-pos)return EIO;
++  if(tag==2) {
++   if(result || len!=4)return EIO;
++   ri_slim.qmi_result=q[pos]|((unsigned)q[pos+1]<<8);
++   ri_slim.qmi_error=q[pos+2]|((unsigned)q[pos+3]<<8);result=true;
++  } else if(tag<0x10)return EIO;
++  pos+=len;
++ }
++ if(!result)return EIO;
++ return ri_slim.qmi_result || ri_slim.qmi_error?EREMOTE:0;
++}
++static int
++ri_slim_receive(uint32_t message,uint32_t txn)
++{
++ struct ri_apr_channel *ch=&ri_slim_channel;
++ if(!ri_slim_live())return EIO;
++ uint32_t head=ri_rd(ch->info,36),tail=ri_rd(ch->info,32);unsigned available=(head-tail)&8191;
++ if(available<20)return EAGAIN;
++ __asm__ volatile("dmb sy" ::: "memory");
++ unsigned bytes=ri_rd(ch->rx,tail);
++ if(bytes<32 || bytes>512 || (bytes&3))return EIO;
++ if(available<20+bytes)return EAGAIN;
++ uint32_t packet[128]={0};
++ for(unsigned i=0;i<bytes;i+=4)packet[i/4]=ri_rd(ch->rx,(tail+20+i)&8191);
++ int error=ri_slim_decode(packet,bytes,message,txn);
++ if(error!=0 && error!=EAGAIN && error!=EREMOTE)return error;
++ __asm__ volatile("dmb sy" ::: "memory");
++ ri_wr(ch->info,32,(tail+20+bytes)&8191);ri_apr_write8(ch->info+9,1);
++ ri_apr_ack_flags(ch);ri_apr_notify(ch);ri_slim.rx_bytes+=20+bytes;ri_slim.frames++;
++ if(packet[4]&1) {
++  uint32_t resume[]={7,1,0x52560001,0,0};
++  int sent=ri_slim_send(7,0xffff,packet[2],0xffff,resume,sizeof(resume));
++  if(sent)return sent;
++ }
++ return error;
++}
++static void
++ri_slim_close(void)
++{
++ if(!ri_slim.owned)return;
++ struct ri_apr_channel current;
++ if(!ri_slim_resolve(river_smd_smem,&current) || current.info!=ri_slim_channel.info ||
++    current.tx!=ri_slim_channel.tx)return;
++ ri_slim.close_requested=true;ri_apr_set_state(&ri_slim_channel,0);ri_slim.opened=false;
++ for(unsigned i=0;i<100;i++) {
++  uint32_t peer=ri_rd(current.info,20);
++  if(peer==4 || peer==0 || peer==1) {ri_slim.close_observed=true;ri_apr_ack_flags(&ri_slim_channel);break;}
++  ri_wait(5);
++ }
++}
++static int
++ri_slim_discover(void)
++{
++ if(ri_slim.attempted)return EALREADY;
++ if(!ri_stream.complete || !ri_route_ready() || !ri_route.muted || !ri_adsp_start.ready ||
++    !ri_adsp_start.authenticated || !river_smd_smem || !ri_apr_dsp_ready(river_smd_smem))
++  return ri_slim_result("prerequisite",EBUSY);
++ struct ri_apr_channel ch;
++ if(!ri_slim_resolve(river_smd_smem,&ch))return ri_slim_result("layout",EBUSY);
++ if(ri_rd(ch.info,0)!=0 || ri_rd(ch.info,20)!=1 || !ri_apr_indices(&ch) ||
++    ri_rd(ch.info,16) || ri_rd(ch.info,12) || ri_rd(ch.info,36) || ri_rd(ch.info,32))
++  return ri_slim_result("ownership",EBUSY);
++ vm_offset_t ipc=ml_io_map_unmappable(0x0b010000,0x4000,VM_WIMG_IO);
++ if(!ipc)return ri_slim_result("ipc_map",ENOMEM);
++ /* Repeat layout/indices after mapping; only local-owned controls change. */
++ struct ri_apr_channel recheck;
++ if(!ri_slim_resolve(river_smd_smem,&recheck) || ch.info!=recheck.info || ch.tx!=recheck.tx ||
++    !ri_apr_dsp_ready(river_smd_smem) || ri_rd(ch.info,0) || ri_rd(ch.info,20)!=1 ||
++    !ri_apr_indices(&ch) || ri_rd(ch.info,16) || ri_rd(ch.info,12) || ri_rd(ch.info,36) || ri_rd(ch.info,32)) {
++  ml_io_unmap(ipc,0x4000);return ri_slim_result("pre_open_recheck",EBUSY);
++ }
++ ch.ipc=ipc+0x1008;ri_slim_channel=ch;ri_slim.attempted=ri_slim.owned=true;
++ ri_slim.info_offset=(uint32_t)(ch.info-river_smd_smem);ri_slim.fifo_offset=(uint32_t)(ch.tx-river_smd_smem);
++ ri_apr_write8(ch.info+11,0);ri_apr_ack_flags(&ch);ri_apr_set_state(&ch,1);
++ int error=ETIMEDOUT;const char *phase="open";
++ for(unsigned i=0;i<500;i++) {
++  ri_slim.open_polls++;
++  if(!ri_apr_dsp_ready(river_smd_smem) || !ri_apr_indices(&ch)) {error=EIO;goto failed;}
++  uint32_t peer=ri_rd(ch.info,20);
++  if(peer==2) {ri_apr_ack_flags(&ch);ri_apr_set_state(&ch,2);ri_slim.opened=true;error=0;break;}
++  if(peer!=1) {error=EIO;goto failed;}ri_wait(10);
++ }
++ if(error)goto failed;
++ phase="hello_send";
++ uint32_t hello[]={2,0xe110,2,0,0};hello[1]=ri_slim_checksum(hello);
++ error=ri_slim_send(2,0xffff,0,0xffff,hello,sizeof(hello));if(error)goto failed;
++ phase="service_discovery";error=ETIMEDOUT;
++ for(unsigned i=0;i<1000 && ri_slim.frames<512;i++) {
++  ri_slim.rx_polls++;int received=ri_slim_receive(0,0);
++  if(received!=EAGAIN) {error=received?received:EIO;goto failed;}
++  if(ri_slim.hello && ri_slim.service)return ri_slim_result("slim_service_discovered",0);
++  ri_wait(5);
++ }
++failed:
++ ri_slim.uncertain=error!=EREMOTE;ri_slim_close();ml_io_unmap(ipc,0x4000);
++ ri_slim_channel.ipc=0;return ri_slim_result(phase,error);
++}
++static int
++ri_slim_qmi(uint32_t message,uint32_t value,bool mode)
++{
++ uint8_t q[21]={0};unsigned bytes=mode?21:14;uint32_t txn=++ri_slim.qmi_txn;
++ q[1]=txn&255;q[2]=(txn>>8)&255;q[3]=message&255;q[4]=(message>>8)&255;q[5]=bytes-7;
++ q[7]=1;q[8]=4;q[10]=value&255;q[11]=(value>>8)&255;q[12]=(value>>16)&255;q[13]=value>>24;
++ if(mode) {q[14]=0x10;q[15]=4;q[17]=2;} /* ADSP master; cell-index1 -> instance0 */
++ ri_slim.qmi_message=message;ri_slim.qmi_result=ri_slim.qmi_error=0xffffffff;
++ int error=ri_slim_send(1,0x52560001,ri_slim.node,ri_slim.port,q,bytes);if(error)return error;
++ for(unsigned i=0;i<400 && ri_slim.frames<1024;i++) {
++  ri_slim.rx_polls++;error=ri_slim_receive(message,txn);
++  if(error!=EAGAIN)return error;
++  if(!ri_slim.service)return ENODEV;
++  ri_wait(5);
++ }
++ return ETIMEDOUT;
++}
++static int
++ri_slim_power(void)
++{
++ if(ri_slim.power_attempted)return EALREADY;
++ if(!ri_stream.complete || !ri_route_ready() || !ri_route.muted || !ri_slim.service || !ri_slim_live())
++  return ri_slim_result("power_prerequisite",EBUSY);
++ ri_slim.power_attempted=true;
++ int error=ri_slim_qmi(0x20,0,true);const char *phase="select_instance";
++ if(error)goto done;
++ ri_slim.selected=true;phase="power_active";error=ri_slim_qmi(0x21,2,false);
++ if(!error) {ri_slim.active=true;phase="slim_power_active_retained";}
++done:
++ /* Retain an acknowledged active request for controller continuation. Never
++  * guess an inactive baseline after a timeout; reboot before further tests. */
++ if(error && error!=EREMOTE)ri_slim.uncertain=true;
++ return ri_slim_result(phase,error);
++}
++static int
++river_adsp_slim_sysctl SYSCTL_HANDLER_ARGS
++{
++ int value=0,error=sysctl_handle_int(oidp,&value,0,req);
++ if(error || !req->newptr)return error;
++ if(value!=1 && value!=2)return EINVAL;
++ lck_mtx_lock(&ri_adsp_lock);error=value==1?ri_slim_discover():ri_slim_power();lck_mtx_unlock(&ri_adsp_lock);return error;
++}
++static int
++river_adsp_slim_status_sysctl SYSCTL_HANDLER_ARGS
++{
++ lck_mtx_lock(&ri_adsp_lock);int error=sysctl_handle_string(oidp,ri_slim_note,sizeof(ri_slim_note),req);
++ lck_mtx_unlock(&ri_adsp_lock);return error;
++}
++SYSCTL_PROC(_debug,OID_AUTO,river_adsp_slim,CTLTYPE_INT|CTLFLAG_RW|CTLFLAG_LOCKED,
++ NULL,0,river_adsp_slim_sysctl,"I","Explicit SLIMbus IPC discovery and QMI select/power");
++SYSCTL_PROC(_debug,OID_AUTO,river_adsp_slim_status,CTLTYPE_STRING|CTLFLAG_RD|CTLFLAG_LOCKED,
++ NULL,0,river_adsp_slim_status_sysctl,"A","Last SLIMbus IPC/QMI prerequisite result");
+diff --git a/bsd/dev/river_adsp_probe.h b/bsd/dev/river_adsp_probe.h
+--- a/bsd/dev/river_adsp_probe.h
++++ b/bsd/dev/river_adsp_probe.h
+@@ -108,6 +108,7 @@
+ #include "river_adsp_pcm.h"
+ #include "river_adsp_route.h"
+ #include "river_adsp_stream.h"
++#include "river_adsp_slim.h"
+ 
+ static int
+ river_adsp_probe_sysctl SYSCTL_HANDLER_ARGS
