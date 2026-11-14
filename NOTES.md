@@ -36,8 +36,12 @@ preserved work/slim-powered/kernel-77eb1a5.verified; isolated tree now0313.
 Image outputs/river-slim-enumerate-6f78bfc.img: 26804224bytes,
 577cmdline, SHA94b638e8ffd343b2373675ced9a7b1a5c642f7df22cfdd7399faf3f28e1f54a2.
 Kernel SHA134ee80e7d2a4c20aab046b59b102f23f741c4538feb62946d83aec489fdf909.
-Fastboot requested; no0313 hardware tests yet. Temporary boot only, responsive
-home confirmation, passive baseline, then run once
+User confirmed fastboot readiness. After interruption checked no prior boot
+evidence; exact image hash/productriver verified. Temporary transfer
+OKAY0.607s, boot OKAY0.216s; no flash.0313 accepted. Home responsiveness
+confirmation pending; no DSP/PCM/QMI/NGD controls run. USB-only capture
+session83503 writes work/slim-enumerate/boot-6f78bfc-usb.log.
+After responsive home confirmation inspect passive baseline then run once
 work/slim-enumerate/run-device.py. Batches full PCM/QMI/powered readback then
 polled capability and codec query; each dependent stage is gated on success.
 Wi-Fi current0312 passive state0/result0; private native snapshots captured.
