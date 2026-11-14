@@ -5,7 +5,33 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0308 combined first-start PCM image ready (2026-11-14)
+## Active handoff:0308 zero-PCM DSP completion verified, responsive (2026-11-14)
+
+User confirmed0308 home responsive. Stock startup/CORE/map-unmap/ASM and
+exact AFE SET/GET/cold ADM route passed. Combined --pcm-silence passed:
+phase=zero_pcm_complete error0 complete1, four submitted/four exact completed
+WRITE_DONE responses,16,384bytes/4096stereo frames, completion_status0,
+poisoned0. PAUSE/ASM close/COPP close/AFE stop/unmap all passed: mapped0,
+running0,in_flight0,asm_open0,adm_open0,matrix0,afe_started0,cleanup_error0.
+Dedicated16KiB page retained at physical0x2046c000; handle0xf0b674e8 unmapped.
+Amp remains hardware muted0x10 and all other surveyed baseline registers
+match. CID6 rings consumed/stable. User confirmed STILL RESPONSIVE afterward.
+No audible samples, physical playback or microphone capture yet; iOS /dev
+backend is still discarded/synthetic. Do not repeat any active controls.
+Evidence work/pcm-restart/{baseline,metadata,stage,handshake,start,pre-query,
+core,map,asm,afe,post-query,afe-config,adm-route,pcm-silence,post-stream,
+wifi-monitor,kernel,wifi-state,network-state,dns-state}-bc61fe7.txt.
+The --route-status note is the last route diagnostic (fresh config phase),
+not a live stream state; --stream-status records actual complete cleanup.
+
+Wi-Fi0308 passive native snapshot is unassociated state0/result0 after boot;
+this does not supersede the user's confirmed0306 spinner with state4/result1
+and absent native NWI/DNS. No new join requested or workaround applied.
+Next implement source-defined CID2 IPCRTR HELLO/service discovery and QMI
+SLIMbus select/power handshake, batching compatible prerequisites in one
+fresh image. Do not access SLIMbus MMIO without acknowledged power.
+
+##0308 combined first-start PCM image ready (2026-11-14)
 
 0306 full route prerequisites passed, but PCM's second AFE START was rejected.
 The existing native /usr/local/bin/dmesg recovered exact DSP status0x9

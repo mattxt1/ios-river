@@ -4,6 +4,15 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+##0308 zero-PCM completion verified with responsive iOS
+
+The DSP consumed four mapped4096byte zero-filled buffers with exact successful
+WRITE_DONE checks. All stream/device/AFE resources closed and mapping was
+released; permanent memory and hardware mute are retained until reboot.
+User confirmed responsive iOS afterward. Physical SLIMbus/Madera stream,
+audible playback and microphone capture remain pending. iOS /dev backend
+still discards output and synthesizes capture.
+
 ##0306 second-start rejection;0308 combined candidate ready
 
 0306 repeated all prerequisite/routing tests, then its second AFE start

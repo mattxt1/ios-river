@@ -102,3 +102,9 @@ separate --afe-route. PCM verifies mute itself and freshly SETs/GETs exact
 AFE config, then performs the first hot route, RUN and WRITE sequence in one
 session. First-command failure status and RX metadata survive cleanup.
 Hardware completion remains pending. Do not repeat one-shot controls.
+
+##0308 hardware completion passed
+
+Four buffers submitted/completed,16,384bytes/4096stereo frames, status0,
+all routes and mapping cleaned up, mute retained. User confirmed responsive
+iOS. This proves DSP PCM consumption, not physical playback/capture.
