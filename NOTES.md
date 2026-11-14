@@ -5,10 +5,17 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff: Wi-Fi evidence collected; audio transport0298 (2026-11-13)
+## Active handoff:0298 exact boot ACKs pass; UI confirmation pending (2026-11-13)
 
-The c3d9af8 boot is responsive and USB SSH works with the approved existing
-River key. The usual AP is visible in My Networks. The first join authenticated
+The new678e917 temporary boot was accepted by fastboot after productriver
+and image SHA verification. Live USB logs verify exact ACK result1 for
+L19 msg1380515841 and L9 msg1380515842, then shared transport ready1/mask3.
+Private evidence: work/audit-device-validation/boot-678e917-usb.log.
+A home-screen responsiveness question is pending; wait for that before
+new device controls. Approved-key SSH and passive log transfer also worked.
+Do not mistake old panic_trace enable/exit markers for a kernel panic.
+
+On the previous responsive c3d9af8 boot, the usual AP was visible in My Networks. The first join authenticated
 and associated but timed out after repeated M2 submissions without M3; this
 is not proof of a wrong password. The second completed M1/M3/PTK/GTK/M4 and
 protected DHCP traffic. Read-only state is4/result1. Native IP/DNS remains
@@ -35,11 +42,11 @@ Verified temporary image: `outputs/river-audio-rpm-678e917.img`,26,697,728
 bytes,577 command-line bytes,1MiB retained log. Image SHA256:
 `f0c575df91aafdd11503f5eaae343da4f4363643c561674418e519997c8c738c`.
 Manifest: `outputs/audio-rpm-build-manifest.json`. All kernel segments verified;
-base c3d9af8 image and helper hashes matched. No flash/device boot yet.
-The phone remains on the responsive c3d9af8 image. Next physical step is
-fastboot for temporary boot of678e917, followed by home-screen confirmation,
-retained-log checks for IDs0x52490001/2, exact ACK result1 for both requests
-and shared transport ready1/mask3. Decimal IDs are1380515841/1380515842.
+base c3d9af8 image and helper hashes matched. Fastboot transfer and temporary
+boot returned OKAY; nothing flashed. USB capture session52450 is bounded;
+start a new capture filename if needed after it exits. Both exact ACKs and
+ready1/mask3 are now live-verified. Decimal IDs are1380515841/1380515842.
+Home-screen responsiveness remains unconfirmed on678e917.
 Do not interpret a build/package pass as device validation or physical audio.
 Then implement shared CX/XO power policy and authenticated ADSP startup.
 The power-policy source review is in AUDIO-BRINGUP.md; candidate floor policy

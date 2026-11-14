@@ -18,8 +18,9 @@ The usual Wi-Fi network is visible; the first join timed out during WPA and
 the second completed WPA with driver state4/result1. Native IP/DNS setup
 remains incomplete. Earlier bb395d6 testing produced a Settings checkmark and
 numeric HTTP200 through en0; ordinary DNS still failed. Patch0298 adds serialized, bounded RPM request transport for the audio
-loader; host sanitizer checks, full kernel build and image verification pass,
-with device validation pending. Source changes can
+loader; host sanitizer checks, full kernel build and image verification pass.
+Its temporary boot also produced both exact RPM ACKs and transport ready1;
+home-screen responsiveness confirmation remains pending. Source changes can
 be newer than the last phone test; see [NOTES.md](NOTES.md) for dated evidence,
 build IDs, hashes and limitations. [RIVER.md](RIVER.md) records earlier bring-up.
 

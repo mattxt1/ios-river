@@ -61,7 +61,9 @@ wrap, full/exact-capacity rings, delayed drain/replies, stale/NACK/timeout,
 invalid layouts/states/indices, ID exhaustion and the audio readiness gate.
 The full678e917 kernel build passed. Its temporary image packaged with all
 kernel segments verified (26,697,728 bytes,577 command-line bytes,1MiB
-retained log); device validation of0298 is pending. It issues the
+retained log). Temporary fastboot boot returned OKAY. Live USB diagnostics
+verify exact ACKs for IDs1380515841/1380515842 and shared transport ready1
+with boot ACK mask3. Home-screen responsiveness confirmation is pending. It issues the
 same existing L19/L9 votes and adds no ADSP votes or DSP startup. WCNSS startup
 still follows its existing policy even when boot votes fail. CX/XO shared
 ownership policy and authenticated startup remain the next audio work.
