@@ -5,7 +5,7 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff: shared PCM/ASM/AFE candidate building (2026-11-13)
+## Active handoff: shared PCM/ASM/AFE image ready; fastboot requested (2026-11-13)
 
 Continuation workspace:
 /Users/matttyson/Documents/Codex/2026-11-13/apr-communication-now-passes-the-dsp
@@ -42,8 +42,21 @@ ASM format NACK followed by CLOSE, prerequisite rejection and wrapped TX/RX.
 The original APR tests also run and pass. Updated helper builds arm64 iOS16
 with Wall/Wextra/Werror and ad-hoc signing. No new commands have run on device.
 
-Full isolated kernel build in progress:
+Full isolated kernel build PASSED with all numbered patches applied:
 work/build/river-3ca804be7f57-SvUHwO (under continuation workspace).
+Kernel SHA256135c48db6f8b499a5fcbaa62c5f50663dc31ebdfbd38f10420491e6b48e1ef37.
+Verified outputs/river-pcm-prerequisites-3ca804b.img is26,732,544bytes,
+577command-line bytes with1MiB retained kernel log and all kernel payload
+segments verified. Image SHA256
+b57d5e9ccdc21589637d995f9c6d7d4d3d94fdddc759b1c8ab4984e1df4a980e.
+Manifest outputs/pcm-build-manifest.json. Updated helper SHA256
+1abcefef019eb90e8833f3569f6508d585a722cadbd8ac16b415c4102cbcd192.
+User has been asked to put River in fastboot; readiness is pending. Do not
+infer readiness from elapsed time. No boot, map, ASM or AFE test has run yet.
+Once ready, verify productriver/image hash, temporary fastboot boot only,
+then wait for responsive-iOS confirmation before controls. Inspect baseline
+first; run work/pcm-mapping/run-device.py only on this fresh candidate.
+
 Original KDK/worktree metadata were iCloud-offloaded. A standalone minimal
 build checkout uses the same committed tree and original object store. Exact
 KDK22G74 downloaded anew, verified SHA256
@@ -51,7 +64,7 @@ KDK22G74 downloaded anew, verified SHA256
 and Apple Software package signature, expanded locally without installation
 at work/pcm-mapping/kdk-local/KDK.pkg/Payload. Original blocked build resumed
 when hydration finished; its duplicate LxsjE0 process tree was explicitly
-stopped. Use SvUHwO only. No new image has been packaged or booted yet.
+stopped. SvUHwO is the only completed candidate. No new image booted yet.
 
 Read-only device check still returns the exact successful CORE state1 on
 1334e8c. Passive Wi-Fi route/SC/DNS snapshot shows configd Never on en0, no
@@ -6157,3 +6170,19 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
      - Initialize CS47L35 over SPI7 (`0x078b8000`) to enable AIF1 BCLK generation, OR
      - Clock LPASS/LPAIF speaker mux (`0x0c051004` / `csr_gp_io_mux_spkr_ctl`) and route external MCLK2 (GPIO 66).
 
+
+## Fresh Wi-Fi join during0303 build (2026-11-13)
+
+User reported a brief blue checkmark followed by a spinner, without an error.
+Immediate private captures wifi-after-spinner.txt,dns-after-spinner.txt and
+kernel-after-spinner.txt are in the continuation work/pcm-mapping directory.
+The log proves association setup, M1/M3, single PTK/GTK installation, M4 DMA,
+protected DHCP OFFER probe and public GET21=result1. No subsequent recorded
+link-loss/deauthentication explains the UI change in this capture. Snapshot
+has en0 default route and interface IPv4/Link state, but no en0 connected/local
+routes, service IPv4/DNS state, usable compiled resolver or NWI presence;
+configd still owns rankNever. This localizes the remaining observed failure
+to integration/configuration after keyed association; it does not identify
+the specific configd policy owner path. No settings/rank/route/DNS workaround
+or additional kernel Wi-Fi patch was applied. See PCM-ROUTING.md for pinned
+physical routing facts gathered while the audio build ran.

@@ -205,3 +205,18 @@ status and kernel-log reads worked; no specific kernel lock defect is proven.
 Evidence is private under the2026-11-13 continuation work/pcm-mapping folder.
 No rank, resolver, route or credentials workaround was applied. Wi-Fi remains
 secondary to audio, with native primary election/DNS still unresolved.
+
+
+## Fresh join: brief checkmark, then spinner on1334e8c
+
+During the0303 audio build the user tried a fresh join. The retained log
+proves successful WPA key installation/M4 and protected DHCP probe, with
+public GET21=result1. The user observed a brief checkmark then a spinner,
+without an alert. The immediate route/SC/DNS snapshot has en0 default route
+and IPv4/Link state, but lacks connected/local routes, service IPv4/DNS,
+usable compiled DNS and NWI presence; configd retains its Never assertion.
+No later link-loss/deauth appears in that captured interval. This supports
+investigating native configuration after keyed association; it does not
+prove which configd policy/cleanup caused the failure. Captures stay private.
+The0303 image passes full build and packaging, batching audio prerequisite
+tests with existing Wi-Fi patches; it introduces no rank/DNS workaround.

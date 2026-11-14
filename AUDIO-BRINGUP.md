@@ -9,8 +9,8 @@ successful iOS API calls nor increasing frame counters prove physical audio.
 Source3ca804be adds dedicated retained-page ASM map/unmap, an ASM session
 open/PCM-format/close test, and an AFE SLIMbus0RX read-only parameter query.
 All run explicitly after the successful CORE query and are batched into one
-kernel candidate. Host sanitizer tests pass; full build/device testing is
-pending. No actual PCM buffer submission, ADM route, AFE port start,
+kernel candidate. Host sanitizer tests and the full kernel build pass. The verified temporary
+image is ready; actual device testing is pending. No actual PCM buffer submission, ADM route, AFE port start,
 SLIMbus activation, codec stream route or physical microphone capture exists
 yet. See the active NOTES.md handoff for exact commands and ownership rules.
 
