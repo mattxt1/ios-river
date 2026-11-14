@@ -4,6 +4,14 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+##0306 second-start rejection;0308 combined candidate ready
+
+0306 repeated all prerequisite/routing tests, then its second AFE start
+returned DSP0x9. No PCM was submitted; mapping and all routes cleaned up,
+with hardware mute retained.0308 combines hot routing and zero-PCM completion
+in the first start after cold route verification, and rechecks exact config.
+Host sanitizer tests and incremental kernel build pass; hardware test pending.
+
 ##0306 muted PCM DMA/completion candidate ready
 
 Source98dcdb1 and the verified temporary image add four zero-only mapped

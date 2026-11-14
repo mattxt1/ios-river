@@ -93,3 +93,12 @@ required; unknown ownership retains memory/mapping until reboot. The test
 never unmutes or connects the iOS /dev writer to DSP. Host tests pass;
 hardware result remains pending. SLIMbus/Madera connection is still required
 before physical sound, even if all four buffers complete.
+
+##0308 combined first AFE start
+
+0306 verified routes but got DSP0x9 at its second AFE start, before PCM.
+0308 follows verified cold ADM teardown directly with --pcm-silence; skip
+separate --afe-route. PCM verifies mute itself and freshly SETs/GETs exact
+AFE config, then performs the first hot route, RUN and WRITE sequence in one
+session. First-command failure status and RX metadata survive cleanup.
+Hardware completion remains pending. Do not repeat one-shot controls.

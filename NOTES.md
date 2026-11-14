@@ -5,7 +5,38 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0306 stopped cleanly at second AFE start (2026-11-14)
+## Active handoff:0308 combined first-start PCM image ready (2026-11-14)
+
+0306 full route prerequisites passed, but PCM's second AFE START was rejected.
+The existing native /usr/local/bin/dmesg recovered exact DSP status0x9
+(ADSP_EALREADY per pinned apr_audio-v2.h); prior unmap replaced status in the
+stream sysctl. Evidence work/pcm-stream/kernel-native-98dcdb1.txt. Do not
+infer STOP retained/cleared configuration merely from that status.
+User post-test responsiveness and requested Wi-Fi join result remain pending.
+No active0306 retries. All mappings/resources closed and mute retained.
+
+Source bc61fe78761dcf0b7d1edb909bb2dc5f30cb01f7 through0308 combines the hot AFE/ASM/ADM
+route and four zero-PCM writes into the first AFE start after verified cold
+ADM route teardown. This avoids the observed second-start rejection.0307
+retains source-defined config-before-start plus exact fresh readback and
+first-failure DSP status/RX identity across cleanup. The test itself verifies
+hardware mute before AFE start; prior mute state is not a prerequisite for
+the combined first-start path. The runner skips separate --afe-route and
+runs --pcm-silence only after successful clean --adm-route. Host actual-code
+ASan/UBSan completion/failure tests pass, including first-start gating,
+reconfiguration order and verification failures, and mute safety.
+Native incremental install passed with changed sweet_keys compiled and
+new diagnostics linked. Isolated tree now through0308, not directory3fc.
+Prior0306 kernel preserved. Ledger work/pcm-restart/incremental-provenance.json.
+Image outputs/river-pcm-combined-bc61fe7.img: 26802176bytes,
+577cmdline, SHA48b825b54c636b562216b7db29632c70f7ccd4bac99d737125c3d9aa3310ffb9.
+Kernel SHAd43691a100cf061fa142e129c2af644042149d357125e732a473d2fc9fd7ca9b. No0308 phone tests yet.
+Next: after any Wi-Fi attempt, request fastboot; temporary boot, responsive
+home confirmation, manual passive baseline, then run once
+work/pcm-restart/run-device.py. Never flash. Reboot before repeated controls.
+Physical playback, microphone capture and SLIMbus/Madera stream remain pending.
+
+##0306 stopped cleanly at second AFE start (2026-11-14)
 
 User confirmed0306 home responsive. Passive baseline matched prior amplifier
 power/format/PLL/gain/IRQ; mute initially0. All stock startup/CORE/map-unmap/
@@ -15,7 +46,8 @@ then second AFE START0x100e5 received matched DSP NACK (EREMOTE71), with no
 ASM RUN or WRITE sent. submitted/completed/bytes0, poisoned0, all resources
 closed, unmap_error0/mapped0, permanent page retained, amp_mute_retained1.
 The stream note captured failed_opcode0x100e5 but0306 did not retain its DSP
-status before unmap replaced the latest reply; do not infer a status value.
+status before unmap replaced the latest reply. Subsequent native dmesg
+recovered status0x9; see newer active handoff.
 Passive post-stream survey confirms only intended mute0x10 change and stable
 consumed rings. User post-test responsiveness is pending. No active retry.
 Evidence work/pcm-stream/{baseline,metadata,stage,handshake,start,pre-query,
