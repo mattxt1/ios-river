@@ -475,3 +475,30 @@ join and monitor/config/scalar/DNS reads (kernel log optional bounded).
 Next after corrected active PCM PASS: bounded quiet tone, real iOS backend,
 physical microphone. Do not claim audible output from zeroPCM completions.
 
+
+##0320 active muted PCM PASS (2026-11-14)
+
+User confirmed0320 home responsive. Full sequence PASSED including corrected
+48k exponent2 channel activation with AFE already started, codec/AIF route,
+FLL/ampPLL locks and session5 PCM4/4 WRITE_DONE completions while active:
+phase=muted_codec_pcm_complete,error0,complete1,route_seen/restored1,
+port_live1,FLL0x100,ampIRQ0x2000000a,submitted/completed4,16384bytes,
+4096stereo frames. Final AFEstarted0,DSPcleanup_error0,mapped/inflight0,
+channel6/6ACKs/connected-defined-active-uncertain0, AIF/amp/clock/pins restored,
+mute retained. No audible samples/output-stage enable. Current phone0320;
+QMIpower/NGD retained, all PCM and data channel lifetimes closed. No retries.
+Post-test responsiveness asked, reply pending. Evidence work/codec-pcm-rate/
+*-b4c6d67.txt, especially codec-pcm/status/channel-status and post-slim.
+
+Improved kernel-address Wi-Fi reader verified installed exact42dc1c95...,
+52688B. Fresh Wi-Fi join requested; reply/capture pending. Historical monitor
+not current association proof. Host diagnostic scripts initially stalled
+before SSH due iCloud; ABSOLUTE brctl download paths hydrated scripts and
+both original passive reads completed. No duplicate active sequence sent.
+Use absolute hydration paths for stalled work files, not relative paths.
+Next audio: bounded quiet tone through now-verified route; audit amp PCM
+source/mute/power/volume and rendered completion/drain before audible test.
+Continuous iOS backend and physical microphone remain pending. Do not claim
+physical playback from zeroPCM completions. Exact0320 source/build/manifest
+paths and KDK are in next historical entry. Keep Wi-Fi secondary.
+
