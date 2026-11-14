@@ -230,3 +230,11 @@ now reports the installed river-net hash, fixed job plist and last64KiB of
 its log, with stage markers and regular-file/size checks. It is included in
 the0304 image without another kernel build. Execution/evidence remain pending;
 no configuration or rank workaround is added.
+
+
+The0304 image now built/packaged and temporarily booted with the native
+reader included. Its execution is pending responsive-home confirmation.
+Expected embedded baseline river-net is71,728bytes/SHA256
+807a0190cac9c3dbb3ce685418f0235af95dc025b9192ba0275fa93dbb7b44ba.
+Compare the new reader's live hash before assuming the observer or source
+version is running. No Wi-Fi connectivity/configuration fix is claimed.

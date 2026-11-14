@@ -5,22 +5,38 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0303 hardware passed;0304 routing candidate building (2026-11-13)
+## Active handoff:0304 routing image temporarily booted; home check pending (2026-11-13)
 
 Kernel source3fc706c1db3d2dd8a57a3ef9454a13ea042b2cb6 adds0304;
 helper source3eee0a6a5da0439bd83a198b55d84b67cfeb152c adds a bounded
 read-only Wi-Fi monitor/hash reader and optional RiverFiles packaging.
 Build work/build/river-3fc706c1db3d-TK5NtT hit ENOSPC during XNU compilation.
-Task-generated abandoned duplicate LxsjE0 and the verified/redundant downloaded
-KDK DMG were removed; extracted KDK, source, completed kernels, all images and
-evidence were preserved. Free space recovered to5.8GiB. Every committed patch
-input and generated route/PCM header was checked unchanged. No linked kernel
-existed in this isolated job. Compilation/linking resumed explicitly using
-its same build_xnu function and flags, avoiding dependency fetch/patch reapply;
-resume-build.log records this recovery separately from the failed build.log.
-No0304 image is packaged/booted yet; do not report original helper exit success.
-Current phone remains user-confirmed responsive on0303 after PCM/ASM success.
-No more0303 active commands are needed; its operations are one-shot.
+Task-generated abandoned duplicate LxsjE0 and redundant verified KDK DMG were
+removed; extracted KDK/source/completed kernels/images/evidence preserved.
+All patch inputs/generated route/PCM headers were verified unchanged. Same
+isolated native build_xnu compile/link completed, but its final debug-macro
+installation first lacked the original Python venv. Restoring that venv and
+running the same make install finished with exit0 (resume-install.log).
+Original failed build.log and resume-build.log remain as recovery evidence;
+do not report the original river-local-build.sh exited successfully.
+
+Kernel SHA256ff0554f613ef2010aced9ce0ff1cbd92014330ba869ebff2d07ce4388001b3d2.
+All numbered patches applied, committed inputs exact, River/route strings
+verified. outputs/river-afe-adm-routing-3fc706c.img is26,802,176bytes,
+577command-line bytes,1MiB retained log, all kernel payload segments verified.
+Image SHA2562df16bab3cd9ccc2564ffb50189822118b03247c03e87e81289db525f38a325c.
+Manifest outputs/route-build-manifest.json, private build verification
+work/pcm-routing/build-verification.json under continuation workspace.
+
+User confirmed fastboot readiness; exact image SHA and productriver checked.
+Temporary transfer OKAY(0.611s), boot OKAY(0.216s), no partition flashed.
+User home-screen confirmation is pending. No0304 DSP startup/map/ASM/AFE/ADM
+controls have run. Wait for home confirmation, inspect passive baseline, then
+run work/pcm-routing/run-device.py exactly once on this boot. Bounded USB-only
+capture session19801 writes work/pcm-routing/boot-3fc706c-usb.log.
+
+Prior0303 phone was user-confirmed responsive after PCM/ASM success.
+Current0304 responsiveness and all device controls remain pending.
 
 0304 batches three explicit operations after repeated0303 prerequisites:
 --afe-config sends source-defined mono48k/16-bit shared-channel144 config to
