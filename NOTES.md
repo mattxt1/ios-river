@@ -5,7 +5,32 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0310 broadcast-control fix temporarily booted (2026-11-14)
+## Active handoff:0310 valid HELLO uses QRTR control endpoint (2026-11-14)
+
+User confirmed0310 home responsive. All PCM prerequisites and four exact
+zero-buffer completions passed with full cleanup again. Corrected broadcast
+validator now retained complete first HELLO metadata: V1/type2/source5,
+destination0xffffffff, source/destination ports BOTH0xfffffffe, flags0,
+20-byte control words2/0x1ee3/0xa/0/0. Checksum computes0xe110 and common
+V1 capability bit1 is present. Local legacy-port0xffff check rejected it.
+CID2 closed with peerCLOSING4 observed, no RX consumed, no service/QMI request
+accepted. Amp mute remains held; no SLIM MMIO or physical playback/capture.
+Post-test responsive confirmation requested, pending answer. No active retry.
+Evidence work/slim-broadcast/{baseline,metadata,stage,handshake,start,pre-query,
+core,map,asm,afe,post-query,afe-config,adm-route,pcm-silence,post-stream,
+slim-discover,post-slim,wifi-monitor}-86af266.txt.
+
+0311 uses observed QRTR control port0xfffffffe for receive, HELLO transmit
+and RESUME_TX; HELLO targets broadcast0xffffffff. Primary Linux QRTR header
+independently defines those exact endpoint constants, and control union/
+service layout matches. V1-only negotiation and strict unicast QMI identities
+remain. Reject reserved service ports and legacy0xffff control frames.
+Host ASan/UBSan actual-code tests pass for full discovery/select/power with
+the observed broadcast/QRTR endpoints and reject wrong/legacy ports.
+Next fresh combined build/boot, then exact same gated test sequence.
+Native build not yet run. Physical playback/capture pending.
+
+##0310 broadcast-control fix temporarily booted (2026-11-14)
 
 0309 repeated clean PCM completion; user confirmed responsive after CID2's
 broadcast HELLO was rejected and channel closed.0310 corrects router control

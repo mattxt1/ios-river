@@ -8,6 +8,7 @@ s='\n'.join(x[1:] for x in s.splitlines() if x.startswith('+') and not x.startsw
 with tempfile.TemporaryDirectory(prefix='river-slim-') as d:
  root=Path(d);target=root/'source/bsd/dev/river_adsp_slim.h';target.parent.mkdir(parents=True);target.write_text(s)
  subprocess.run(['patch','--batch','--silent','-p1','-d',str(root/'source')],input=(repo/'xnu/patches/0310-river-ipcrtr-broadcast-control-replies.patch').read_bytes(),check=True)
+ subprocess.run(['patch','--batch','--silent','-p1','-d',str(root/'source')],input=(repo/'xnu/patches/0311-river-qrtr-firmware-control-endpoint.patch').read_bytes(),check=True)
  (root/'slim-actual.h').write_text(target.read_text());p=root/'test'
  subprocess.run([os.environ.get('CC','cc'),'-O1','-g','-Wall','-Wextra','-Werror','-Wno-unused-value','-Wno-unused-function','-fsanitize=address,undefined','-I',d,str(repo/'tools/tests/river-adsp-slim-host.c'),'-o',str(p)],check=True)
  subprocess.run([str(p)],check=True)

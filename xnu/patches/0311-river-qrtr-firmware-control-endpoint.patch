@@ -1,0 +1,47 @@
+diff --git a/bsd/dev/river_adsp_slim.h b/bsd/dev/river_adsp_slim.h
+--- a/bsd/dev/river_adsp_slim.h
++++ b/bsd/dev/river_adsp_slim.h
+@@ -1,4 +1,6 @@
+-/* Explicit stock IPCRTR V1/QMI SLIMbus prerequisite. No SLIMbus MMIO,
++/* Firmware-observed QRTR control port0xfffffffe with IPCRTR V1/QMI.
++ * Linux include/uapi/linux/qrtr.h defines this reserved endpoint.
++ * Explicit SLIMbus prerequisite. No SLIMbus MMIO,
+  * codec routing or unmute. ri_adsp_lock owns CID2; no peer index resets. */
+ static struct {
+  bool attempted,owned,opened,hello,service,power_attempted,selected,active,uncertain;
+@@ -99,7 +101,7 @@
+  if(type!=1 && packet[5]==20)memcpy(ri_slim.last_control,data,sizeof(ri_slim.last_control));
+  if(!src || src==1 || src==0xffffffff)return EIO;
+  if(type!=1) {
+-  if(packet[4] || sport!=0xffff || dport!=0xffff || packet[5]!=20 || data[0]!=type ||
++  if(packet[4] || sport!=0xfffffffe || dport!=0xfffffffe || packet[5]!=20 || data[0]!=type ||
+      (dst!=1 && dst!=0xffffffff && !(type==2 && dst==0)))return EIO;
+   if(type==2) {
+    if(ri_slim.hello && ri_slim.peer!=src)return EIO;
+@@ -113,7 +115,7 @@
+    ri_slim.servers++;
+    if(data[1]==0x301) {
+     ri_slim.seen_instance=data[2];ri_slim.seen_node=data[3];ri_slim.seen_port=data[4];
+-    if(data[2]==1 && data[3]==ri_slim.peer && data[4] && data[4]!=0xffff) {
++    if(data[2]==1 && data[3]==ri_slim.peer && data[4] && data[4]!=0xfffffffe && data[4]!=0xffff && data[4]!=0xffffffff) {
+      if(type==5) {if(ri_slim.node==data[3] && ri_slim.port==data[4])ri_slim.service=false;}
+      else {
+       if(ri_slim.service && (ri_slim.node!=data[3] || ri_slim.port!=data[4]))return EIO;
+@@ -167,7 +169,7 @@
+  ri_apr_ack_flags(ch);ri_apr_notify(ch);ri_slim.rx_bytes+=20+bytes;ri_slim.frames++;
+  if(packet[4]&1) {
+   uint32_t resume[]={7,1,0x52560001,0,0};
+-  int sent=ri_slim_send(7,0xffff,packet[2],0xffff,resume,sizeof(resume));
++  int sent=ri_slim_send(7,0xfffffffe,packet[2],0xfffffffe,resume,sizeof(resume));
+   if(sent)return sent;
+  }
+  return error;
+@@ -221,7 +223,7 @@
+  if(error)goto failed;
+  phase="hello_send";
+  uint32_t hello[]={2,0xe110,2,0,0};hello[1]=ri_slim_checksum(hello);
+- error=ri_slim_send(2,0xffff,0,0xffff,hello,sizeof(hello));if(error)goto failed;
++ error=ri_slim_send(2,0xfffffffe,0xffffffff,0xfffffffe,hello,sizeof(hello));if(error)goto failed;
+  phase="service_discovery";error=ETIMEDOUT;
+  for(unsigned i=0;i<1000 && ri_slim.frames<512;i++) {
+   ri_slim.rx_polls++;int received=ri_slim_receive(0,0);
