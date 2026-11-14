@@ -153,7 +153,8 @@ padding/unknown/duplicate/malformed allocations, concurrent publication,
 invalid names/CIDs, bounded records/output and zero shared-memory writes.
 The full8278313 kernel build and image verification pass, with no numbered
 patches skipped. The temporary image is26,716,160 bytes,577 command-line
-bytes and retains1MiB of kernel log. Live private-channel validation remains
+bytes and retains1MiB of kernel log. Fastboot accepted its verified temporary boot; a home-screen confirmation
+is pending before startup controls. Live private-channel validation remains
 pending. Artifact hashes are in `outputs/adsp-transport-build-manifest.json`.
 
 The pinned source points to SMD: River's configuration enables SDM450 and

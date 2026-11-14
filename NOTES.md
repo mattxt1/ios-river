@@ -5,7 +5,40 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff: ADSP authenticated and ready; PCM transport next (2026-11-13)
+## Active handoff:0300 temporarily booted; home confirmation pending (2026-11-13)
+
+The user returned River to fastboot. Productriver and the exact image SHA256
+592c3e1d9059dff22222c7afd8f0180cecfbe97b3f072e623949cf5355b82b30
+were checked. Temporary fastboot boot of outputs/river-adsp-transport-8278313.img
+completed transfer/boot OKAY; no partition flashed. USB capture is running
+with a bounded lifetime at work/audit-device-validation/boot-8278313-usb.log
+(session23468). Home-screen responsiveness is pending; no metadata, staging,
+handshake or startup controls have run on this boot. Wait for the user's reply.
+The approved SSH key/private-public pair was requested from macOS storage;
+no credential contents were read or copied.
+
+After the home is responsive: create a fresh private SSH control socket
+(e.g. /private/tmp/river-audio-cm-8278313/control) with the already-approved
+key, preserving host validation/IdentitiesOnly/IdentityAgent=none/BatchMode.
+Collect --probe, --start-status and audio baseline. Then run exact stock
+--metadata /private/var/tmp/river-adsp-3aae7a57.mdt, inspect success; run
+--stage-image /private/var/tmp/river-adsp-f325942f.img, inspect complete hash
+success; --handshake-init, inspect release/readback; --start once. After ready,
+--probe now includes passive private channel names/layouts/indices and GLINK
+metadata. Save private captures under work/adsp-transport. Do not open an APR
+channel or assume a CID until this survey has been inspected. Prior6ac8fd5
+startup and responsive iOS are verified, described below; new8278313 startup
+and private channel discovery remain untested. Output remains discarded and
+input synthetic; no physical audio has passed.
+
+Pinned canonical SMD sources are newly private at work/pcm-transport/msm_smd.c
+and smd_private.c. The header confirms20-byte packet framing, type low8/xfer
+bits8–11, byte-access40/word-access88 control layouts. The implementation has
+separate bridge base IDs, consistent with0300 reporting bridge names without
+decoding them using table13 assumptions. Use its actual handshake/ownership
+protocol when implementing the subsequent APR CORE state query.
+
+##0299 startup milestone and0300 build evidence (2026-11-13)
 
 The user confirmed the home screen responsive on6ac8fd5 before controls.
 Read-only baseline passed. Stock metadata accepted (PAS status0/result0),
