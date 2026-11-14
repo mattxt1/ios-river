@@ -311,3 +311,10 @@ service resolvers. This supports failure after keyed association in native
 network configuration, not successful usable Wi-Fi. It does not identify
 private configd policy owner. No rank/route/DNS override or Wi-Fi patch.
 User notified capture complete and can move to fastboot for verified0316.
+
+##0318 restores publication observation to combined image
+
+Installed daemon fingerprint lacks existing tracked SCwrite/readback logging.
+0318 embeds recompiled tracked observer with same entitlements and source
+behavior; no live restart or network override. Verify installed hash after
+boot before fresh join. See active NOTES.md for hashes and private evidence.

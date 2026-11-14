@@ -689,3 +689,60 @@ Private evidence work/codec-pcm/*-b9fe8ea.txt, especially codec-pcm/status.
 Next: audit/adjust AFE lifetime ordering relative to codec sink activation.
 DSPstatus1 alone does not prove the cause. Physical playback/capture pending.
 
+
+##0318 AFE-before-channel + Wi-Fi observer ready (2026-11-14)
+
+0317 full prior stages/codec clocks and route passed; active PCM AFEstart
+returned matched DSPstatus1 before any submission. Complete unmap/codec/
+amp/clocks/pins/channel cleanup, no uncertainty; user confirmed responsive.
+Phone remains0317, amp muted/QMIpower/NGD retained. Do not repeat one-shots.
+0318 source24942bcdb51c2d588ee12b642a0e4c4455b670bd committed before build;
+prepares acknowledged AFE SET/GET/START BEFORE codec channel activation in
+--codec-pcm. Session5 then reuses that start, without SET/START during the
+codec callback. Only exact owned afe_prepared state allows NGD transactions
+while AFE active; all prior map/ASM/stream proof/mute/ownership gates remain.
+No relaxed raw mode. Codec early failures close owned AFE before channel
+cleanup; pre-callback channel failure also cleans AFE. Unknown ownership
+retained, no retries. This is an ordering hypothesis, not a proven root cause.
+Primary stock msm-dai-q6-v2.c calls AFEstart in prepare; Madera sink activation
+is a separate DAPM event. Source pin work/codec-pcm-order/stock-source-pin.json.
+
+Actual-code ASan/UBSan engine tests pass AFEprepare ordering/one start,
+reuse/no duplicate SET/START, prepare rejection and owned cleanup plus all
+previous completion/timeout/2-page/session tests. Actual codec callback tests
+pass early prepare rejection/no writes, APR speaker-lock release, complete
+restoration and uncertainty. Actual NGD/channel tests pass. Native0318 exit0,
+exact three headers/new strings verified; previous kernel preserved
+work/codec-pcm/kernel-b9fe8ea.verified. Build/ledger work/codec-pcm-order/
+incremental-provenance.json, job work/build/river-3fc706c1db3d-TK5NtT.
+KDKROOT remains /private/tmp/river-kdk-22G74-qq2pjbum/expanded/KDK.pkg/Payload.
+Kernel SHAa883dcd595a0376fa372dd2e421700d827413b661c29d83f80f7ff667e99c5ff.
+Image outputs/river-codec-pcm-order-24942bc.img:26839040bytes,577cmdline,
+SHA8a8be9f559a03527cc96e2726749a337e3e6cf9e8b8794a3f4243685cf9735bd.
+Fastboot requested; no0318 boot yet. Temporary boot only; never flash.
+
+Wi-Fi secondary: rget read-only fingerprint proves currently installed
+river-net71728B SHA807a0190cac9c3dbb3ce685418f0235af95dc025b9192ba0275fa93dbb7b44ba,
+without tracked SCwrite/readback observation strings. Prior observer was
+apparently overwritten by older bundled daemon on later temporary boots;
+that overwrite mechanism still needs confirmation, not assumed. Initial
+cat attempt exit127/0B was missing tool, not a daemon fingerprint; rget
+capture succeeded exit0. Private binaries/metadata work/codec-pcm/installed-*.
+Recompiled existing tracked observer source (no source/config behavior
+change), same three entitlements verified against installed daemon, signed.
+Only warnings deprecated daemon and unused ask_ipconfiguration. Embedded
+observer SHA962ae61430553b64e3d6d3282ad43625ddc30662062447f2874f6c7fe5a6528f.
+Committed packer114caea184dacb9f0b307bdfb39297cf31d06216 adds optional
+--net-helper and validates every actual RiverFiles entry: unrelated content
+and metadata preserved, no duplicate/missing daemon; payload/kernel verified.
+No live daemon replacement/restart or new rank/route/DNS overrides this turn.
+
+After readiness: verify productriver/hash, start work/codec-pcm-order/
+capture-boot.py, temporary boot, ask responsive home, inspect passive baseline
+then run work/codec-pcm-order/run-device.py ONCE. --codec-pcm owns same one-shot
+as --codec-route/channel-test; never run those first. Capture full status and
+post responsiveness. Also read installed daemon with rget and verify embedded
+observer hash before fresh Wi-Fi join/log collection. Existing monitor history
+is not current join proof. After active-route PCM PASS: bounded quiet tone,
+real iOS backend, physical mic. Playback/capture remain pending.
+
