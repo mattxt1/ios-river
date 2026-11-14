@@ -229,6 +229,18 @@ int main(void)
  fail_opcode=0x10dab;timeout_failure=true;
  assert(ri_stream_execute(&ri_live_stream,5)==ETIMEDOUT && ri_live_stream.mapped && ri_live_stream.in_flight && ri_pcm.poisoned);
  assert(!memcmp(&prior,&ri_stream,sizeof(prior)));
+ /* AFE START precedes sink setup and is not repeated by the engine. */
+ stream_reset(2);assert(!ri_stream_test());commands=write_count=0;expected_stream=0x05010000;
+ assert(!ri_stream_prepare_live() && ri_stream_live_prepared() && commands==3);
+ assert(ops[0]==0x100ef && ops[1]==0x100f0 && ops[2]==0x100e5);
+ assert(ri_stream_prepare_live()==EALREADY);unsigned before=commands;
+ assert(!ri_stream_execute(&ri_live_stream,5) && ri_live_stream.complete && !ri_live_stream.afe_prepared);
+ for(unsigned i=before;i<commands;i++)assert(ops[i]!=0x100e5 && ops[i]!=0x100ef);
+ stream_reset(2);assert(!ri_stream_test());commands=write_count=0;fail_opcode=0x100e5;
+ assert(ri_stream_prepare_live()==EREMOTE && !ri_live_stream.afe_prepared && !ri_route.afe_started);
+ assert(ri_live_stream.failed_opcode==0x100e5 && ri_stream_prepare_live()==EALREADY);
+ stream_reset(2);assert(!ri_stream_test());commands=write_count=0;assert(!ri_stream_prepare_live());
+ ri_stream_cleanup(&ri_live_stream);assert(!ri_route.afe_started && !ri_live_stream.afe_prepared);
  puts("actual-code zero-PCM map/RUN/WRITE ownership, completion and failure teardown tests passed");
  return 0;
 }

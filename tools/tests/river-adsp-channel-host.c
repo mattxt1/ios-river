@@ -15,6 +15,7 @@ static void channel_response(unsigned length);
 static uint32_t regs[0x4000/4],tx[8];
 static bool ri_slim_live(void){return live;}
 static bool ri_route_ready(void){return ready;}
+static bool ri_stream_live_prepared(void){return false;}
 #define VM_WIMG_IO 1
 static vm_offset_t ml_io_map_unmappable(unsigned p,unsigned n,unsigned a){assert(p==0xc140000 && n==0x4000 && a==1);maps++;return mode==12?0:(vm_offset_t)regs;}
 static void ml_io_unmap(vm_offset_t p,unsigned n){assert(p==(vm_offset_t)regs && n==0x4000);unmaps++;}

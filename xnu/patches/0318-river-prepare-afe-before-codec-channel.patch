@@ -1,0 +1,125 @@
+diff --git a/bsd/dev/river_adsp_stream.h b/bsd/dev/river_adsp_stream.h
+--- a/bsd/dev/river_adsp_stream.h
++++ b/bsd/dev/river_adsp_stream.h
+@@ -2,7 +2,7 @@
+  * No audible samples or /dev backend. Dedicated memory is permanent, and
+  * unresolved ownership is retained until reboot. ri_adsp_lock owns state. */
+ struct ri_stream_state {
+- bool attempted,mapped,running,in_flight,complete;
++ bool attempted,mapped,running,in_flight,complete,arm_attempted,afe_prepared;
+  vm_offset_t page;
+  uint64_t physical;
+  uint32_t handle,completion_status,failed_opcode,failed_status;
+@@ -53,6 +53,7 @@
+   if(!ri_route_command(stream|0x507,stream|0x407,0x10bd3,0,NULL,0,&reply,true))state->running=false;
+  }
+  ri_route_cleanup(state->session,true);
++ if(!ri_route.afe_started)state->afe_prepared=false;
+  if(!ri_route.asm_open)state->running=false;
+  /* A returned buffer and fully acknowledged stream/device teardown precede
+   * unmap. Unknown WRITE ownership keeps the entire mapping until reboot. */
+@@ -63,13 +64,41 @@
+   if(!state->unmap_error)state->mapped=false;
+  }
+ }
++/* The live route may own an acknowledged AFE start while NGD connects its
++ * codec sink. No ASM, ADM or PCM submission exists at this point. */
++static bool
++ri_stream_live_prepared(void)
++{
++ return ri_live_stream.arm_attempted && ri_live_stream.afe_prepared &&
++  !ri_live_stream.attempted && ri_route.afe_started && ri_pcm.unmapped &&
++  ri_pcm.asm_closed && !ri_pcm.poisoned && !ri_route.asm_open &&
++  !ri_route.adm_open && !ri_route.cleanup_error && ri_route.muted;
++}
++static int
++ri_stream_prepare_live(void)
++{
++ if(ri_live_stream.arm_attempted || ri_live_stream.attempted)return EALREADY;
++ if(!ri_stream.complete || !ri_route_ready() || !ri_route.config_readback ||
++    ri_route.cleanup_error || ri_route.failed_opcode || !ri_route.asm_format)return EBUSY;
++ ri_live_stream.arm_attempted=true;ri_live_stream.session=5;
++ struct ri_apr_reply reply;int error;const char *phase="afe_prepare_mute";
++ if(!ri_route_hold_mute()) {error=EIO;goto done;}
++ phase="afe_prepare_config";error=ri_route_apply_config();if(error)goto done;
++ if(!ri_route.config_readback) {error=EIO;goto done;}
++ uint32_t port=0x4000;phase="afe_prepare_start";
++ error=ri_stream_command(&ri_live_stream,0x504,0x404,0x100e5,0,&port,1,&reply);
++ if(!error) {ri_route.afe_started=ri_live_stream.afe_prepared=true;phase="afe_prepared";}
++done:
++ return ri_stream_result(&ri_live_stream,phase,error);
++}
+ static int
+ ri_stream_execute(struct ri_stream_state *state,unsigned session)
+ {
+  if(state->attempted)return EALREADY;
+- if(!ri_route_ready() || !ri_route.config_readback || !ri_route.cold_attempted ||
++ if((!ri_route_ready() && !(state==&ri_live_stream && ri_stream_live_prepared())) || !ri_route.config_readback || !ri_route.cold_attempted ||
+     ri_route.cleanup_error || ri_route.failed_opcode || !ri_route.asm_format)return ri_stream_result(state,"prerequisite",EBUSY);
+  if(session!=4 && session!=5)return EINVAL;
++ if(state==&ri_live_stream && state->arm_attempted && !ri_stream_live_prepared())return EBUSY;
+  state->attempted=true;state->session=session;
+  ri_route.failed_opcode=ri_route.failed_status=ri_route.cleanup_opcode=ri_route.cleanup_status=0;
+  ri_route.cleanup_error=0;ri_route.asm_format=false;ri_route.session=session;
+@@ -94,6 +123,7 @@
+  if(reply.words!=1 || !reply.data[0]) {ri_pcm.poisoned=true;error=EIO;goto done;}
+  state->handle=reply.data[0];state->mapped=true;
+  if(!ri_route_hold_mute()) {phase="mute";error=EIO;goto done;}
++ if(!state->afe_prepared) {
+  phase="afe_reconfigure";
+  error=ri_route_apply_config();
+  if(error) {
+@@ -105,6 +135,7 @@
+  error=ri_stream_command(state,0x504,0x404,0x100e5,0,&port,1,&reply);
+  if(error)goto done;
+  ri_route.afe_started=true;
++ }
+  const uint32_t stream=((state->session<<8)|1)<<16;
+  uint32_t open[]={0,16u<<16,0x10c68,0x10da5};phase="asm_open";
+  error=ri_stream_command(state,stream|0x507,stream|0x407,0x10db3,0,open,4,&reply);
+diff --git a/bsd/dev/river_adsp_ngd.h b/bsd/dev/river_adsp_ngd.h
+--- a/bsd/dev/river_adsp_ngd.h
++++ b/bsd/dev/river_adsp_ngd.h
+@@ -24,7 +24,7 @@
+ ri_ngd_live(void)
+ {
+  return ri_slim.active && ri_slim.selected && ri_slim_live() && ri_stream.complete &&
+-  ri_route_ready() && ri_route.muted;
++  (ri_route_ready() || ri_stream_live_prepared()) && ri_route.muted;
+ }
+ static int
+ ri_ngd_decode(const uint32_t *words,unsigned bytes)
+diff --git a/bsd/dev/river_adsp_codec_route.h b/bsd/dev/river_adsp_codec_route.h
+--- a/bsd/dev/river_adsp_codec_route.h
++++ b/bsd/dev/river_adsp_codec_route.h
+@@ -146,6 +146,12 @@
+    error=ri_clock_run_impl(true,true,true);ri_clock_data_test=NULL;
+   }
+  }
++ /* Route setup can fail before the PCM callback; close the owned AFE
++  * before returning to channel cleanup. APR waits never hold speaker lock. */
++ if(ri_codec_path.with_pcm && ri_live_stream.afe_prepared) {
++  lck_mtx_unlock(&ri_speaker_lock);ri_stream_cleanup(&ri_live_stream);lck_mtx_lock(&ri_speaker_lock);
++  if(ri_route.afe_started || ri_pcm.poisoned || ri_route.cleanup_error)ri_channel.uncertain=true;
++ }
+  ri_codec_path.clock_error=error;
+  lck_mtx_unlock(&ri_speaker_lock);lck_mtx_unlock(&ri_codec_lock);return error;
+ }
+@@ -156,8 +162,15 @@
+  if(!ri_stream.complete || !ri_route_ready() || !ri_route.muted || !ri_afe_mute_hold ||
+     !ri_ngd.address_valid || !ri_ngd.enabled || ri_ngd.uncertain || ri_channel.attempted)return EBUSY;
+  ri_codec_path.attempted=true;ri_codec_path.with_pcm=with_pcm;
+- ri_channel_active_test=ri_codec_path_clock;
+- int error=ri_channel_test();ri_channel_active_test=NULL;ri_codec_path.channel_error=error;
++ int error=with_pcm?ri_stream_prepare_live():0;
++ if(!error) {
++  ri_channel_active_test=ri_codec_path_clock;
++  error=ri_channel_test();ri_channel_active_test=NULL;
++ }
++ /* A channel failure before the active callback still owns this AFE start. */
++ if(with_pcm && ri_live_stream.afe_prepared)ri_stream_cleanup(&ri_live_stream);
++ if(!error && (ri_route.afe_started || ri_route.cleanup_error))error=EIO;
++ ri_codec_path.channel_error=error;
+  ri_codec_path.complete=!error && ri_codec_path.seen && ri_codec_path.restored &&
+   (!with_pcm || (ri_live_stream.complete && !ri_live_stream.mapped && !ri_live_stream.in_flight)) &&
+   ri_channel.complete && ri_i2s_codec_restored && ri_i2s_amp_restored;
