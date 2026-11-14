@@ -5,7 +5,7 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0304 AFE SET accepted;0305 readback candidate ready (2026-11-14)
+## Active handoff:0305 temporarily booted; home check pending (2026-11-14)
 
 User confirmed0304 home responsive. Initial baseline SSH stalled before
 connection because the approved key had become iCloud compressed/dataless.
@@ -35,8 +35,16 @@ additional bounded transport tail is ignored. Diagnostics now retain reply
 word count, module/parameter/size and six known config words. No readback
 success or hardware route is assumed from SET acceptance.
 
-0305 source34a024356e818873f2f88b2d9f990a1937cf81c4 is built/packaged,
-not booted; next fastboot readiness has been requested. Host ASan/UBSan route regressions, extended-tail/malformed record
+0305 source34a024356e818873f2f88b2d9f990a1937cf81c4 is built/packaged.
+User reported the0304 Wi-Fi join showed a checkmark then spinner, then
+confirmed fastboot readiness. This reply arrived after the last passive
+snapshot, so do not assign that earlier unassociated snapshot to the UI event.
+Exact image SHA and productriver were verified; temporary transfer
+OKAY(0.609s), boot OKAY(0.216s); no partition flashed. Home-screen confirmation
+is pending. No0305 controls have run. Bounded USB capture session50311 writes
+work/afe-readback/boot-34a0243-usb.log. Wait for responsive-home confirmation,
+inspect passive baseline, then run work/afe-readback/run-device.py once.
+Host ASan/UBSan route regressions, extended-tail/malformed record
 cases, full0304/0305 patch application and real speaker helper tests pass.
 To save build time, the verified0304 kernel was preserved separately at
 work/pcm-routing/kernel-3fc706c.verified. Only the committed0305 header patch

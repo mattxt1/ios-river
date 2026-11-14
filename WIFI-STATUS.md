@@ -250,3 +250,11 @@ evidence was requested while the audio readback correction built.
 Some host SSH timeouts were traced to an iCloud-offloaded approved key before
 connection. In-place hydration fixed that case. Do not infer a kernel lock
 problem from those timeouts. No rank/route/DNS override was applied.
+
+
+The user subsequently reported checkmark then spinner on0304 and returned
+the phone to fastboot. That reply was later than the passive unassociated
+snapshot; it cannot be treated as an immediate post-event capture.0305 is
+temporarily booted with home confirmation pending. The persistent log reader
+can compare new bytes against the earlier16,086byte snapshot, while retaining
+the lack of native per-entry timestamps as a limitation.
