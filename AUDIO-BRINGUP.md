@@ -4,6 +4,15 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+## AFE readback, ADM routing and AFE start/stop verified on0305
+
+The0305 boot verified exact mono48k/16-bit/channel144 AFE configuration,
+ADM COPP0 and RX matrix routing, then a muted AFE start/route/stop cycle.
+Both ASM/COPP sessions closed, AFE stopped, rings were consumed and no
+uncertain ownership remained. The amplifier stays muted until reboot.
+No ASM RUN/WRITE/sample DMA, physical playback or microphone capture has run.
+Completion-driven PCM buffers are the next implementation stage.
+
 ## AFE SET accepted; readback correction0305 ready
 
 0304 repeated PCM map/unmap and ASM format/close successfully. AFE accepted

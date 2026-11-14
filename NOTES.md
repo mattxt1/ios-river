@@ -5,7 +5,43 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0305 temporarily booted; home check pending (2026-11-14)
+## Active handoff:0305 AFE/ADM routes and cleanup passed (2026-11-14)
+
+User confirmed responsive0305 home. Passive baseline and full exact stock
+startup/CORE/map-unmap/ASM format-close prerequisites passed. --afe-config
+now passed exact readback: phase=afe_config_verified/error0, get_words10,
+module0x1020c,param0x10212,bytes0x18, config words
+1/0x100000/0x10000/0x90/0/0xbb80 (mono48k16-bit shared144).
+--adm-route passed session2 open/format, ADM COPP0 open, RX matrix map and
+ASM/COPP close: inactive_route_complete/error0,transactions14.
+--afe-route passed verified amplifier mute, AFE start, session3 format,
+ADM COPP0/matrix routing, ASM/COPP close and AFE stop:
+active_route_complete/error0,transactions22,poisoned0,cleanup_error0,
+all asm_open/adm_open/matrix/afe_started flags0, amp_mute_retained1.
+Post-route CID6 remains OPENED2/2 with consumed TX0x4ec/RX0x5c4 and stable
+records. Amplifier differs only by intended hardware mute0x10; power/format/
+PLL/gain/IRQ baseline match. No RUN/WRITE/sample DMA or physical sound/capture
+has run. Mute policy stays enabled until reboot. A post-test responsiveness
+question is pending; do not record its answer before received.
+
+Evidence: continuation work/afe-readback/{baseline,metadata,stage,handshake,
+start,pre-query,core,map,asm,afe,post-query,afe-config,adm-route,afe-route,
+post-route,wifi-monitor}-34a0243.txt. Current phone is0305, ADSP ready, APR
+owned/open, verified page unmapped/retained, all route resources closed,
+shared CX/XO retained and amplifier mute held. Do not repeat one-shot tests.
+Next implementation: dedicated retained PCM buffer, ASM RUN/WRITE with exact
+WRITE_DONE address/handle/token ownership and bounded teardown. This is the
+next required step toward streaming, followed by codec/SLIMbus connection.
+Batch compatible bus discovery and Wi-Fi observations where source supports it.
+
+Native Wi-Fi reader ran again. The log increased from16,086 to16,788bytes;
+new tail records an accepted DHCP ACK and helper SC publication before the
+next monitor startup. Compare exact old/new prefix to bound attribution;
+no per-entry timestamps or immediate post-UI native DNS snapshot exists.
+The user reported checkmark then spinner before returning0304 to fastboot.
+No rank/route/DNS override was applied. Physical PCM and capture remain pending.
+
+##0305 build and pre-test record (2026-11-14)
 
 User confirmed0304 home responsive. Initial baseline SSH stalled before
 connection because the approved key had become iCloud compressed/dataless.
