@@ -216,7 +216,7 @@ ready0x6 does not establish post-query readiness. Queue size alone does not
 identify the response format. A valid CORE response has not been verified.
 
 
-## Declared response framing and diagnostics prepared (patch0302)
+## Declared response framing verified (patch0302)
 
 The pinned APR receiver accepts V0/V1, a declared common-prefix header of at
 least20bytes and payload sized by the APR declaration. Q6 CORE accepts at
@@ -237,8 +237,26 @@ and pass0302's extensions, padding/length bounds, address/token checks,
 readiness failure with queued RX, partial/wrap/races, errors and close/no-ACK.
 The device's queued bytes have not been recovered; compatibility fixtures
 do not prove their format or the actual failure cause. Full1334e8c build and image verification pass; temporary fastboot boot returned
-OKAY. Home-screen confirmation is pending before controls. Live validation
-of0302 remains pending. Artifact hashes: `outputs/apr-framing-build-manifest.json`.
+OKAY. The home-screen confirmation, firmware/startup sequence and live0302 APR
+validation passed. Artifact hashes: `outputs/apr-framing-build-manifest.json`.
+
+## Bidirectional APR milestone (1334e8c)
+
+The live CORE query passed: exact source/destination/token/opcode match,
+returned DSP state1, TX40bytes consumed and RX56bytes consumed. The actual
+SMD body is36bytes; APR header0x00240081 declares version1 and32-byte header,
+with state at the declared payload offset. This validates0302's extended
+header handling. The channel remains OPENED on both sides, TXhead=tail0x28
+and RXhead=tail0x38. Live SMP2P snapshot is state0x6/version1. Amplifier
+baseline registers remain unchanged. Post-query UI confirmation is pending;
+read-only SSH and surveys already worked.
+
+Next is a serialized APR transaction/notification dispatcher and an isolated
+ASM shared-memory map/unmap test with explicit physical-page/cache/handle
+ownership. The pinned q6asm driver uses shared-memory pool3 and property0;
+no buffer was allocated or mapped by this milestone. ASM session, ADM/AFE
+routing, SLIMbus/codec configuration and completion-driven PCM buffers are
+still required before physical playback, followed by microphone capture.
 
 ## Verified progress and remaining work (2026-11-13)
 
@@ -259,8 +277,8 @@ of0302 remains pending. Artifact hashes: `outputs/apr-framing-build-manifest.jso
   one valid340-byte record at0x86030 and uncachedfree0x188, with no malformed
   records. No IPC, power vote or DSP start was requested. iOS stayed responsive.
 
-The next audio step is the bounded APR CORE state query over the now
-validated private SMD channel. Q6AFE/Q6ASM/SLIMbus PCM
+The next audio step is shared-buffer map/unmap through a reusable serialized
+APR dispatcher, building on the now-verified CORE command exchange. Q6AFE/Q6ASM/SLIMbus PCM
 transport, codec routing and physical microphone capture remain to be
 implemented. Output is currently discarded and input is synthetic; endpoint
 counters and successful iOS API calls establish only software plumbing.

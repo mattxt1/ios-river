@@ -5,7 +5,46 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0302 built/temporarily booted; home confirmation pending (2026-11-13)
+## Active handoff: APR CORE exchange passed; shared PCM buffers next (2026-11-13)
+
+The user confirmed responsive home on1334e8c. Baseline, exact metadata,
+17MiB staging, handshake, ADSP startup and pre-query closed/empty CID6 check
+all passed. The one-shot --apr returned phase=core_state/error0, sent1,
+received1, state1, TX40/RX56 bytes,2open polls/1TX poll/2RX polls. The actual
+response metadata is SMDbody36, APRheader0x00240081 (version1,32-byte header,
+36-byte declared packet), source0x403,destination0x503, token1379991553,
+opcode0x1290d, decoder STATE1. Live readiness snapshot succeeded with remote
+state0x6/version1. No close requested. Post-query passive survey has CID6
+states2/2, TXhead=tail0x28, RXhead=tail0x38, valid/stable records. Amplifier
+register baseline is unchanged. This proves a matched bidirectional APR CORE
+command exchange, not PCM playback or capture. The actual V1 extended header
+explains0301's framing rejection on this response format; old failure record
+alone lacked decisive bytes, so preserve its historical uncertainty.
+
+Evidence: work/adsp-apr-framing/{baseline,metadata,stage,handshake,start,
+pre-query,query,post-query}-1334e8c.txt. Execution script run-1334e8c.py stopped
+on failed prerequisite by design; all gates passed, APR exit0. Current phone
+runs outputs/river-apr-framing-1334e8c.img with ADSP ready and CID6 OPENED.
+No RX worker/PCM backend exists, and one-shot --apr cannot run again this boot.
+Shared CX/XO remain enabled until reboot. A post-query responsive-home question
+is pending; await reply before further active device controls. Read-only SSH
+worked immediately after query. Private SSH control socket:
+/private/tmp/river-audio-cm-1334e8c/control (600s persistence), approved key only.
+
+Next implementation: refactor the proven SMD send/receive into a serialized
+APR transaction dispatcher with exact service/port/token/opcode routing and
+bounded asynchronous notification handling. Then validate ASM shared-memory
+map/unmap using a dedicated retained contiguous page, exact physical range,
+cache/barrier discipline and explicit map handle ownership. Stock q6asm.c
+uses ASM_CMD_SHARED_MEM_MAP_REGIONS, pool3(SHMEM8_4K), property0 and region
+address/size; handle arrives in a separate response. Do not reuse firmware
+carveout, assume TZ allows arbitrary buffers or free a page after uncertain
+map/unmap. These are next design requirements, no map sent/allocated yet.
+Further physical playback needs ASM session/PCM format, ADM/AFE device routing,
+SLIMbus/codec paths and completion-driven buffers; capture follows playback.
+No AFE/ASM command, sample buffer or physical audio test has run.
+
+##0302 build and temporary boot evidence (2026-11-13)
 
 Source1334e8cb0bbf5c1667cafbc6a2010ba5c5b01387 through0302 passed full
 build work/build/river-1334e8cb0bbf-L6pqRY with no numbered patches skipped.
