@@ -1,0 +1,174 @@
+diff --git a/bsd/dev/river_adsp_stream.h b/bsd/dev/river_adsp_stream.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/river_adsp_stream.h
+@@ -0,0 +1,158 @@
++/* One explicit zero-PCM DMA/completion test on the verified AFE/ADM path.
++ * No audible samples or /dev backend. Dedicated memory is permanent, and
++ * unresolved ownership is retained until reboot. ri_adsp_lock owns state. */
++static struct {
++ bool attempted,mapped,running,in_flight,complete;
++ vm_offset_t page;
++ uint64_t physical;
++ uint32_t handle,completion_status,failed_opcode;
++ unsigned submitted,completed,bytes_completed;
++ int unmap_error;
++} ri_stream;
++static char ri_stream_note[1536]="not requested; physical playback/capture pending";
++static int
++ri_stream_result(const char *phase,int error)
++{
++ snprintf(ri_stream_note,sizeof(ri_stream_note),
++  "phase=%s error=%d attempted=%u poisoned=%u complete=%u page_retained=%u region_bytes=%u physical=%#llx handle=%#x mapped=%u running=%u in_flight=%u submitted=%u completed=%u bytes_completed=%u frames_completed=%u completion_status=%#x failed_opcode=%#x unmap_error=%d asm_open=%u adm_open=%u matrix=%u afe_started=%u amp_mute_retained=%u cleanup_error=%d cleanup_opcode=%#x cleanup_status=%#x rx_header=%#x rx_source=%#x rx_destination=%#x rx_token=%#x rx_opcode=%#x samples=zero_only ios_pcm_backend=0 capture=synthetic",
++  phase,error,ri_stream.attempted,ri_pcm.poisoned,ri_stream.complete,!!ri_stream.page,
++  ri_stream.page?(unsigned)PAGE_SIZE:0,(unsigned long long)ri_stream.physical,
++  ri_stream.handle,ri_stream.mapped,ri_stream.running,ri_stream.in_flight,
++  ri_stream.submitted,ri_stream.completed,ri_stream.bytes_completed,
++  ri_stream.bytes_completed/4,ri_stream.completion_status,ri_stream.failed_opcode,
++  ri_stream.unmap_error,ri_route.asm_open,ri_route.adm_open,ri_route.matrix,
++  ri_route.afe_started,ri_route.muted,ri_route.cleanup_error,ri_route.cleanup_opcode,
++  ri_route.cleanup_status,ri_pcm.rx_header,ri_pcm.rx_source,ri_pcm.rx_destination,
++  ri_pcm.rx_token,ri_pcm.rx_opcode);
++ printf("RIVER STREAM: %s\n",ri_stream_note);return error;
++}
++static int
++ri_stream_command(uint32_t source,uint32_t destination,uint32_t opcode,uint32_t response,
++ const uint32_t *payload,unsigned words,struct ri_apr_reply *reply)
++{
++ int error=ri_route_command(source,destination,opcode,response,payload,words,reply,false);
++ if(error && !ri_stream.failed_opcode)ri_stream.failed_opcode=opcode;
++ return error;
++}
++static void
++ri_stream_cleanup(void)
++{
++ struct ri_apr_reply reply;const uint32_t stream=0x04010000;
++ if(ri_stream.running && !ri_pcm.poisoned) {
++  if(!ri_route_command(stream|0x507,stream|0x407,0x10bd3,0,NULL,0,&reply,true))ri_stream.running=false;
++ }
++ ri_route_cleanup(4,true);
++ if(!ri_route.asm_open)ri_stream.running=false;
++ /* A returned buffer and fully acknowledged stream/device teardown precede
++  * unmap. Unknown WRITE ownership keeps the entire mapping until reboot. */
++ if(ri_stream.mapped && !ri_stream.in_flight && !ri_pcm.poisoned &&
++    !ri_route.asm_open && !ri_route.adm_open && !ri_route.afe_started &&
++    !ri_route.cleanup_error) {
++  ri_stream.unmap_error=ri_route_command(0x507,0x407,0x10d94,0,&ri_stream.handle,1,&reply,true);
++  if(!ri_stream.unmap_error)ri_stream.mapped=false;
++ }
++}
++static int
++ri_stream_test(void)
++{
++ if(ri_stream.attempted)return EALREADY;
++ if(!ri_route_ready() || !ri_route.config_readback || !ri_route.hot_attempted ||
++    ri_route.cleanup_error || ri_route.failed_opcode || !ri_route.asm_format || !ri_route.muted)return ri_stream_result("prerequisite",EBUSY);
++ ri_stream.attempted=true;
++ ri_route.failed_opcode=ri_route.failed_status=ri_route.cleanup_opcode=ri_route.cleanup_status=0;
++ ri_route.cleanup_error=0;ri_route.asm_format=false;ri_route.session=4;
++ if(kmem_alloc_contig(kernel_map,&ri_stream.page,PAGE_SIZE,PAGE_MASK,0,0,
++     KMA_DATA|KMA_ZERO|KMA_PERMANENT,VM_KERN_MEMORY_IOKIT)!=KERN_SUCCESS)return ri_stream_result("allocate",ENOMEM);
++ ppnum_t pn=pmap_find_phys(kernel_pmap,(addr64_t)ri_stream.page);
++ uint64_t pa=pn?ptoa_64(pn):0;
++ if(!pa || (pa&PAGE_MASK) || PAGE_SIZE<16384 || (PAGE_SIZE&4095) ||
++    pa<0x18000000ULL || pa>0x81800000ULL-PAGE_SIZE || pa==ri_pcm.physical)
++  return ri_stream_result("physical_range",EIO);
++ for(unsigned i=0;i<PAGE_SIZE;i+=4096) {
++  ppnum_t sub=pmap_find_phys(kernel_pmap,(addr64_t)(ri_stream.page+i));
++  if(!sub || ptoa_64(sub)+(i&PAGE_MASK)!=pa+i)return ri_stream_result("contiguity",EIO);
++ }
++ ri_stream.physical=pa;
++ memset((void *)ri_stream.page,0,PAGE_SIZE);sweet_dcache_clean(ri_stream.page,PAGE_SIZE);
++ __asm__ volatile("dmb sy" ::: "memory");
++ struct ri_apr_reply reply;int error;const char *phase="map";
++ uint32_t map[]={0x10003,0,(uint32_t)pa,(uint32_t)(pa>>32),(uint32_t)PAGE_SIZE};
++ error=ri_stream_command(0x507,0x407,0x10d92,0x10d93,map,5,&reply);
++ if(error)goto done;
++ if(reply.words!=1 || !reply.data[0]) {ri_pcm.poisoned=true;error=EIO;goto done;}
++ ri_stream.handle=reply.data[0];ri_stream.mapped=true;
++ if(!ri_route_hold_mute()) {phase="mute";error=EIO;goto done;}
++ uint32_t port=0x4000;phase="afe_start";
++ error=ri_stream_command(0x504,0x404,0x100e5,0,&port,1,&reply);
++ if(error)goto done;
++ ri_route.afe_started=true;
++ const uint32_t stream=0x04010000;
++ uint32_t open[]={0,16u<<16,0x10c68,0x10da5};phase="asm_open";
++ error=ri_stream_command(stream|0x507,stream|0x407,0x10db3,0,open,4,&reply);
++ if(error)goto done;
++ ri_route.asm_open=true;
++ uint32_t format[]={20,(16u<<16)|2,48000,1,0x0201,0};phase="format";
++ error=ri_stream_command(stream|0x507,stream|0x407,0x10d98,0,format,6,&reply);
++ if(error)goto done;
++ ri_route.asm_format=true;
++ uint32_t device[]={1u<<16,0xffff4000,0x10312,(16u<<16)|1,48000,3,0};phase="adm_open";
++ error=ri_stream_command(0x40000508,0x40000408,0x10326,0x10329,device,7,&reply);
++ if(error)goto done;
++ if(reply.words!=2) {ri_pcm.poisoned=true;error=EIO;goto done;}
++ if(reply.data[0]) {ri_route.failed_status=reply.data[0];ri_stream.failed_opcode=0x10326;error=EREMOTE;goto done;}
++ if((reply.data[1]>>16) || (reply.data[1]&0xffff)>=0xff) {ri_pcm.poisoned=true;error=EIO;goto done;}
++ ri_route.copp=reply.data[1]&0xffff;ri_route.adm_open=true;
++ uint32_t matrix[]={0,1,0x10004,ri_route.copp};phase="matrix";
++ error=ri_stream_command(0x508,0x408,0x10325,0,matrix,4,&reply);
++ if(error)goto done;
++ ri_route.matrix=true;
++ uint32_t run[]={0,0,0};phase="run";
++ error=ri_stream_command(stream|0x507,stream|0x407,0x10daa,0,run,3,&reply);
++ if(error)goto done;
++ ri_stream.running=true;
++ for(unsigned i=0;i<4;i++) {
++  uint64_t address=pa+(uint64_t)i*4096;
++  uint32_t write[]={(uint32_t)address,(uint32_t)(address>>32),ri_stream.handle,4096,i,0,0,0};
++  phase="write_done";ri_stream.in_flight=true;
++  error=ri_stream_command(stream|0x507,stream|0x407,0x10dab,0x10d99,write,8,&reply);
++  if(reply.sent)ri_stream.submitted++;
++  if(!reply.sent)ri_stream.in_flight=false;
++  if(error)goto done;
++  /* Match token/services/ports in dispatcher plus exact address and handle
++   * here. An unrelated/malformed completion never releases this buffer. */
++  if(reply.words!=4 || reply.data[0]!=(uint32_t)address ||
++     reply.data[1]!=(uint32_t)(address>>32) || reply.data[2]!=ri_stream.handle) {
++   ri_pcm.poisoned=true;error=EIO;goto done;
++  }
++  ri_stream.in_flight=false;ri_stream.completion_status=reply.data[3];
++  if(reply.data[3]) {ri_stream.failed_opcode=0x10dab;error=EREMOTE;goto done;}
++  ri_stream.completed++;ri_stream.bytes_completed+=4096;
++ }
++ phase="zero_pcm_complete";
++done:
++ ri_stream_cleanup();
++ if(!error && ri_route.cleanup_error) {phase="cleanup";error=ri_route.cleanup_error;}
++ if(!error && (ri_stream.mapped || ri_stream.in_flight || ri_route.asm_open ||
++    ri_route.adm_open || ri_route.afe_started)) {phase="ownership";error=EIO;}
++ ri_stream.complete=!error && ri_stream.completed==4;
++ return ri_stream_result(phase,error);
++}
++static int
++river_adsp_stream_sysctl SYSCTL_HANDLER_ARGS
++{
++ int value=0,error=sysctl_handle_int(oidp,&value,0,req);
++ if(error || !req->newptr)return error;
++ if(value!=1)return EINVAL;
++ lck_mtx_lock(&ri_adsp_lock);error=ri_stream_test();lck_mtx_unlock(&ri_adsp_lock);return error;
++}
++static int
++river_adsp_stream_status_sysctl SYSCTL_HANDLER_ARGS
++{
++ lck_mtx_lock(&ri_adsp_lock);
++ int error=sysctl_handle_string(oidp,ri_stream_note,sizeof(ri_stream_note),req);
++ lck_mtx_unlock(&ri_adsp_lock);return error;
++}
++SYSCTL_PROC(_debug,OID_AUTO,river_adsp_stream,CTLTYPE_INT|CTLFLAG_RW|CTLFLAG_LOCKED,
++ NULL,0,river_adsp_stream_sysctl,"I","Explicit muted zero-PCM DMA/completion test");
++SYSCTL_PROC(_debug,OID_AUTO,river_adsp_stream_status,CTLTYPE_STRING|CTLFLAG_RD|CTLFLAG_LOCKED,
++ NULL,0,river_adsp_stream_status_sysctl,"A","Last zero-PCM buffer ownership/completion result");
+diff --git a/bsd/dev/river_adsp_probe.h b/bsd/dev/river_adsp_probe.h
+--- a/bsd/dev/river_adsp_probe.h
++++ b/bsd/dev/river_adsp_probe.h
+@@ -107,6 +107,7 @@
+ #include "river_adsp_apr.h"
+ #include "river_adsp_pcm.h"
+ #include "river_adsp_route.h"
++#include "river_adsp_stream.h"
+ 
+ static int
+ river_adsp_probe_sysctl SYSCTL_HANDLER_ARGS

@@ -21,8 +21,7 @@ all asm_open/adm_open/matrix/afe_started flags0, amp_mute_retained1.
 Post-route CID6 remains OPENED2/2 with consumed TX0x4ec/RX0x5c4 and stable
 records. Amplifier differs only by intended hardware mute0x10; power/format/
 PLL/gain/IRQ baseline match. No RUN/WRITE/sample DMA or physical sound/capture
-has run. Mute policy stays enabled until reboot. A post-test responsiveness
-question is pending; do not record its answer before received.
+has run. Mute policy stays enabled until reboot. The user confirmed iOS remains responsive after the full sequence.
 
 Evidence: continuation work/afe-readback/{baseline,metadata,stage,handshake,
 start,pre-query,core,map,asm,afe,post-query,afe-config,adm-route,afe-route,
