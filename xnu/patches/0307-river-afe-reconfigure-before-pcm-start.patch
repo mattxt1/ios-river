@@ -1,0 +1,95 @@
+diff --git a/bsd/dev/river_adsp_route.h b/bsd/dev/river_adsp_route.h
+--- a/bsd/dev/river_adsp_route.h
++++ b/bsd/dev/river_adsp_route.h
+@@ -48,11 +48,13 @@
+      !ri_route.asm_open && !ri_route.adm_open && !ri_route.afe_started;
+ }
+ static int
+-ri_route_config(void)
+-{
+- if(ri_route.config_attempted)return EALREADY;
+- if(!ri_route_ready())return ri_route_result("config_prerequisite",EBUSY);
+- ri_route.config_attempted=true;
++ri_route_apply_config(void)
++{
++ /* The stock AFE start path sends device config for every start. A previous
++  * successful readback is not proof that STOP retained usable config. */
++ ri_route.configured=ri_route.config_readback=false;
++ ri_route.get_status=ri_route.get_words=ri_route.get_module=ri_route.get_param=ri_route.get_bytes=0;
++ memset(ri_route.get_config,0,sizeof(ri_route.get_config));
+  /* Stock Madera SLIM0 RX defaults: device1 enum0, mono48kHz/16-bit,
+   * shared channel144. The amplifier AIF1 stereo wire format is separate. */
+  const uint32_t config[]={1,16u<<16,1u<<16,144,0,48000};
+@@ -88,6 +90,14 @@
+  }
+  ri_route.config_readback=true;return ri_route_result("afe_config_verified",0);
+ }
++static int
++ri_route_config(void)
++{
++ if(ri_route.config_attempted)return EALREADY;
++ if(!ri_route_ready())return ri_route_result("config_prerequisite",EBUSY);
++ ri_route.config_attempted=true;
++ return ri_route_apply_config();
++}
+ static void
+ ri_route_cleanup(unsigned session,bool hot)
+ {
+diff --git a/bsd/dev/river_adsp_stream.h b/bsd/dev/river_adsp_stream.h
+--- a/bsd/dev/river_adsp_stream.h
++++ b/bsd/dev/river_adsp_stream.h
+@@ -5,7 +5,8 @@
+  bool attempted,mapped,running,in_flight,complete;
+  vm_offset_t page;
+  uint64_t physical;
+- uint32_t handle,completion_status,failed_opcode;
++ uint32_t handle,completion_status,failed_opcode,failed_status;
++ uint32_t failure_rx_header,failure_rx_source,failure_rx_destination,failure_rx_token,failure_rx_opcode;
+  unsigned submitted,completed,bytes_completed;
+  int unmap_error;
+ } ri_stream;
+@@ -14,12 +15,14 @@
+ ri_stream_result(const char *phase,int error)
+ {
+  snprintf(ri_stream_note,sizeof(ri_stream_note),
+-  "phase=%s error=%d attempted=%u poisoned=%u complete=%u page_retained=%u region_bytes=%u physical=%#llx handle=%#x mapped=%u running=%u in_flight=%u submitted=%u completed=%u bytes_completed=%u frames_completed=%u completion_status=%#x failed_opcode=%#x unmap_error=%d asm_open=%u adm_open=%u matrix=%u afe_started=%u amp_mute_retained=%u cleanup_error=%d cleanup_opcode=%#x cleanup_status=%#x rx_header=%#x rx_source=%#x rx_destination=%#x rx_token=%#x rx_opcode=%#x samples=zero_only ios_pcm_backend=0 capture=synthetic",
++  "phase=%s error=%d attempted=%u poisoned=%u complete=%u page_retained=%u region_bytes=%u physical=%#llx handle=%#x mapped=%u running=%u in_flight=%u submitted=%u completed=%u bytes_completed=%u frames_completed=%u completion_status=%#x failed_opcode=%#x failed_status=%#x failure_rx_header=%#x failure_rx_source=%#x failure_rx_destination=%#x failure_rx_token=%#x failure_rx_opcode=%#x unmap_error=%d asm_open=%u adm_open=%u matrix=%u afe_started=%u amp_mute_retained=%u cleanup_error=%d cleanup_opcode=%#x cleanup_status=%#x rx_header=%#x rx_source=%#x rx_destination=%#x rx_token=%#x rx_opcode=%#x samples=zero_only ios_pcm_backend=0 capture=synthetic",
+   phase,error,ri_stream.attempted,ri_pcm.poisoned,ri_stream.complete,!!ri_stream.page,
+   ri_stream.page?(unsigned)PAGE_SIZE:0,(unsigned long long)ri_stream.physical,
+   ri_stream.handle,ri_stream.mapped,ri_stream.running,ri_stream.in_flight,
+   ri_stream.submitted,ri_stream.completed,ri_stream.bytes_completed,
+-  ri_stream.bytes_completed/4,ri_stream.completion_status,ri_stream.failed_opcode,
++  ri_stream.bytes_completed/4,ri_stream.completion_status,ri_stream.failed_opcode,ri_stream.failed_status,
++  ri_stream.failure_rx_header,ri_stream.failure_rx_source,ri_stream.failure_rx_destination,
++  ri_stream.failure_rx_token,ri_stream.failure_rx_opcode,
+   ri_stream.unmap_error,ri_route.asm_open,ri_route.adm_open,ri_route.matrix,
+   ri_route.afe_started,ri_route.muted,ri_route.cleanup_error,ri_route.cleanup_opcode,
+   ri_route.cleanup_status,ri_pcm.rx_header,ri_pcm.rx_source,ri_pcm.rx_destination,
+@@ -31,7 +34,12 @@
+  const uint32_t *payload,unsigned words,struct ri_apr_reply *reply)
+ {
+  int error=ri_route_command(source,destination,opcode,response,payload,words,reply,false);
+- if(error && !ri_stream.failed_opcode)ri_stream.failed_opcode=opcode;
++ if(error && !ri_stream.failed_opcode) {
++  ri_stream.failed_opcode=opcode;ri_stream.failed_status=reply->status;
++  ri_stream.failure_rx_header=ri_pcm.rx_header;ri_stream.failure_rx_source=ri_pcm.rx_source;
++  ri_stream.failure_rx_destination=ri_pcm.rx_destination;ri_stream.failure_rx_token=ri_pcm.rx_token;
++  ri_stream.failure_rx_opcode=ri_pcm.rx_opcode;
++ }
+  return error;
+ }
+ static void
+@@ -82,6 +90,13 @@
+  if(reply.words!=1 || !reply.data[0]) {ri_pcm.poisoned=true;error=EIO;goto done;}
+  ri_stream.handle=reply.data[0];ri_stream.mapped=true;
+  if(!ri_route_hold_mute()) {phase="mute";error=EIO;goto done;}
++ phase="afe_reconfigure";
++ error=ri_route_apply_config();
++ if(error) {
++  ri_stream.failed_opcode=ri_route.failed_opcode;ri_stream.failed_status=ri_route.failed_status;
++  goto done;
++ }
++ if(!ri_route.config_readback) {phase="afe_reconfigure_unverified";error=EIO;goto done;}
+  uint32_t port=0x4000;phase="afe_start";
+  error=ri_stream_command(0x504,0x404,0x100e5,0,&port,1,&reply);
+  if(error)goto done;

@@ -5,7 +5,36 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0306 muted PCM completion candidate ready (2026-11-14)
+## Active handoff:0306 stopped cleanly at second AFE start (2026-11-14)
+
+User confirmed0306 home responsive. Passive baseline matched prior amplifier
+power/format/PLL/gain/IRQ; mute initially0. All stock startup/CORE/map-unmap/
+ASM setup, exact AFE SET/GET, cold ADM route, and muted hot AFE/ADM teardown
+passed again. --pcm-silence mapped its dedicated16KiB page successfully,
+then second AFE START0x100e5 received matched DSP NACK (EREMOTE71), with no
+ASM RUN or WRITE sent. submitted/completed/bytes0, poisoned0, all resources
+closed, unmap_error0/mapped0, permanent page retained, amp_mute_retained1.
+The stream note captured failed_opcode0x100e5 but0306 did not retain its DSP
+status before unmap replaced the latest reply; do not infer a status value.
+Passive post-stream survey confirms only intended mute0x10 change and stable
+consumed rings. User post-test responsiveness is pending. No active retry.
+Evidence work/pcm-stream/{baseline,metadata,stage,handshake,start,pre-query,
+core,map,asm,afe,post-query,afe-config,adm-route,afe-route,post-route,
+pcm-silence,post-stream,wifi-monitor}-98dcdb1.txt.
+
+Stock q6afe.c __afe_port_start sends device SET config before every start.
+0307 now reapplies exact config and requires fresh exact GET readback before
+PCM's second start. This is source-grounded recovery, not proof that STOP
+cleared firmware config. It also retains first failed-command DSP status and
+RX identity across cleanup. Actual-code sanitizer tests now model config
+invalidated by STOP; reconfigure-before-start passes four completions and
+checks command order, SET/GET/start failures and unsupported GET blocking.
+Kernel build is not yet run. A fresh boot is required for one-shot controls.
+Wi-Fi read-only baseline on0306: state0/result0, native config and resolver
+snapshots captured privately. Join attempt requested while audio rebuilds.
+Physical playback and microphone capture remain pending.
+
+##0306 muted PCM completion candidate ready (2026-11-14)
 
 The user confirmed0305 remains responsive after full AFE/ADM routing and
 teardown. Current phone still runs0305; no active controls repeated.

@@ -10,7 +10,7 @@ static struct {bool unmapped,asm_closed,poisoned;uint64_t physical;unsigned tran
 static bool ri_afe_mute_hold,ri_speaker_ok;
 static unsigned ri_speaker_lock,lock_depth,commands,mode;
 static uint32_t mute_control,fail_opcode,fail_status,cleanup_fail_opcode,ops[32],digital;
-static bool timeout_failure,mute_failure;
+static bool timeout_failure,mute_failure,afe_config_live;
 static void lck_mtx_lock(unsigned *p) {assert(p==&ri_speaker_lock && !lock_depth);lock_depth++;}
 static void lck_mtx_unlock(unsigned *p) {assert(p==&ri_speaker_lock && lock_depth==1);lock_depth--;}
 static bool ri_cs35l41_rd(uint32_t reg,uint32_t *out) {assert(reg==0x2024 || reg==0x6000);*out=reg==0x2024?mute_control:digital;return !mute_failure;}
@@ -71,7 +71,7 @@ static int ri_pcm_transaction(struct ri_apr_request *r,struct ri_apr_reply *p)
  case 0x100ef: {
   uint32_t expected[]={(36u<<16)|0x4000,0,0,0,0x1020c,0x10212,24,1,16u<<16,1u<<16,144,0,48000};
   assert(r->source==0x504 && r->destination==0x404 && r->words==13 && !r->response);
-  assert(!memcmp(r->payload,expected,sizeof(expected)));break;
+  assert(!memcmp(r->payload,expected,sizeof(expected)));afe_config_live=true;break;
  }
  case 0x100f0:
   assert(r->words==6 && r->payload[0]==((24u<<16)|0x4000) && r->response==0x10106);
@@ -92,7 +92,10 @@ static int ri_pcm_transaction(struct ri_apr_request *r,struct ri_apr_reply *p)
   break;
  case 0x100e5:case 0x100e6:
   assert(r->source==0x504 && r->destination==0x404 && r->words==1 && r->payload[0]==0x4000);
-  assert(ri_afe_mute_hold && (mute_control&0x10));break;
+  assert(ri_afe_mute_hold && (mute_control&0x10));
+  if(r->opcode==0x100e5 && !afe_config_live) {p->status=2;return EREMOTE;}
+  if(r->opcode==0x100e6)afe_config_live=false;
+  break;
  case 0x10db3: {
   uint32_t session=(r->source>>24)&0xff;
   assert(session==2 || session==3 || session==4);assert(r->source==(((session<<8)|1)<<16|0x507));
@@ -128,7 +131,7 @@ static void reset(unsigned scenario)
 {
  memset(&ri_pcm,0,sizeof(ri_pcm));memset(&ri_route,0,sizeof(ri_route));
  ri_pcm.unmapped=ri_pcm.asm_closed=ri_speaker_ok=true;
- ri_afe_mute_hold=false;commands=lock_depth=0;mute_control=0xa5000001;digital=0;
+ ri_afe_mute_hold=false;afe_config_live=false;commands=lock_depth=0;mute_control=0xa5000001;digital=0;
  mode=scenario;fail_opcode=cleanup_fail_opcode=0;fail_status=7;timeout_failure=mute_failure=false;
 }
 int route_baseline_main(void)
@@ -180,7 +183,8 @@ static void stream_reset(unsigned scenario)
 int main(void)
 {
  route_baseline_main();
- stream_reset(2);assert(ri_stream_test()==0);
+ stream_reset(2);assert(!afe_config_live);assert(ri_stream_test()==0);
+ assert(ops[0]==0x10d92 && ops[1]==0x100ef && ops[2]==0x100f0 && ops[3]==0x100e5);
  assert(ri_stream.complete && ri_stream.completed==4 && ri_stream.submitted==4 && ri_stream.bytes_completed==16384);
  assert(!ri_stream.mapped && !ri_stream.in_flight && !ri_stream.running && !ri_route.afe_started && !ri_route.asm_open && !ri_route.adm_open);
  assert(ri_afe_mute_hold && (mute_control&0x10) && cleaned==1 && ri_stream.page);
@@ -198,6 +202,11 @@ int main(void)
  assert(!ri_pcm.poisoned && ri_stream.in_flight && ri_stream.mapped && !ri_route.asm_open && !ri_route.adm_open && !ri_route.afe_started);
  stream_reset(2);fail_opcode=0x10dab;timeout_failure=true;assert(ri_stream_test()==ETIMEDOUT && ri_pcm.poisoned && ri_stream.in_flight);
  stream_reset(2);fail_opcode=0x10daa;assert(ri_stream_test()==EREMOTE && !ri_stream.mapped && !ri_route.afe_started);
+ stream_reset(2);fail_opcode=0x100e5;assert(ri_stream_test()==EREMOTE);
+ assert(ri_stream.failed_opcode==0x100e5 && ri_stream.failed_status==7 && !ri_stream.mapped && !ri_route.afe_started && !ri_stream.submitted);
+ stream_reset(2);fail_opcode=0x100ef;assert(ri_stream_test()==EREMOTE && !ri_stream.mapped && !ri_route.afe_started && !ri_route.configured);
+ stream_reset(2);fail_opcode=0x100f0;assert(ri_stream_test()==EREMOTE && !ri_stream.mapped && !ri_route.config_readback && !ri_route.afe_started);
+ stream_reset(2);mode=1;assert(ri_stream_test()==EIO && !ri_stream.mapped && !ri_route.afe_started);
  const uint32_t cleanup_failures[]={0x10bd3,0x10bcd,0x10327,0x100e6,0x10d94};
  for(unsigned i=0;i<5;i++) {
   stream_reset(2);cleanup_fail_opcode=cleanup_failures[i];assert(ri_stream_test()==EREMOTE);

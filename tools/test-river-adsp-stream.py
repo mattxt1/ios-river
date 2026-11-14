@@ -13,11 +13,13 @@ with tempfile.TemporaryDirectory(prefix='river-adsp-route-') as directory:
  root=Path(directory)
  target=root/'source/bsd/dev/river_adsp_route.h';target.parent.mkdir(parents=True);target.write_text(source)
  subprocess.run(['patch','--batch','--silent','-p1','-d',str(root/'source')],input=(repo/'xnu/patches/0305-river-afe-get-capacity-record-bounds.patch').read_bytes(),check=True)
- (root/'route-actual.h').write_text(target.read_text())
  stream_patch=(repo/'xnu/patches/0306-river-zero-pcm-write-completion.patch').read_text().split('diff --git a/bsd/dev/river_adsp_stream.h',1)[1].split('diff --git ',1)[0]
  stream='\n'.join(x[1:] for x in stream_patch.splitlines() if x.startswith('+') and not x.startswith('+++'))+'\n'
  stream=stream.split('static int\nriver_adsp_stream_sysctl',1)[0].replace('__asm__ volatile("dmb sy" ::: "memory");','host_barrier();')
- (root/'stream-actual.h').write_text(stream)
+ stream_target=root/'source/bsd/dev/river_adsp_stream.h';stream_target.write_text(stream)
+ subprocess.run(['patch','--batch','--silent','-p1','-d',str(root/'source')],input=(repo/'xnu/patches/0307-river-afe-reconfigure-before-pcm-start.patch').read_bytes(),check=True)
+ (root/'route-actual.h').write_text(target.read_text())
+ (root/'stream-actual.h').write_text(stream_target.read_text())
  binary=root/'route'
  subprocess.run([os.environ.get('CC','cc'),'-O1','-g','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-I',str(root),str(repo/'tools/tests/river-adsp-stream-host.c'),'-o',str(binary)],check=True)
  subprocess.run([str(binary)],check=True)
