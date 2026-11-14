@@ -5,7 +5,59 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0318 AFE prepared, controller guard stopped, responsive (2026-11-14)
+## Active handoff:0319 temporarily booted; home check pending (2026-11-14)
+
+Source97104d33f0043925bb66a7179d52bde2f3a98732 through0319 committed before
+native build.0318 AFE-before-channel start passed but initial controller
+ownership guard stopped before channel commands/codec writes/PCM. AFE
+cleanup source path acknowledged STOP; user confirmed responsive. Current
+phone0319 after user ready; productriver/exact image SHA verified, temporary
+transfer OKAY0.612s/boot OKAY0.216s, no flash. Home responsiveness asked;
+no active0319 controls run. USB-only capture session50499 under
+work/codec-pcm-preflight/boot-97104d3-usb.log.
+
+0319 captures initial version/CFG/STATUS/IRQ_EN/IRQ_STAT/IE/VE BEFORE
+controller ownership rejection, plus final CFG/status/interrupts. Allows only
+bounded8*5ms busy settling and documented informational W1C notices
+0x11000000; never changes CFG/IRQ_EN, clears an error, or consumes unsolicited
+RX to pass ownership. Unexpected RX/TX/error/unknown bits stop unconsumed.
+Exact version/CFG1/IRQ_EN0/valid address remain required. New codec status
+reports actual final AFEstarted/DSPcleanup_error/live_mapping/inflight outside
+stored earlier livePCM snapshot. No mute/route/PCM policy change.
+Actual-code ASan/UBSan channel tests pass known IE/VE notice clear+proceed,
+unknown/fatal status retain, CFG change retain, stuck busy bound and previous
+ACK/failure/callback ownership tests. Codec route/clock/cleanup regressions
+pass. Native incremental0319 exit0, changed sweet_keys compilation, exact
+2headers and new linked strings verified. Ledger work/codec-pcm-preflight/
+incremental-provenance.json; prior0318 kernel preserved
+work/codec-pcm-order/kernel-24942bc.verified. Existing build job
+work/build/river-3fc706c1db3d-TK5NtT; exactKDKROOT remains
+/private/tmp/river-kdk-22G74-qq2pjbum/expanded/KDK.pkg/Payload.
+Kernel SHA81524a9d97bafc3a860916b41fa6b4c60f3a0212bd05b36d5adaaa8cd2c37183.
+Image outputs/river-codec-pcm-preflight-97104d3.img:26839040bytes,577cmdline,
+SHA9a3b4af91c9963cc5ee290439cdfa148b37b03396c403189058434195ebbe555.
+Packer114caea validates all actual unrelated RiverFiles metadata/content,
+kernel segments and image limits. Same observer/net hash962ae614... and
+native helperb9fe8ea embedded; no new live network override.
+
+Next after responsive home: inspect work/codec-pcm-preflight/passive-baseline.py,
+then run work/codec-pcm-preflight/run-device.py ONCE. Do not consume channel or
+codec one-shot first. Capture exact preflight registers even on failure and
+final AFE cleanup flags; ask post responsiveness. If PCM passes, bounded
+quiet tone then real iOS backend and microphone. Physical playback/capture pending.
+
+Wi-Fi0318 user spinner with state4/result1 and current observer verified.
+Detailed writes all accepted; globalIPv4 immediate1/end0, serviceIPv4/DNS
+end1 but later native absence; rankNever/NWI absent/empty resolvers. Four
+Wi-Fi reads complete; kernel partial/SSH timeout. Logs captured before new
+boot. No reason to claim keyed association failure or usable Wi-Fi.
+Secondary source audit of retained public bootp/ipconfig.defs: subsystem20000,
+set_service at index11; existing ask_ipconfiguration is unused. Public
+read-only get_summary/get_interface_list are potential next diagnostics;
+private iOS16 wire compatibility not yet verified, no MIG calls made.
+Do not enable the old unverified setter or force rank/routes/DNS.
+
+##0318 AFE prepared, controller guard stopped, responsive (2026-11-14)
 
 User confirmed home and post-sequence iOS responsive. Known standalone PCM
 session4 passed4/4 and all QMI/enum prerequisites. New order AFE SET/GET/START
