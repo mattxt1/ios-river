@@ -16,7 +16,8 @@ Updated November 13, 2026. `1334e8c` (through patch0302) booted to a
 responsive home screen and passed authenticated ADSP startup plus a matched
 APR CORE state query. The DSP returned state1 with a version1/32-byte APR
 header; both SMD rings are fully consumed and the channel remains open.
-Read-only post-query surveys work; post-query UI confirmation is pending.
+Read-only post-query surveys work, and the user confirmed iOS remained
+responsive after the successful APR exchange.
 Shared CX/XO requirements remain enabled until reboot. Physical playback and
 microphone capture remain unimplemented; shared PCM buffer mapping and
 ASM/AFE/codec routing are next. See [AUDIO-BRINGUP.md](AUDIO-BRINGUP.md).

@@ -26,8 +26,8 @@ pre-query,query,post-query}-1334e8c.txt. Execution script run-1334e8c.py stopped
 on failed prerequisite by design; all gates passed, APR exit0. Current phone
 runs outputs/river-apr-framing-1334e8c.img with ADSP ready and CID6 OPENED.
 No RX worker/PCM backend exists, and one-shot --apr cannot run again this boot.
-Shared CX/XO remain enabled until reboot. A post-query responsive-home question
-is pending; await reply before further active device controls. Read-only SSH
+Shared CX/XO remain enabled until reboot. The user confirmed iOS remains responsive after the successful query.
+No further APR request is needed on this one-shot test boot. Read-only SSH
 worked immediately after query. Private SSH control socket:
 /private/tmp/river-audio-cm-1334e8c/control (600s persistence), approved key only.
 

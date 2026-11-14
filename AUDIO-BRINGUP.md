@@ -200,8 +200,7 @@ with Wall/Wextra/Werror and normal ad-hoc signing; patch application passes.
 Full3e9f5cd kernel build and packaging passed; no numbered patches skipped,
 all kernel segments verified. Temporary image size26,732,544 bytes with577
 command-line bytes and1MiB retained log. Fastboot accepted its verified
-temporary boot; home-screen confirmation is pending before controls. Live
-APR validation is pending;
+temporary boot. Its live test is recorded below;
 artifact hashes are in `outputs/adsp-apr-build-manifest.json`.
 
 Live test on3e9f5cd opened SMD in2polls and sent40bytes, which the DSP
@@ -248,8 +247,8 @@ SMD body is36bytes; APR header0x00240081 declares version1 and32-byte header,
 with state at the declared payload offset. This validates0302's extended
 header handling. The channel remains OPENED on both sides, TXhead=tail0x28
 and RXhead=tail0x38. Live SMP2P snapshot is state0x6/version1. Amplifier
-baseline registers remain unchanged. Post-query UI confirmation is pending;
-read-only SSH and surveys already worked.
+baseline registers remain unchanged. The user confirmed responsive iOS after the query;
+read-only SSH and surveys also worked.
 
 Next is a serialized APR transaction/notification dispatcher and an isolated
 ASM shared-memory map/unmap test with explicit physical-page/cache/handle
