@@ -4,6 +4,14 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+##0310 broadcast reply correction temporarily booted
+
+0309 PCM passed again, then local validation rejected DSP node5's broadcast
+HELLO and closed CID2 before QMI. iOS remained responsive.0310 accepts router
+broadcast controls, retains strict QMI endpoints and adds reply metadata.
+Host tests and kernel build pass; corrected image temporarily booted.
+Responsive-home confirmation and hardware tests are pending.
+
 ##0309 SLIMbus control candidate ready
 
 The next verified image batches repeat PCM validation with CID2 IPCRTR

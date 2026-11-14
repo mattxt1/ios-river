@@ -35,3 +35,12 @@ lineage-18.1), with Git blob IDs calculated from retained exact source bytes:
 | [drivers/soc/qcom/qmi_interface.c](https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/lineage-18.1/drivers/soc/qcom/qmi_interface.c) | 0b952a48a33e77c41f6224207238e074525bfde0 |
 | [include/linux/qmi_encdec.h](https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/lineage-18.1/include/linux/qmi_encdec.h) | 66c3d84485eda6eddd1bbfb4a2de91fcc391f9e1 |
 | [drivers/slimbus/slim-msm.c](https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/lineage-18.1/drivers/slimbus/slim-msm.c) | 1cc5d8476630f7a90f86708c0e01ddb961128bc3 |
+
+##0309 observation and0310 correction
+
+0309 PCM passed with responsive iOS. CID2 opened and peer consumed HELLO,
+but local validation rejected a V1 HELLO from node5 to destination0xffffffff.
+CID2 CLOSED/CLOSING acknowledged; no QMI sent and no MMIO accessed.0310
+accepts broadcast router control destinations (stock dummy destination),
+while DATA/QMI stays exact unicast. Control words, ports and flags are now
+retained before rejection. Tests/build pass; hardware result pending.

@@ -5,7 +5,40 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0309 PCM passed; IPC broadcast HELLO correction (2026-11-14)
+## Active handoff:0310 broadcast-control fix temporarily booted (2026-11-14)
+
+0309 repeated clean PCM completion; user confirmed responsive after CID2's
+broadcast HELLO was rejected and channel closed.0310 corrects router control
+destination validation, accepts0xffffffff broadcast controls and keeps strict
+DATA/QMI endpoint checks. Captures control words/ports/flags before validation.
+Actual-code ASan/UBSan tests pass with broadcast HELLO/service discovery and
+QMI select/power flow, ring wrap and malformed/foreign endpoint rejection.
+Source86af266d94508b7701ba5f1ab59476e6d6970be0 compiled/linked/installed incrementally in the
+same isolated tree; new diagnostics linked, no compiler errors. Prior0309
+kernel preserved work/slim-control/kernel-6548eec.verified. Ledger:
+work/slim-broadcast/incremental-provenance.json. Current build through0310.
+Image outputs/river-slim-broadcast-86af266.img: 26802176bytes,
+577cmdline, SHA29d107f1a408a028753a47296c288f96be9808a59a145294219e23c6612f0df0.
+Kernel SHA0ea185357d2e86e306715d81b98f681e3abcac147d3ca516918482e5058934c0.
+User confirmed fastboot readiness; exact hash/productriver verified.
+Temporary transfer OKAY0.609s, boot OKAY0.216s; no partition flashed.
+Current phone accepted0310. Responsive-home confirmation is pending; no
+DSP/PCM/SLIM controls run. USB-only capture session45264 writes
+work/slim-broadcast/boot-86af266-usb.log. After responsive confirmation inspect
+passive baseline then run work/slim-broadcast/run-device.py ONCE. PCM clean
+completion gates discovery, successful exact service gates QMI select/power.
+No SLIMbus MMIO or codec routing/unmute. Physical playback/capture pending.
+
+0309 native Wi-Fi snapshot remains unassociated state0/result0. No new UI
+join attempt requested;0306's observed spinner remains unresolved. The
+0309 native kernel-log read timed out after196545bytes, while subsequent
+independent scalar/config/resolver reads succeeded; record as partial log,
+not a complete dump or proof of iOS failure. Protocol evidence is preserved
+in sysctl/post-survey captures. Offline public configd source audit confirms
+interface and service rank assertions are separate; it does not identify
+the private configd client's rank3 policy owner. No rank/DNS override applied.
+
+##0309 PCM passed; IPC broadcast HELLO correction (2026-11-14)
 
 User confirmed0309 home responsive. All prerequisite and combined PCM tests
 passed again: four submitted/completed16KiB, full teardown/unmap success,
