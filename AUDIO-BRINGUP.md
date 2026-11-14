@@ -69,7 +69,7 @@ same existing L19/L9 votes and adds no ADSP votes or DSP startup. WCNSS startup
 still follows its existing policy even when boot votes fail. CX/XO shared
 ownership policy and authenticated startup remain the next audio work.
 
-## Authenticated startup prepared (patch0299,2026-11-13)
+## Authenticated startup verified (patch0299,2026-11-13)
 
 The explicit `river-adsp-status --start` operation requires accepted stock
 metadata, a completed hash-verified17MiB stage, the owned outbound429 record,
@@ -111,10 +111,22 @@ is signed ad hoc with its existing privilege model. Patch application passes.
 Full6ac8fd5 kernel build passed, with no numbered project patches skipped.
 The verified temporary image is26,716,160 bytes with577 command-line bytes
 and1MiB retained log; all kernel segments verify against the new kernel.
-Fastboot accepted its verified temporary boot; a responsive-home confirmation
-is pending before staging or startup controls. Device startup validation
-remains pending. See the local manifest
-`outputs/adsp-start-build-manifest.json` for artifact hashes.
+The user confirmed a responsive home screen on its temporary boot. Fresh
+metadata acceptance,17MiB staging and locked handshake initialization passed.
+The one-shot start then passed live: all four exact power ACKs (mask0xf),
+PAS1 AUTH_AND_RESET status0/result0, remote version1/features0 and
+`slave-kernel=0x6` (ready plus proxy-unvote), after3polls and1interrupt.
+The documented CX/XO policy retains those requirements; it does not honor
+proxy-unvote yet. No shutdown was requested. Post-start SSH and read-only
+surveys worked; user home-screen confirmation after startup is pending.
+
+Post-start private SMEM contains17valid/stable records, including a2048-byte
+channel table (item13) at0x86300. The current global-only channel count remains
+zero and cannot describe that private table. APR transport discovery is next.
+Amplifier baseline registers remain unchanged and flags3 still identify
+synthetic capture/discarded playback. This is DSP startup evidence, not
+physical audio. Local artifact hashes remain in
+`outputs/adsp-start-build-manifest.json`; captures stay outside Git.
 
 The stock driver uses PAS1, an80MHz crypto source and the same CX/XO proxy
 requirements. Its XO branch is shared by LPASS, USB and WLAN; it assumes

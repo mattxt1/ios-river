@@ -5,7 +5,45 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0299 temporarily booted; home confirmation pending (2026-11-13)
+## Active handoff: ADSP authenticated and ready; PCM transport next (2026-11-13)
+
+The user confirmed the home screen responsive on6ac8fd5 before controls.
+Read-only baseline passed. Stock metadata accepted (PAS status0/result0),
+17MiB staging completed with input hash verified, and locked outbound429
+handshake initialization/readback/release all passed. The one-shot --start
+returned phase=ready/error0: vote attempt/ACK masks0xf, last message1380515846,
+shutdown service available, crypto cfg0x113/vote0x1e407, PAS AUTH_AND_RESET
+status0/result0, authenticated1, remote features/version1, slave-kernel0x6,
+3polls/1interrupt, ready1. No shutdown requested. The shared active/sleep
+CX384/swen1/ma100 and XO1 requirements intentionally remain until reboot;
+remote proxy-unvote bit2 is set, but this experimental policy retains them.
+
+Private evidence under work/adsp-start: baseline-6ac8fd5.txt,
+metadata-6ac8fd5.txt, stage-6ac8fd5.txt, handshake-6ac8fd5.txt,
+start-6ac8fd5.txt/.stderr and post-start-6ac8fd5.txt. USB startup capture
+work/audit-device-validation/start-6ac8fd5-usb.log (bounded session45547).
+Approved-key SSH works; a temporary private control socket at
+/private/tmp/river-audio-cm-6ac8fd5/control reuses authentication for600s.
+Do not copy/display key material. Early connection delay resolved; no proven
+kernel/probe hang. No need to repeat metadata/start on this boot (one-shot).
+
+Post-start read-only probe found SMEM global free0x29d10; item423 allocated
+at0x14cc0 length0x50. APPS↔ADSP partition is valid/stable with17records,
+uncached free0x1ccf8, cached free0x24000. Out429 at0x86030 and in443 at0x86198
+are valid; in443 used2 entries. Partition item13 is2048bytes at0x86300.
+The global-only channel scan still prints zero ADSP/APR channels; this does
+not inspect the private channel table. Next source work: bounded read-only
+private-partition channel/GLINK discovery before choosing APR transport.
+Amplifier identity, power, format, PLL and volume baseline remain unchanged;
+endpoint flags3 still mean discarded playback/synthetic capture. No physical
+PCM, speaker playback or microphone capture has passed.
+
+A question is pending for home responsiveness after ADSP startup. Continue
+independent source/docs work while waiting; no additional active device
+controls before that reply. Update status with the user's answer. The running
+image is outputs/river-adsp-start-6ac8fd5.img, source through0299; do not flash.
+
+##0299 temporary boot evidence before startup (2026-11-13)
 
 The user confirmed the home screen is responsive on678e917. Read-only SSH
 baseline work/rpm-transport/baseline-678e917.txt shows amplifier identity and
