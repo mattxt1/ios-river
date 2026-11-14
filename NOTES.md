@@ -46,8 +46,12 @@ Prior0313 kernel preserved work/slim-enumerate/kernel-6f78bfc.verified.
 Image outputs/river-slim-channel-068df37.img: 26820608bytes,
 577cmdline, SHA586588eb68f5be39abf6e8283c110de2e209d3d56fa7d1cc7ffcaf3a225e1b75.
 Kernel SHA7eaac04c74b1cdafbd1450653f203dd91dd2d8f95e53bd7042da65718973e54e.
-Fastboot requested; no0314 hardware test. Temporary boot, responsive home
-confirmation, passive baseline, then run once work/slim-channel/run-device.py.
+User confirmed fastboot readiness. Exact image hash/productriver verified;
+temporary transfer OKAY0.614s, boot OKAY0.216s; no flash.0314 accepted.
+Home responsiveness confirmation pending; no DSP/PCM/QMI/NGD/channel controls
+run. USB-only capture session52926 writes work/slim-channel/boot-068df37-usb.log.
+After responsive-home confirmation inspect passive baseline, then run once
+work/slim-channel/run-device.py.
 Full passing PCM/QMI/NGD/address stages gate channel lifetime test. Independent
 post-state/Wi-Fi reader remain. Physical playback/capture still pending.
 
