@@ -36,7 +36,7 @@ word count, module/parameter/size and six known config words. No readback
 success or hardware route is assumed from SET acceptance.
 
 0305 source34a024356e818873f2f88b2d9f990a1937cf81c4 is built/packaged,
-not booted. Host ASan/UBSan route regressions, extended-tail/malformed record
+not booted; next fastboot readiness has been requested. Host ASan/UBSan route regressions, extended-tail/malformed record
 cases, full0304/0305 patch application and real speaker helper tests pass.
 To save build time, the verified0304 kernel was preserved separately at
 work/pcm-routing/kernel-3fc706c.verified. Only the committed0305 header patch
@@ -6336,3 +6336,15 @@ to integration/configuration after keyed association; it does not identify
 the specific configd policy owner path. No settings/rank/route/DNS workaround
 or additional kernel Wi-Fi patch was applied. See PCM-ROUTING.md for pinned
 physical routing facts gathered while the audio build ran.
+
+##0304 Wi-Fi follow-up before0305 (2026-11-14)
+
+No user join result has arrived yet. Follow-up native configuration remains
+unassociated-looking (no en0 IPv4 route, configd Never). The monitor log stays
+16,086bytes with no new join/lease lines. Retained logs continue refreshing
+scans. The combined scalar/DNS SSH command timed out with no output and no
+corresponding new river-wifi-state exec in retained logs; do not diagnose a
+Wi-Fi ioctl/kernel hang from that attempt. Separate config/monitor/kernel
+reads succeeded. Private captures wifi-join-{check,config,monitor}-3fc706c.txt
+and kernel-wifi-followup-3fc706c.txt preserve the evidence. The0305 image is
+ready and fastboot has been requested after the Wi-Fi attempt finishes.
