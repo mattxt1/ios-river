@@ -87,7 +87,7 @@ static void respond(void)
 {
  uint32_t token=ri_apr.token;
  uint32_t response[7]={(24u<<16)|0x150,0x403,0x503,token,0x1290d,1,0};
- if(mode==2 || mode==6)return; /* timeout / delayed response */
+ if(mode==2 || mode==6 || mode==17)return; /* timeout / delayed response */
  unsigned h=memory[(inf+36)/4];
  if(mode==1) {
   response[3]=token-1;h=append(h,response,24);response[3]=token;
@@ -98,9 +98,13 @@ static void respond(void)
   append(h,response,28);return;
  }
  if(mode==5)response[5]=0; /* valid transport, DSP says not ready */
- if(mode==7 || mode==13)response[0]^=1; /* malformed APR version */
+ if(mode==7 || mode==13 || mode==14 || mode==15)response[0]^=2; /* malformed APR version */
  if(mode==8)response[3]=token-1; /* only a stale token, never success */
  if(mode==9) {memory[(rx+h)/4]=512;memory[(inf+36)/4]=(h+24)&8191;return;}
+ if(mode==16) {
+  uint32_t extended[]={(36u<<16)|0x150,0x403,0x503,token,0x1290d,1,0,0,0};
+  append(h,extended,36);return;
+ }
  append(h,response,24);
 }
 static void host_write8(vm_offset_t address,uint8_t value)
@@ -118,7 +122,10 @@ static void ri_wr(vm_offset_t base,unsigned offset,uint32_t value)
   assert(offset==0 && value==0x100);doorbells++;
   unsigned state=memory[inf/4];
   if(state==1 && mode!=4) {memory[(inf+20)/4]=2;((uint8_t *)memory)[inf+10]=0;}
-  if(state==0 && mode!=13) {memory[(inf+20)/4]=0;((uint8_t *)memory)[inf+10]=0;}
+  if(state==0 && mode!=13) {
+   memory[(inf+20)/4]=mode==14?4:0;
+   if(mode!=14 && mode!=15)((uint8_t *)memory)[inf+10]=0;
+  }
   if(state==2 && memory[(inf+16)/4]!=memory[(inf+12)/4]) {
    assert(packet_words==10 && barriers>head_barrier && ((uint8_t *)memory)[inf+8]==1);
    uint32_t expected[]={20,0,0,0,0,(20u<<16)|0x250,0x503,0x403,0x52410001,0x1290c};
@@ -139,6 +146,11 @@ static void ri_wait(unsigned ms)
  assert(ms==5 || ms==10 || ms==200);wait_ms+=ms;
  if(ms==200 && mode==10)memory[(inf+12)/4]=4; /* no TX capacity */
  if(ms==200 && mode==12)memory[slave/4]=1; /* fatal after open */
+ if(mode==17 && ri_apr.sent && ri_apr.rx_waits==1) {
+  memory[slave/4]=1;
+  uint32_t queued[]={(36u<<16)|0x150,0x403,0x503,ri_apr.token,0x1290d,1,0,0,0};
+  append(memory[(inf+36)/4],queued,36);
+ }
  if(mode==6 && ri_apr.sent && ri_apr.rx_waits==2) {
   uint32_t response[]={(24u<<16)|0x150,0x403,0x503,ri_apr.token,0x1290d,1};
   append(memory[(inf+36)/4],response,24);
@@ -169,7 +181,28 @@ int main(void)
  reset(0);memory[(entry+16)/4]=0x12345678;memory[(entry+12)/4]|=0x55aa0000;
  assert(query()==0); /* Bytes after the NUL are not part of the name. */
  reset(13);assert(query()==EIO && ri_apr.close_requested && !ri_apr.close_observed && !ri_apr.opened);
+ reset(14);assert(query()==EIO && ri_apr.close_requested);
+#if PATCHED_APR_FRAMING
+ assert(ri_apr.close_observed && ri_apr.close_peer==4);
+#else
+ assert(!ri_apr.close_observed);
+#endif
+ reset(15);assert(query()==EIO && !ri_apr.close_observed);
+ reset(16);
+#if PATCHED_APR_FRAMING
+ assert(query()==0 && ri_apr.rx_bytes==56 && ri_apr.received);
+ assert(ri_apr.rx_smd_bytes==36 && ri_apr.rx_opcode==0x1290d && ri_apr.last_decode==RI_APR_STATE);
+#else
+ assert(query()==EIO && !ri_apr.rx_bytes && !ri_apr.received);
+#endif
  reset(12);assert(query()==EBUSY && !ri_apr.sent && ri_apr.close_observed);
+#if PATCHED_APR_FRAMING
+ assert(ri_apr.remote_state==1 && !ri_apr.remote_snapshot_error);
+#endif
+ reset(17);assert(query()==EIO && ri_apr.sent && !ri_apr.rx_bytes);
+#if PATCHED_APR_FRAMING
+ assert(ri_apr.remote_state==1 && !ri_apr.rx_smd_bytes && !ri_apr.last_decode);
+#endif
  reset(0);ri_adsp_start.ready=false;no_write(EBUSY);
  reset(0);ri_adsp_start.authenticated=false;no_write(EBUSY);
  reset(0);memory[slave/4]=1;no_write(EBUSY);
@@ -199,12 +232,62 @@ int main(void)
  ch.ipc=(uintptr_t)ipc_words+0x1008;append(0,response,24);mutate_rx_head=1;
  assert(ri_apr_receive(&ch,42,&value)==RI_APR_BAD && !rx_reads && !writes && !byte_writes);
  for(unsigned i=0;i<6;i++) {
-  uint32_t bad[6];memcpy(bad,response,sizeof(bad));bad[i]^=1;
+  uint32_t bad[6];memcpy(bad,response,sizeof(bad));bad[i]^=i?1:2;
   int result=ri_apr_decode(bad,24,42,&value);
   if(i==0)assert(result==RI_APR_BAD);
   else if(i<5)assert(result==RI_APR_STALE);
   else assert(result==RI_APR_STATE); /* Any returned state is data, not framing. */
  }
  assert(ri_apr_decode(response,24,0,&value)==RI_APR_BAD);
+
+ /* Source-compatible variants: declared extension headers, version1,
+  * longer state payloads and outer padding must remain fully bounded. */
+ uint32_t variant[128]={0};
+ variant[0]=(36u<<16)|0x150;variant[1]=0x403;variant[2]=0x503;
+ variant[3]=42;variant[4]=0x1290d;variant[5]=9;
+#if PATCHED_APR_FRAMING
+ assert(ri_apr_decode(variant,36,42,&value)==RI_APR_STATE && value==9);
+#else
+ assert(ri_apr_decode(variant,36,42,&value)==RI_APR_BAD);
+#endif
+ variant[0]=(36u<<16)|0x180;variant[8]=11;
+#if PATCHED_APR_FRAMING
+ assert(ri_apr_decode(variant,36,42,&value)==RI_APR_STATE && value==11);
+#else
+ assert(ri_apr_decode(variant,36,42,&value)==RI_APR_BAD);
+#endif
+ variant[0]=(24u<<16)|0x151;
+#if PATCHED_APR_FRAMING
+ assert(ri_apr_decode(variant,24,42,&value)==RI_APR_STATE && value==9);
+#else
+ assert(ri_apr_decode(variant,24,42,&value)==RI_APR_BAD);
+#endif
+ variant[0]=(24u<<16)|0x50;
+#if PATCHED_APR_FRAMING
+ assert(ri_apr_decode(variant,24,42,&value)==RI_APR_STATE);
+#else
+ assert(ri_apr_decode(variant,24,42,&value)==RI_APR_STALE);
+#endif
+ variant[0]=(24u<<16)|0x150;
+#if PATCHED_APR_FRAMING
+ assert(ri_apr_decode(variant,36,42,&value)==RI_APR_STATE); /* bounded outer padding */
+ for(unsigned words=0;words<16;words++)for(unsigned size=20;size<=128;size+=4)for(unsigned ver=0;ver<3;ver++) {
+  memset(variant,0,sizeof(variant));variant[0]=(size<<16)|0x100|(words<<4)|ver;
+  variant[1]=0x403;variant[2]=0x503;variant[3]=42;variant[4]=0x1290d;
+  bool valid=ver<=1 && words>=5 && words*4+4<=size;
+  assert(ri_apr_decode(variant,size,42,&value)==(valid?RI_APR_STATE:RI_APR_BAD));
+ }
+ /* Overlong/short declarations and unknown versions never read a payload. */
+ variant[0]=(516u<<16)|0x150;assert(ri_apr_decode(variant,512,42,&value)==RI_APR_BAD);
+ variant[0]=(16u<<16)|0x150;assert(ri_apr_decode(variant,36,42,&value)==RI_APR_BAD);
+ variant[0]=(24u<<16)|0x550;assert(ri_apr_decode(variant,24,42,&value)==RI_APR_BAD);
+ uint32_t extack[10]={(40u<<16)|0x180,0x403,0x503,42,0x110e8,0,0,0,0x1290c,7};
+ assert(ri_apr_decode(extack,40,42,&value)==RI_APR_NACK && value==7);
+ extack[0]=(36u<<16)|0x180;assert(ri_apr_decode(extack,36,42,&value)==RI_APR_BAD);
+#else
+ assert(ri_apr_decode(variant,36,42,&value)==RI_APR_BAD);
+ puts("0301 fixed-size rejection of source-compatible extended replies and CLOSING nonrecognition reproduced");
+#endif
+
  puts("actual SMD/APR: owned discovery, byte flags/handshake, exact CORE frame/token, stale/basic/NACK, bounds/partial/wrap/races, timeouts and close protocol PASS");
 }

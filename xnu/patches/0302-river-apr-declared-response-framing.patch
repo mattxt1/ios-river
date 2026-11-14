@@ -1,0 +1,102 @@
+diff --git a/bsd/dev/river_adsp_apr.h b/bsd/dev/river_adsp_apr.h
+--- a/bsd/dev/river_adsp_apr.h
++++ b/bsd/dev/river_adsp_apr.h
+@@ -6,6 +6,9 @@
+ static struct {
+  bool attempted, owned, opened, sent, received, close_requested, close_observed;
+  uint32_t info_offset,fifo_offset,token,state,reply_error;
++ uint32_t rx_smd_bytes,rx_header,rx_source,rx_destination,rx_token,rx_opcode,close_peer;
++ uint32_t remote_state,remote_version;
++ int remote_snapshot_error,last_decode;
+  unsigned tx_waits,rx_waits,open_waits,stale,acks,tx_bytes,rx_bytes;
+ } ri_apr;
+ static char ri_apr_note[1536]="not requested; physical PCM unimplemented";
+@@ -41,7 +44,9 @@
+ ri_apr_dsp_ready(vm_offset_t smem)
+ {
+  struct ri_adsp_remote remote;
+- return !ri_adsp_remote_snapshot(smem,&remote) && remote.outbound && remote.inbound &&
++ ri_apr.remote_snapshot_error=ri_adsp_remote_snapshot(smem,&remote);
++ ri_apr.remote_state=remote.state;ri_apr.remote_version=remote.version_features;
++ return !ri_apr.remote_snapshot_error && remote.outbound && remote.inbound &&
+      remote.slave && remote.version_features==1 && (remote.state&3)==2;
+ }
+ static bool
+@@ -72,11 +77,14 @@
+ ri_apr_result(const char *phase,int error)
+ {
+  snprintf(ri_apr_note,sizeof(ri_apr_note),
+-     "phase=%s error=%d attempted=%u channel=apr_audio_svc cid=6 info=%#x fifo=%#x owned=%u opened=%u token=%u sent=%u received=%u dsp_state=%#x reply_error=%#x open_polls=%u tx_polls=%u rx_polls=%u stale=%u ack_only=%u tx_bytes=%u rx_bytes=%u close_requested=%u close_observed=%u pcm_transport=0 playback=discarded capture=synthetic",
++     "phase=%s error=%d attempted=%u channel=apr_audio_svc cid=6 info=%#x fifo=%#x owned=%u opened=%u token=%u sent=%u received=%u dsp_state=%#x reply_error=%#x open_polls=%u tx_polls=%u rx_polls=%u stale=%u ack_only=%u tx_bytes=%u rx_bytes=%u close_requested=%u close_observed=%u close_peer=%u rx_smd_bytes=%u rx_header=%#x rx_source=%#x rx_destination=%#x rx_token=%u rx_opcode=%#x last_decode=%d remote_snapshot_error=%d remote_state=%#x remote_version=%#x pcm_transport=0 playback=discarded capture=synthetic",
+      phase,error,ri_apr.attempted,ri_apr.info_offset,ri_apr.fifo_offset,ri_apr.owned,
+      ri_apr.opened,ri_apr.token,ri_apr.sent,ri_apr.received,ri_apr.state,ri_apr.reply_error,
+      ri_apr.open_waits,ri_apr.tx_waits,ri_apr.rx_waits,ri_apr.stale,ri_apr.acks,
+-     ri_apr.tx_bytes,ri_apr.rx_bytes,ri_apr.close_requested,ri_apr.close_observed);
++     ri_apr.tx_bytes,ri_apr.rx_bytes,ri_apr.close_requested,ri_apr.close_observed,
++     ri_apr.close_peer,ri_apr.rx_smd_bytes,ri_apr.rx_header,ri_apr.rx_source,
++     ri_apr.rx_destination,ri_apr.rx_token,ri_apr.rx_opcode,ri_apr.last_decode,
++     ri_apr.remote_snapshot_error,ri_apr.remote_state,ri_apr.remote_version);
+  printf("RIVER APR: %s\n",ri_apr_note);return error;
+ }
+ enum { RI_APR_BAD=-2, RI_APR_NACK=-1, RI_APR_WAIT=0, RI_APR_STATE=1, RI_APR_STALE=2, RI_APR_ACK_ONLY=3 };
+@@ -85,17 +93,23 @@
+ {
+  if(!packet || !value || !token || bytes<20 || bytes>512 || (bytes&3))return RI_APR_BAD;
+  uint32_t header=packet[0]&0xffff;
+- if((header&0xfcff)!=0x50 || (packet[0]>>16)!=bytes)return RI_APR_BAD;
+- /* Different services/ports/tokens are never our CORE response. */
+- if(header!=0x150 || packet[1]!=0x403 || packet[2]!=0x503 || packet[3]!=token)return RI_APR_STALE;
++ unsigned header_bytes=((header>>4)&15)*4, packet_bytes=packet[0]>>16;
++ /* Match the pinned APR receiver's V0/V1 common prefix and declared header
++  * size. Q6 CORE accepts a state payload of at least one32-bit word. */
++ if((header&0xfc00) || (header&15)>1 || header_bytes<20 ||
++    packet_bytes<header_bytes || packet_bytes>bytes)return RI_APR_BAD;
++ unsigned type=(header>>8)&3, payload=header_bytes/4;
++ /* Events and command responses may carry the known response opcode.
++  * Different services/ports/tokens are never our CORE response. */
++ if(type>1 || packet[1]!=0x403 || packet[2]!=0x503 || packet[3]!=token)return RI_APR_STALE;
+  if(packet[4]==0x1290d) {
+-  if(bytes!=24)return RI_APR_BAD;
+-  *value=packet[5];return RI_APR_STATE;
++  if(packet_bytes-header_bytes<4)return RI_APR_BAD;
++  *value=packet[payload];return RI_APR_STATE;
+  }
+  if(packet[4]==0x110e8) {
+-  if(bytes!=28)return RI_APR_BAD;
+-  if(packet[5]!=0x1290c)return RI_APR_STALE;
+-  *value=packet[6];return *value?RI_APR_NACK:RI_APR_ACK_ONLY;
++  if(packet_bytes-header_bytes<8)return RI_APR_BAD;
++  if(packet[payload]!=0x1290c)return RI_APR_STALE;
++  *value=packet[payload+1];return *value?RI_APR_NACK:RI_APR_ACK_ONLY;
+  }
+  return RI_APR_STALE;
+ }
+@@ -109,11 +123,16 @@
+  if(available<20)return RI_APR_WAIT;
+  __asm__ volatile("dmb sy" ::: "memory");
+  uint32_t bytes=ri_rd(ch->rx,tail);
++ ri_apr.rx_smd_bytes=bytes;
+  if(bytes<20 || bytes>512 || (bytes&3))return RI_APR_BAD;
+  if(available<20+bytes)return RI_APR_WAIT;
+  uint32_t packet[128]={0};
+  for(unsigned i=0;i<bytes;i+=4)packet[i/4]=ri_rd(ch->rx,(tail+20+i)&8191);
++ /* Header metadata only: no raw response/sample payload dump. */
++ ri_apr.rx_header=packet[0];ri_apr.rx_source=packet[1];
++ ri_apr.rx_destination=packet[2];ri_apr.rx_token=packet[3];ri_apr.rx_opcode=packet[4];
+  int result=ri_apr_decode(packet,bytes,token,value);
++ ri_apr.last_decode=result;
+  if(result==RI_APR_BAD)return result; /* Leave malformed framing alone. */
+  __asm__ volatile("dmb sy" ::: "memory");
+  ri_wr(ch->info,32,(tail+20+bytes)&8191);
+@@ -129,7 +148,10 @@
+  ri_apr.close_requested=true;ri_apr_set_state(ch,0);ri_apr.opened=false;
+  for(unsigned i=0;i<100;i++) {
+   uint32_t peer=ri_rd(ch->info,20);
+-  if((peer==0 || peer==1) && !(ri_rd(ch->info,8)&0x00ff0000)) {
++  ri_apr.close_peer=peer;
++  /* The stock closing-list handler treats peer CLOSING with host CLOSED
++   * as remote_processed_close. This is not restored/empty ring state. */
++  if(peer==4 || ((peer==0 || peer==1) && !(ri_rd(ch->info,8)&0x00ff0000))) {
+    ri_apr.close_observed=true;ri_apr_ack_flags(ch);break;
+   }
+   ri_wait(5);

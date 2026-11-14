@@ -5,7 +5,50 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0301 temporarily booted; home confirmation pending (2026-11-13)
+## Active handoff: SMD opened/request consumed;0302 framing/diagnostics prepared (2026-11-13)
+
+The user confirmed responsive home on3e9f5cd. Baseline, stock metadata,
+17MiB staging, handshake and ADSP startup passed (four exact power ACKs,
+PAS0/0, startup slave-kernel0x6). Pre-query passive survey matched the observed
+CID6/40-byte/16KiB APR layout, host0/peer1 and all indices0. --apr opened the
+channel in2polls, sent40bytes and stopped with EIO at RXpoll2. Post-query TX
+head/tail are0x28/0x28 (DSP consumed request), RXhead/tail0x38/0 (56unclassified
+bytes queued and unconsumed). Host0/peer4 after close request; old probe did
+not mark close observed. No retry was attempted. The user confirmed iOS is
+still responsive; amplifier baseline and other SMD channels are unchanged.
+
+Important: --start-status is historical. It does not prove live DSP readiness
+after this failure.0301 can return EIO from either its ready gate or decoder,
+and did not capture the decisive header/live-state metadata. Actual cause of
+the56queued bytes is not yet established. Do not claim a valid CORE response
+or assume a36-byte APR body from queue size alone. No physical audio passed.
+Private evidence: work/adsp-apr/{baseline,metadata,stage,handshake,start,
+pre-query,query,post-query}-3e9f5cd.txt, query stderr, and
+work/audit-device-validation/apr-3e9f5cd-usb.log (bounded session34918).
+Current phone remains on3e9f5cd. Do not repeat its one-shot APR operation.
+
+Patch0302 follows pinned apr.c/q6core.c framing: bounded V0/V1 common prefix,
+declared header length, declared APR size within complete SMD frame, state
+payload at least4bytes/basic result at least8. Optional header/payload/outer
+padding is bounded; exact service/domain/ports/token/opcode matching remains.
+Events/command responses only are accepted for the known response opcode.
+Header metadata and the live SMP2P snapshot at the ready gate are now recorded,
+so next test can distinguish gate changes, malformed framing and stale replies.
+No raw payload dump is added. Close reporting recognizes peer CLOSING4 with
+host CLOSED, matching stock remote_processed_close, and records close_peer;
+this is not empty/restored ring state. No peer index resets or retries added.
+
+Actual-code sanitizer tests pass for old0301 baseline and patched0302:
+source-compatible extended replies, V1, declared lengths/padding, wrong
+addresses/tokens, malformed bounds, partial/wrap/races, readiness failure with
+pending RX, NACK/timeouts and close/no-ACK cases. Baseline fixed-size and
+CLOSING restrictions reproduce. These fixtures are not recovered device bytes.
+0302 dry-run application passes. Commit before full build/package; helper
+binary is unchanged from0301. Fresh-boot test repeats startup and one APR
+query, then inspects full status/header/remote-state metadata and passive
+survey. Keep the still-unimplemented physical playback/capture milestone clear.
+
+##0301 boot/build evidence before live APR test (2026-11-13)
 
 The user returned River to fastboot. The exact APR image SHA and productriver
 were verified; temporary fastboot boot of outputs/river-adsp-apr-3e9f5cd.img

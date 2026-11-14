@@ -173,7 +173,7 @@ Sources: [River configuration](https://github.com/LineageOS/android_kernel_motor
 [CORE query](https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/2dba45b8e247958d5a1b15b33c6064c15af4983e/techpack/audio/dsp/q6core.c).
 
 
-## APR CORE query prepared (patch0301)
+## APR CORE query: live request consumed, reply unresolved (patch0301)
 
 The explicit `--apr` operation validates the live ready DSP and the observed
 CID6/flags0x201/40-byte/16KiB private SMD layout. It refuses existing ownership
@@ -203,6 +203,41 @@ command-line bytes and1MiB retained log. Fastboot accepted its verified
 temporary boot; home-screen confirmation is pending before controls. Live
 APR validation is pending;
 artifact hashes are in `outputs/adsp-apr-build-manifest.json`.
+
+Live test on3e9f5cd opened SMD in2polls and sent40bytes, which the DSP
+consumed (TXhead=tail=0x28).56unclassified bytes appeared in RX; the operation
+stopped with EIO at RXpoll2 without consuming them. Close was requested;
+post-state is host CLOSED0/peer CLOSING4 and RXhead0x38/tail0. The user
+confirmed responsive iOS; amplifier baseline is unchanged. No retry was run.
+
+The old status lacks both the received header and the last live ready-gate
+snapshot. EIO can originate from either gate or parser; historical startup
+ready0x6 does not establish post-query readiness. Queue size alone does not
+identify the response format. A valid CORE response has not been verified.
+
+
+## Declared response framing and diagnostics prepared (patch0302)
+
+The pinned APR receiver accepts V0/V1, a declared common-prefix header of at
+least20bytes and payload sized by the APR declaration. Q6 CORE accepts at
+least one state word.0301's fixed20-byte header/exact24-byte state requirement
+was narrower.0302 supports bounded declared headers and APR size within the
+complete SMD packet, with minimum4-byte state/8-byte basic-result payloads.
+Exact service/domain/ports/token/opcode checks remain. Response/event types
+are supported for the known response opcode; command types are not accepted.
+
+The status now records SMD length, common APR header metadata and the live
+SMP2P snapshot used by the ready gate. It does not dump raw payloads. Close
+reporting recognizes peer CLOSING4 with host CLOSED as the stock closing-list
+handler does, and reports that peer state without claiming empty/restored
+rings. No peer-owned index reset or retry is introduced.
+
+Actual-source ASan/UBSan tests reproduce0301's fixed-framing/CLOSING limits
+and pass0302's extensions, padding/length bounds, address/token checks,
+readiness failure with queued RX, partial/wrap/races, errors and close/no-ACK.
+The device's queued bytes have not been recovered; compatibility fixtures
+do not prove their format or the actual failure cause. Full build, packaging
+and live validation of0302 are pending.
 
 ## Verified progress and remaining work (2026-11-13)
 

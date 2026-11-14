@@ -12,18 +12,15 @@ parts of the port. Do not rely on the device to protect personal data or use it
 for sensitive accounts. Battery capacity remains a voltage/current estimate;
 charging-policy validation is incomplete.
 
-Updated November 13, 2026. `8278313` (through patch0300) temporarily booted
-to a user-confirmed responsive home screen. Stock ADSP metadata,17MiB staging,
-locked handshake setup and authenticated startup passed: all four exact power
-ACKs, PAS status0/result0 and remote ready state0x6. Read-only post-start
-surveys work, and the user confirmed the home screen remains responsive
-after startup. Shared CX/XO
-requirements remain enabled until reboot. Physical PCM and microphone capture
-remain unimplemented. Private transport discovery passed: apr_audio_svc is CID6 with byte-access
-SMD controls and empty rings. Patch0301 prepares a bounded APR CORE state
-query; host tests, full kernel build and image verification pass, with live
-APR validation pending. See
-[AUDIO-BRINGUP.md](AUDIO-BRINGUP.md).
+Updated November 13, 2026. `3e9f5cd` (through patch0301) boots to a
+responsive iOS home screen. Authenticated ADSP startup and private SMD
+discovery passed. The first APR test opened CID6 and the DSP consumed its
+40-byte request, but56unclassified RX bytes remain unconsumed after EIO.
+A valid CORE reply is not yet verified; the old status cannot distinguish a
+ready-gate change from framing rejection. iOS stayed responsive afterward.
+Patch0302 prepares source-compatible declared response framing and precise
+header/live-gate diagnostics. Physical PCM and microphone capture remain
+unimplemented. See [AUDIO-BRINGUP.md](AUDIO-BRINGUP.md).
 
 On c3d9af8, the usual Wi-Fi network was visible and the second join completed
 WPA (state4/result1); native IP/DNS remains incomplete. Earlier bb395d6 testing
