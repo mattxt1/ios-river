@@ -1,0 +1,239 @@
+diff --git a/bsd/dev/river_adsp_route.h b/bsd/dev/river_adsp_route.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/river_adsp_route.h
+@@ -0,0 +1,183 @@
++/* Explicit source-supported AFE/ADM routing stages. No ASM RUN/WRITE or
++ * codec/SLIMbus host programming. ri_adsp_lock serializes every APR command.
++ * Resource flags are cleared only after exact successful teardown replies. */
++static struct {
++ bool config_attempted,configured,config_readback,cold_attempted,hot_attempted;
++ bool asm_open,asm_format,adm_open,matrix,afe_started,muted;
++ unsigned session;
++ uint32_t copp,failed_opcode,failed_status,cleanup_opcode,cleanup_status,get_status;
++ int cleanup_error;
++} ri_route;
++static char ri_route_note[1536]="not requested; physical PCM pending";
++static int
++ri_route_result(const char *phase,int error)
++{
++ snprintf(ri_route_note,sizeof(ri_route_note),
++  "phase=%s error=%d poisoned=%u config_attempted=%u configured=%u config_readback=%u get_status=%#x cold_attempted=%u hot_attempted=%u session=%u asm_open=%u asm_format=%u adm_open=%u copp=%u matrix=%u afe_started=%u amp_mute_retained=%u failed_opcode=%#x failed_status=%#x cleanup_error=%d cleanup_opcode=%#x cleanup_status=%#x transactions=%u rx_header=%#x rx_source=%#x rx_destination=%#x rx_token=%#x rx_opcode=%#x playback=discarded capture=synthetic",
++  phase,error,ri_pcm.poisoned,ri_route.config_attempted,ri_route.configured,
++  ri_route.config_readback,ri_route.get_status,ri_route.cold_attempted,ri_route.hot_attempted,
++  ri_route.session,ri_route.asm_open,ri_route.asm_format,ri_route.adm_open,
++  ri_route.copp,ri_route.matrix,ri_route.afe_started,ri_route.muted,
++  ri_route.failed_opcode,ri_route.failed_status,ri_route.cleanup_error,
++  ri_route.cleanup_opcode,ri_route.cleanup_status,ri_pcm.transactions,
++  ri_pcm.rx_header,ri_pcm.rx_source,ri_pcm.rx_destination,ri_pcm.rx_token,ri_pcm.rx_opcode);
++ printf("RIVER ROUTE: %s\n",ri_route_note);return error;
++}
++static int
++ri_route_command(uint32_t source,uint32_t destination,uint32_t opcode,uint32_t response,
++ const uint32_t *payload,unsigned words,struct ri_apr_reply *reply,bool cleanup)
++{
++ struct ri_apr_request request={source,destination,0,opcode,response,payload,words};
++ int error=ri_pcm_transaction(&request,reply);
++ printf("RIVER ROUTE command: opcode=%#x source=%#x destination=%#x error=%d dsp_status=%#x cleanup=%u\n",opcode,source,destination,error,reply->status,cleanup);
++ if(error) {
++  if(cleanup) {
++   if(!ri_route.cleanup_error) {ri_route.cleanup_error=error;ri_route.cleanup_opcode=opcode;ri_route.cleanup_status=reply->status;}
++  } else if(!ri_route.failed_opcode) {ri_route.failed_opcode=opcode;ri_route.failed_status=reply->status;}
++ }
++ return error;
++}
++static bool
++ri_route_ready(void)
++{
++ return ri_pcm.unmapped && ri_pcm.asm_closed && !ri_pcm.poisoned &&
++     !ri_route.asm_open && !ri_route.adm_open && !ri_route.afe_started;
++}
++static int
++ri_route_config(void)
++{
++ if(ri_route.config_attempted)return EALREADY;
++ if(!ri_route_ready())return ri_route_result("config_prerequisite",EBUSY);
++ ri_route.config_attempted=true;
++ /* Stock Madera SLIM0 RX defaults: device1 enum0, mono48kHz/16-bit,
++  * shared channel144. The amplifier AIF1 stereo wire format is separate. */
++ const uint32_t config[]={1,16u<<16,1u<<16,144,0,48000};
++ uint32_t payload[13]={(36u<<16)|0x4000,0,0,0,0x1020c,0x10212,24};
++ memcpy(payload+7,config,sizeof(config));
++ struct ri_apr_reply reply;
++ int error=ri_route_command(0x504,0x404,0x100ef,0,payload,13,&reply,false);
++ if(error)return ri_route_result("afe_config_set",error);
++ ri_route.configured=true;
++ /* GET of a hardware config may be unsupported even when SET succeeded.
++  * This optional diagnostic never converts a rejected SET into success. */
++ uint32_t get[]={(36u<<16)|0x4000,0,0,0,0x1020c,0x10212};
++ struct ri_apr_request request={0x504,0x404,0,0x100f0,0x10106,get,6};
++ error=ri_pcm_transaction(&request,&reply);ri_route.get_status=reply.status;
++ if(error==EREMOTE && (reply.status==2 || reply.status==3))
++  return ri_route_result("afe_config_accepted_get_rejected",0);
++ if(error) {ri_route.configured=false;return ri_route_result("afe_config_get",error);}
++ if(!reply.words) {ri_route.configured=false;return ri_route_result("afe_config_get_payload",EIO);}
++ ri_route.get_status=reply.data[0];
++ if(reply.data[0]==2 || reply.data[0]==3)return ri_route_result("afe_config_accepted_get_rejected",0);
++ if(reply.data[0]) {ri_route.configured=false;return ri_route_result("afe_config_get_rejected",EREMOTE);}
++ if(reply.words!=10 || reply.data[1]!=0x1020c || reply.data[2]!=0x10212 ||
++    reply.data[3]!=24 || memcmp(reply.data+4,config,sizeof(config))) {
++  /* An inconsistent accepted configuration blocks dependent route tests. */
++  ri_route.configured=false;return ri_route_result("afe_config_mismatch",EIO);
++ }
++ ri_route.config_readback=true;return ri_route_result("afe_config_verified",0);
++}
++static void
++ri_route_cleanup(unsigned session,bool hot)
++{
++ struct ri_apr_reply reply;
++ /* Closing the ASM input tears down its owned matrix connection; close its
++  * COPP separately, matching normal stream/device lifetime. No fabricated
++  * zero-COPP matrix map or resetting a foreign DSP port is used. */
++ if(ri_route.asm_open && !ri_pcm.poisoned) {
++  uint32_t port=((session<<8)|1)<<16;
++  if(!ri_route_command(port|0x507,port|0x407,0x10bcd,0,NULL,0,&reply,true)) {
++   ri_route.asm_open=false;ri_route.matrix=false;
++  }
++ }
++ if(ri_route.adm_open && !ri_pcm.poisoned) {
++  if(!ri_route_command(0x40000508,(ri_route.copp<<16)|0x408,0x10327,0,NULL,0,&reply,true)) {
++   ri_route.adm_open=false;ri_route.matrix=false;
++  }
++ }
++ if(hot && ri_route.afe_started && !ri_pcm.poisoned) {
++  uint32_t port=0x4000;
++  if(!ri_route_command(0x504,0x404,0x100e6,0,&port,1,&reply,true))ri_route.afe_started=false;
++ }
++}
++static bool
++ri_route_hold_mute(void)
++{
++ uint32_t control=0,verified=0;
++ lck_mtx_lock(&ri_speaker_lock);
++ /* Volume changes remain available but force hardware mute for this boot.
++  * Do not hold the speaker/QUP lock across bounded APR waits. */
++ ri_afe_mute_hold=true;
++ bool ok=ri_speaker_ok && ri_cs35l41_rd(0x2024,&control) &&
++     ri_cs35l41_wr(0x2024,control|0x10u) && ri_cs35l41_rd(0x2024,&verified) && (verified&0x10u);
++ ri_route.muted=ok;
++ lck_mtx_unlock(&ri_speaker_lock);return ok;
++}
++static int
++ri_route_test(bool hot)
++{
++ if(hot?ri_route.hot_attempted:ri_route.cold_attempted)return EALREADY;
++ if(!ri_route_ready() || !ri_route.configured)return ri_route_result("route_prerequisite",EBUSY);
++ if(hot)ri_route.hot_attempted=true;else ri_route.cold_attempted=true;
++ ri_route.failed_opcode=ri_route.failed_status=ri_route.cleanup_opcode=ri_route.cleanup_status=0;
++ ri_route.cleanup_error=0;ri_route.asm_format=false;
++ unsigned session=hot?3:2;ri_route.session=session;
++ struct ri_apr_reply reply;int error=0;
++ const char *phase="not_started";
++ if(hot) {
++  if(!ri_route_hold_mute())return ri_route_result("amp_mute_gate",EIO);
++  uint32_t port=0x4000;phase="afe_start";
++  error=ri_route_command(0x504,0x404,0x100e5,0,&port,1,&reply,false);
++  if(error)goto done;
++  ri_route.afe_started=true;
++ }
++ uint32_t stream=((session<<8)|1)<<16;
++ uint32_t open[]={0,16u<<16,0x10c68,0x10da5};phase="asm_open";
++ error=ri_route_command(stream|0x507,stream|0x407,0x10db3,0,open,4,&reply,false);
++ if(error)goto done;
++ ri_route.asm_open=true;
++ uint32_t format[]={20,(16u<<16)|2,48000,1,0x0201,0};phase="asm_format";
++ error=ri_route_command(stream|0x507,stream|0x407,0x10d98,0,format,6,&reply,false);
++ if(error)goto done;
++ ri_route.asm_format=true;
++ /* ADM RX COPP, null processing topology, mono center channel, matching
++  * SLIM0 config. Device-open returns status plus16-bit COPP/reserved. */
++ uint32_t device[]={1u<<16,0xffff4000,0x10312,(16u<<16)|1,48000,3,0};phase="adm_open";
++ error=ri_route_command(0x40000508,0x40000408,0x10326,0x10329,device,7,&reply,false);
++ if(error)goto done;
++ if(reply.words!=2) {ri_pcm.poisoned=true;error=EIO;goto done;}
++ if(reply.data[0]) {ri_route.failed_opcode=0x10326;ri_route.failed_status=reply.data[0];error=EREMOTE;goto done;}
++ if((reply.data[1]>>16) || (reply.data[1]&0xffff)>=0xff) {
++  ri_pcm.poisoned=true;error=EIO;goto done;
++ }
++ ri_route.copp=reply.data[1]&0xffff;ri_route.adm_open=true;
++ uint32_t matrix[]={0,1,(1u<<16)|session,ri_route.copp};phase="adm_matrix";
++ error=ri_route_command(0x508,0x408,0x10325,0,matrix,4,&reply,false);
++ if(error)goto done;
++ ri_route.matrix=true;phase=hot?"active_route_complete":"inactive_route_complete";
++done:
++ ri_route_cleanup(session,hot);
++ if(!error && ri_route.cleanup_error) {phase="route_cleanup";error=ri_route.cleanup_error;}
++ return ri_route_result(phase,error);
++}
++static int
++river_adsp_route_sysctl SYSCTL_HANDLER_ARGS
++{
++ int value=0,error=sysctl_handle_int(oidp,&value,0,req);
++ if(error || !req->newptr)return error;
++ if(value<1 || value>3)return EINVAL;
++ lck_mtx_lock(&ri_adsp_lock);
++ error=value==1?ri_route_config():ri_route_test(value==3);
++ lck_mtx_unlock(&ri_adsp_lock);return error;
++}
++static int
++river_adsp_route_status_sysctl SYSCTL_HANDLER_ARGS
++{
++ lck_mtx_lock(&ri_adsp_lock);
++ int error=sysctl_handle_string(oidp,ri_route_note,sizeof(ri_route_note),req);
++ lck_mtx_unlock(&ri_adsp_lock);return error;
++}
++SYSCTL_PROC(_debug,OID_AUTO,river_adsp_route,CTLTYPE_INT|CTLFLAG_RW|CTLFLAG_LOCKED,
++ NULL,0,river_adsp_route_sysctl,"I","Explicit AFE config and muted ADM/AFE route tests");
++SYSCTL_PROC(_debug,OID_AUTO,river_adsp_route_status,CTLTYPE_STRING|CTLFLAG_RD|CTLFLAG_LOCKED,
++ NULL,0,river_adsp_route_status_sysctl,"A","Last AFE/ADM routing test outcome");
+diff --git a/bsd/dev/river_adsp_pcm.h b/bsd/dev/river_adsp_pcm.h
+--- a/bsd/dev/river_adsp_pcm.h
++++ b/bsd/dev/river_adsp_pcm.h
+@@ -14,6 +14,7 @@
+  vm_offset_t page;
+  uint64_t physical;
+  uint32_t handle,sequence,opcode,token,status;
++ uint32_t rx_header,rx_source,rx_destination,rx_token,rx_opcode;
+  unsigned transactions,notifications;
+ } ri_pcm;
+ static char ri_pcm_note[1536]="not requested; physical playback/capture pending";
+@@ -68,6 +69,8 @@
+  if(bytes<20 || bytes>512 || (bytes&3))return RI_APR_BAD;
+  if(available<20+bytes)return RI_APR_WAIT;
+  for(unsigned i=0;i<bytes;i+=4)packet[i/4]=ri_rd(ch->rx,(tail+20+i)&8191);
++ ri_pcm.rx_header=packet[0];ri_pcm.rx_source=packet[1];ri_pcm.rx_destination=packet[2];
++ ri_pcm.rx_token=packet[3];ri_pcm.rx_opcode=packet[4];
+  int result=ri_pcm_decode(packet,bytes,request,reply);
+  if(result==RI_APR_BAD)return result;
+  __asm__ volatile("dmb sy" ::: "memory");
+diff --git a/bsd/dev/river_adsp_probe.h b/bsd/dev/river_adsp_probe.h
+--- a/bsd/dev/river_adsp_probe.h
++++ b/bsd/dev/river_adsp_probe.h
+@@ -106,6 +106,7 @@
+ #include "river_adsp_start.h"
+ #include "river_adsp_apr.h"
+ #include "river_adsp_pcm.h"
++#include "river_adsp_route.h"
+ 
+ static int
+ river_adsp_probe_sysctl SYSCTL_HANDLER_ARGS
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -63,6 +63,8 @@
+ static LCK_GRP_DECLARE(ri_speaker_grp, "river-speaker-control");
+ static LCK_MTX_DECLARE(ri_speaker_lock, &ri_speaker_grp);
+ static bool ri_speaker_ok;
++/* AFE routing tests retain hardware mute until reboot. Speaker lock owns it. */
++static bool ri_afe_mute_hold;
+ static uint32_t ri_cs35l41_devid, ri_cs35l41_revid, ri_cs35l41_status;
+ static uint32_t ri_cs35l41_dig_vol, ri_cs35l41_out_mute, ri_cs35l41_sp_fmt, ri_cs35l41_pll_clk, ri_cs35l41_gain;
+ static uint32_t ri_cs35l41_irq1, ri_cs35l41_irq2, ri_cs35l41_irq3, ri_cs35l41_irq4;
+@@ -4315,6 +4317,7 @@
+ static void
+ river_speaker_set_volume_locked(uint32_t below_eighths, bool muted)
+ {
++ if(ri_afe_mute_hold)muted=true;
+  if (!ri_speaker_ok) return;
+  uint32_t control=0, digital=0, verified=0;
+  if(!ri_cs35l41_rd(0x2024,&control)) return;

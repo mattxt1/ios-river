@@ -8,6 +8,7 @@ import tempfile
 repo=Path(__file__).resolve().parent.parent
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--baseline-0301',action='store_true',help='Reproduce the prior fixed-response framing restriction')
+parser.add_argument('--with-routing',action='store_true',help='Apply the0304 PCM transport diagnostics before testing')
 args=parser.parse_args()
 
 def added(patch,name):
@@ -28,6 +29,12 @@ with tempfile.TemporaryDirectory(prefix='river-adsp-apr-') as directory:
   apr=target.read_text()
  apr=apr.split('static int\nriver_adsp_apr_sysctl',1)[0]
  pcm=added('0303-river-pcm-map-asm-afe-prerequisites.patch','river_adsp_pcm.h').split('static int\nriver_adsp_pcm_sysctl',1)[0]
+ if args.with_routing:
+  target=root/'source/bsd/dev/river_adsp_pcm.h';target.parent.mkdir(parents=True,exist_ok=True);target.write_text(pcm)
+  patches=(repo/'xnu/patches/0304-river-afe-config-adm-matrix-routing.patch').read_text()
+  section='diff --git a/bsd/dev/river_adsp_pcm.h'+patches.split('diff --git a/bsd/dev/river_adsp_pcm.h',1)[1].split('diff --git ',1)[0]
+  subprocess.run(['/usr/bin/patch','--batch','--silent','-p1','-d',str(root/'source')],input=section.encode(),check=True)
+  pcm=target.read_text()
  (root/'pcm-actual.h').write_text(pcm)
  (root/'pcm-stubs.h').write_text((repo/'tools/tests/river-adsp-pcm-stubs.h').read_text())
  apr=apr.replace('*(volatile uint8_t *)address=value;','host_write8(address,value);')

@@ -82,7 +82,16 @@ static int stage_image(const char *path) {
 int main(int argc,char **argv) {
  int rc=0,request=1;
  const char *status="debug.river_adsp_status";
- if(argc==2 && (!strcmp(argv[1],"--pcm-map") || !strcmp(argv[1],"--asm-test") ||
+ if(argc==2 && (!strcmp(argv[1],"--afe-config") || !strcmp(argv[1],"--adm-route") ||
+     !strcmp(argv[1],"--afe-route") || !strcmp(argv[1],"--route-status"))) {
+  status="debug.river_adsp_route_status";
+  if(strcmp(argv[1],"--route-status")) {
+   request=!strcmp(argv[1],"--afe-config")?1:!strcmp(argv[1],"--adm-route")?2:3;
+   if(sysctlbyname("debug.river_adsp_route",NULL,NULL,&request,sizeof(request))) {
+    perror("AFE/ADM route test");rc=1;
+   }
+  }
+ } else if(argc==2 && (!strcmp(argv[1],"--pcm-map") || !strcmp(argv[1],"--asm-test") ||
      !strcmp(argv[1],"--afe-probe") || !strcmp(argv[1],"--pcm-status"))) {
   status="debug.river_adsp_pcm_status";
   if(strcmp(argv[1],"--pcm-status")) {
@@ -112,7 +121,7 @@ int main(int argc,char **argv) {
  } else if(argc==3&&!strcmp(argv[1],"--metadata")) rc=metadata_test(argv[2]);
  else if(argc==3&&!strcmp(argv[1],"--stage-image")) rc=stage_image(argv[2]);
  else if(argc!=1) {
-  fprintf(stderr,"Usage: %s [--probe|--handshake-init|--metadata PATH|--stage-image PATH|--start|--start-status|--apr|--apr-status|--pcm-map|--asm-test|--afe-probe|--pcm-status]\n",argv[0]);return 2;
+  fprintf(stderr,"Usage: %s [--probe|--handshake-init|--metadata PATH|--stage-image PATH|--start|--start-status|--apr|--apr-status|--pcm-map|--asm-test|--afe-probe|--pcm-status|--afe-config|--adm-route|--afe-route|--route-status]\n",argv[0]);return 2;
  }
  char note[8192]={0};size_t n=sizeof(note)-1;
  if(sysctlbyname(status,note,&n,NULL,0)) {perror("ADSP status");return 1;}
