@@ -5,7 +5,36 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0315 mixer status mismatch, clean restoration (2026-11-14)
+## Active handoff:0316 mixer-status correction ready (2026-11-14)
+
+Source91e8fac1403fe251e8b5eda0623efbb31f974d62 committed before native build.
+Patch0316 handles digital mixer source bit15 x_STSn as live enable status,
+compares configuration excluding that bit, and separately requires both
+AIF1TX mixer inputs enabled during100ms muted observation. GP10_LVL bit15
+also excluded from configuration checks. Same route/mute/PCM/channel policy.
+Actual-code sanitizer model now sets x_STSn when source is selected; full
+success, each ignored write, restore failures, preflight gates and missing
+mixer enable timeout pass. No new physical playback/capture implementation.
+Native incremental0316 exit0, changed sweet_keys compilation, exact modified
+headers and new kernel checked; provenance work/codec-route-fix/incremental-provenance.json.
+KDKROOT remains /private/tmp/river-kdk-22G74-qq2pjbum/expanded/KDK.pkg/Payload.
+Image outputs/river-codec-route-fix-91e8fac.img:26820608bytes,577cmdline,
+SHA56890ade85bcdf267747f95154b395534892e823f2366a9592d8dda5e028578f.
+Kernel SHA6641561cb1480523bd7f67eeae1719924dae72cca9e2c045ae4ddec194f9e8a1.
+Existing helperc305b28 unchanged; payload segments verified. Prior kernel
+preserved work/codec-route/kernel-c305b28.verified. Fastboot requested after
+Wi-Fi attempt; no0316 boot yet.0315 post-test responsiveness reply pending.
+Phone0315 retains muted amp/QMIpower/NGD; all PCM and data channels cleaned.
+Do not retry active controls on0315.
+
+On readiness: verify productriver/hash, captureUSB using work/codec-route-fix/
+capture-boot.py, temporary fastboot boot only. Ask responsive home, then inspect
+passive baseline and run work/codec-route-fix/run-device.py ONCE. Never run
+--channel-test before --codec-route. Capture post-restoration and Wi-Fi states.
+Next after route PASS: integrate zeroPCM while channel/codec route active,
+then bounded quiet tone, real device backend and physical microphone capture.
+
+##0315 mixer status mismatch, clean restoration (2026-11-14)
 
 User replied ready to responsive-home question; full gated sequence ran once.
 DSP/CORE/map/ASM/config/ADM/zeroPCM all passed;4 completions/16384bytes,

@@ -282,3 +282,14 @@ Evidence work/pcm-stream/{wifi-followup,network-followup,dns-followup,
 wifi-monitor-followup}-98dcdb1.txt. This is a fresh same-boot associated
 snapshot. The user subsequently confirmed Settings showed a spinner. No workaround applied.
 Next image ready; fastboot requested after user's Wi-Fi attempt.
+
+##0315 native Wi-Fi follow-up (2026-11-14)
+
+Before new join request, current scalar state1/association_result0. Native
+configuration has no en0 IPv4 route, configdPID35 interface rank3(Never),
+NWIen0 absent and compiled DNS seven default resolver records with zero
+nameservers/A/AAAA and no scoped/service resolvers. Retained monitor log's
+DHCP/publication entries are historical; do not assign them to this boot.
+Requested fresh user join while0316 audio correction builds. No Wi-Fi code
+or route/rank/DNS overrides applied. Private evidence work/codec-route/
+wifi-{native,config,dns}-c305b28.txt and wifi-monitor-c305b28.txt.

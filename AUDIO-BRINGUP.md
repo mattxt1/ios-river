@@ -589,3 +589,13 @@ Ask post-sequence responsiveness. Next: zeroPCM while route active, bounded
 quiet tone, real device backend, then microphone capture. No unmute this boot.
 Wi-Fi remains secondary; no new UI join result or code change since0314.
 
+
+##0315 codec route stopped with full restoration (2026-11-14)
+
+PCM4/4 and channel6/6 ACKs passed again. Both FLL and amplifierPLL locked.
+Mixer source0x700 write0x38 read0x8038 triggered exact-word rejection;
+route_seen0,all codec/AIF/amp/clock/pin restoration successful, channel fully
+removed/disconnected, mute retained. No active-route DSPPCM submitted.
+Cirrus DS1085F2 Table4-7 bit15 is x_STSn enable status;0316 corrects only
+status handling and adds explicit mixer-enabled observation and host tests.
+Physical playback and capture remain pending. Post-test iOS check pending.
