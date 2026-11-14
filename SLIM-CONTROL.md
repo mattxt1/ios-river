@@ -44,3 +44,15 @@ CID2 CLOSED/CLOSING acknowledged; no QMI sent and no MMIO accessed.0310
 accepts broadcast router control destinations (stock dummy destination),
 while DATA/QMI stays exact unicast. Control words, ports and flags are now
 retained before rejection. Tests/build pass; hardware result pending.
+
+##0311/0312 firmware endpoint and powered snapshot
+
+The0310 capture has valid HELLO checksum and source/destination control ports
+0xfffffffe, matching [Linux QRTR](https://github.com/torvalds/linux/blob/master/include/uapi/linux/qrtr.h).
+0311 uses this reserved endpoint for HELLO/control receive and RESUME_TX;
+QMI DATA still requires exact unicast endpoints.0312 adds --slim-ngd after
+successful select/power only, matching stock ngd_slim_power_up: version then
+cell-index1 NGD registers. It reads CFG/STATUS/INT_EN/INT_STAT/IE/VE, without
+controller writes, RX-message consumption, reset, IRQ clear or BAM setup.
+Snapshot map is0x0c140000/0x4000; version upper16 chooses stock0x800/0x1000.
+Host tests and build pass; firmware QMI and actual MMIO results are pending.

@@ -5,7 +5,48 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0310 valid HELLO uses QRTR control endpoint (2026-11-14)
+## Active handoff:0312 QRTR endpoint and powered NGD candidate ready (2026-11-14)
+
+0310 again passed four zero-PCM completions with full teardown and mute hold.
+Its received HELLO is valid IPCRTR V1/checksum0xe110, from node5 to broadcast,
+control source/destination0xfffffffe.0311 corrects the firmware endpoint on
+both RX and HELLO/RESUME_TX, preserving strict DATA/QMI checks. HELLO sends
+to broadcast with only V1 supported. Primary Linux qrtr.h independently
+confirms0xfffffffe control/0xffffffff broadcast constants. Current phone
+still0310; no active retry; post-test user responsiveness answer pending.
+
+0312 batches read-only NGD snapshot after exact QMI ACTIVE acknowledgment,
+using stock ngd_slim_power_up ordering. --slim-ngd requires completed/clean
+PCM, verified mute, selected/active QMI and live owned channel. Map only
+0x0c140000/0x4000, recheck ownership/power, read stable version, select
+cell-index1 V1 offset0x800 when upper16 version0 or V2 offset0x1000 otherwise,
+read CFG/STATUS/INT_EN/INT_STAT/IE/VE and unmap. No writes, RX-message read,
+interrupt clear, reset, BAM, DMA, codec route or unmute. All-ones/unstable
+version rejects further register reads. Power vote retained until reboot.
+
+Source77eb1a577dc8ffa0303f38c9cdfca37c02635fed through0312 and updated helper compile/sign
+passed. Actual-code ASan/UBSan tests cover QRTR endpoint success/failure,
+QMI flow and timeouts, NGD acknowledgment gate, V1/V2 offset selection,
+invalid version and map failure. Native incremental install exit0 with
+sweet_keys compiled/new diagnostics linked.0311 intermediate build exit0;
+prior0310 and intermediate0311 kernels preserved. Ledger
+work/slim-powered/incremental-provenance.json; isolated tree now0312.
+Image outputs/river-slim-powered-77eb1a5.img: 26802176bytes,
+577cmdline, SHAea8cf61c225b2a1df52402bacfe2c9fa026ada54f5c232625d3fac89f35e58b0.
+Kernel SHA7ca4dba2e482866cebd2f9e115ed46542de6013ccf804afafb97e9f7c6b0ff7a.
+Fastboot requested. No0312 hardware result. After temporary boot/responsive
+home confirmation inspect passive baseline and run once
+work/slim-powered/run-device.py. It batches exact PCM completion -> service
+discovery -> QMI select/power -> acknowledged-power register snapshot; each
+stage gates its dependent control. Failure still permits independent passive
+status/Wi-Fi reader. No repeated controls on one boot. Physical playback
+and microphone capture remain pending.
+
+Wi-Fi current0310 passive native state0/result0, config/resolver captures
+under work/slim-broadcast/*-86af266.txt; no fresh join or override applied.
+User's confirmed0306 spinner with state4/result1 remains unresolved.
+
+##0310 valid HELLO uses QRTR control endpoint (2026-11-14)
 
 User confirmed0310 home responsive. All PCM prerequisites and four exact
 zero-buffer completions passed with full cleanup again. Corrected broadcast

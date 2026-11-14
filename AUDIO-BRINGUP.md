@@ -4,6 +4,14 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+##0312 QRTR endpoint and powered controller snapshot candidate ready
+
+0310 exposed valid HELLO control ports0xfffffffe, matching QRTR. The new
+verified image corrects both transmit/receive endpoints and batches read-only
+NGD version/status registers after successful QMI selection/power only.
+Host tests and native builds pass; hardware test pending. PCM consumption
+is repeatedly verified, but physical playback/capture remain pending.
+
 ##0310 broadcast reply correction temporarily booted
 
 0309 PCM passed again, then local validation rejected DSP node5's broadcast
