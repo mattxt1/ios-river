@@ -5,6 +5,7 @@
 #include <dlfcn.h>
 #include <errno.h>
 #include <net/if.h>
+#include <ifaddrs.h>
 #include <net/route.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,6 +23,28 @@ static void print_plist(const char *label, CFPropertyListRef value) {
  if(data){fwrite(CFDataGetBytePtr(data),1,(size_t)CFDataGetLength(data),stdout);CFRelease(data);}
  else puts("  plist serialization failed");
  if(error)CFRelease(error);
+}
+/* Kernel interface addresses are independent of helper-published SC values.
+ * Report only scalar flags and IPv4 addresses; never inspect credentials. */
+static void interface_dump(void) {
+ struct ifaddrs *head=NULL;
+ puts("Kernel interface addresses:");
+ if(getifaddrs(&head)){perror("getifaddrs");return;}
+ unsigned seen=0,ipv4=0,rows=0;
+ for(struct ifaddrs *p=head;p && rows++<4096;p=p->ifa_next){
+  if(!p->ifa_name || (strcmp(p->ifa_name,"en0") && strcmp(p->ifa_name,"ue0")))continue;
+  seen++;int family=p->ifa_addr?p->ifa_addr->sa_family:0;
+  printf("  interface=%s index=%u flags=%#x family=%d",p->ifa_name,if_nametoindex(p->ifa_name),p->ifa_flags,family);
+  if(family==AF_INET){
+   char address[INET_ADDRSTRLEN]={0},mask[INET_ADDRSTRLEN]={0};ipv4++;
+   (void)inet_ntop(AF_INET,&((struct sockaddr_in*)p->ifa_addr)->sin_addr,address,sizeof(address));
+   if(p->ifa_netmask && p->ifa_netmask->sa_family==AF_INET)
+    (void)inet_ntop(AF_INET,&((struct sockaddr_in*)p->ifa_netmask)->sin_addr,mask,sizeof(mask));
+   printf(" IPv4=%s mask=%s",address,mask);
+  }
+  putchar('\n');
+ }
+ printf("  observed_records=%u IPv4_records=%u\n",seen,ipv4);freeifaddrs(head);
 }
 static void route_dump(void) {
  int mib[]={CTL_NET,PF_ROUTE,0,AF_INET,NET_RT_DUMP,0};size_t size=0;
@@ -157,4 +180,4 @@ static void preferences(void) {
  }
  CFRelease(plist);
 }
-int main(void) {route_dump();dynamic_state();preferences();return 0;}
+int main(void) {interface_dump();route_dump();dynamic_state();preferences();return 0;}

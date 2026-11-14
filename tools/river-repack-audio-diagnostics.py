@@ -29,7 +29,7 @@ def require(condition, message):
         raise ValueError(message)
 
 
-def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None):
+def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None, network_state=None):
     require(blob[:8] == b'RIVFILES', 'Invalid RiverFiles magic')
     count, = struct.unpack_from('<I', blob, 8)
     require(count <= 64 and 12 + count * 128 <= len(blob), 'Invalid file table')
@@ -38,6 +38,7 @@ def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None):
     adsp_found = 0
     wifi_found = 0
     net_found = 0
+    network_state_found = 0
     for i in range(count):
         name, mode, off, size, reserved = struct.unpack_from('<112sIIII', blob, 12 + 128 * i)
         require(off + size <= len(blob), 'File outside container')
@@ -57,6 +58,10 @@ def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None):
             net_found += 1
             if net is not None:
                 data = net
+        if name.split(b'\0')[0] == b'/usr/local/bin/river-network-config-state':
+            network_state_found += 1
+            if network_state is not None:
+                data = network_state
         entries.append((name, mode, data, reserved))
     require(found == 1, 'Expected exactly one existing clock helper')
     require(adsp_found <= 1, 'Duplicate ADSP helper')
@@ -68,6 +73,9 @@ def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None):
     require(net_found <= 1, 'Duplicate Wi-Fi daemon')
     if net is not None:
         require(net_found == 1, 'Expected existing Wi-Fi daemon')
+    require(network_state_found <= 1, 'Duplicate network-state reader')
+    if network_state is not None and not network_state_found:
+        entries.append((b'/usr/local/bin/river-network-config-state', 0o755, network_state, 0))
     count = len(entries)
     require(count <= 64, 'Too many RiverFiles entries')
     offset = (12 + count * 128 + 15) & ~15
@@ -85,6 +93,7 @@ def main():
     ap.add_argument('--kernel', type=Path, required=True)
     ap.add_argument('--clock-helper', type=Path, required=True)
     ap.add_argument('--adsp-helper', type=Path)
+    ap.add_argument('--network-state-helper', type=Path, help='Optional read-only kernel/SC state reader')
     ap.add_argument('--net-helper', type=Path, help='Optional existing Wi-Fi daemon with publication observations')
     ap.add_argument('--wifi-monitor-helper', type=Path, help='Optional bounded read-only Wi-Fi monitor diagnostics')
     ap.add_argument('--msgbuf-bytes', type=int, choices=(131072, 262144, 1048576),
@@ -153,8 +162,11 @@ def main():
     net_helper = args.net_helper.read_bytes() if args.net_helper else None
     if net_helper is not None:
         require(net_helper[:8] == bytes.fromhex('cffaedfe0c000001'), 'Expected arm64 Wi-Fi daemon')
+    network_state = args.network_state_helper.read_bytes() if args.network_state_helper else None
+    if network_state is not None:
+        require(network_state[:8] == bytes.fromhex('cffaedfe0c000001'), 'Expected arm64 network-state reader')
     prior_files = blobs['RiverFiles']
-    blobs['RiverFiles'] = replace_helper(prior_files, replacement, adsp_helper, wifi_helper, net_helper)
+    blobs['RiverFiles'] = replace_helper(prior_files, replacement, adsp_helper, wifi_helper, net_helper, network_state)
     # Compare the actual containers: every unrelated file and metadata survives.
     def files(blob):
         result = {}
@@ -168,7 +180,8 @@ def main():
     changed = {b'/usr/local/bin/river-codec-clock': replacement}
     for name, data in [(b'/usr/local/bin/river-adsp-status', adsp_helper),
                        (b'/usr/local/bin/river-wifi-monitor-state', wifi_helper),
-                       (b'/usr/local/bin/river-net', net_helper)]:
+                       (b'/usr/local/bin/river-net', net_helper),
+                       (b'/usr/local/bin/river-network-config-state', network_state)]:
         if data is not None:
             changed[name] = data
     require(set(after) == set(before) | set(changed), 'Unexpected file set')
@@ -220,6 +233,8 @@ def main():
                     cmdline_bytes=len(cmdline), kernel_payload_segments_verified=True,
                     clock_helper_sha256=digest(replacement), temporary_boot_only=True)
     manifest['unrelated_riverfiles_verified'] = True
+    if network_state is not None:
+        manifest['network_state_helper_sha256'] = digest(network_state)
     if net_helper is not None:
         manifest['net_helper_sha256'] = digest(net_helper)
     if args.msgbuf_bytes is not None:
