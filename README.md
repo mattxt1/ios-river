@@ -19,7 +19,8 @@ ACKs, PAS status0/result0 and remote ready state0x6. Read-only post-start
 surveys work, and the user confirmed the home screen remains responsive
 after startup. Shared CX/XO
 requirements remain enabled until reboot. Physical PCM and microphone capture
-remain unimplemented; APR transport discovery is next. See
+remain unimplemented. Patch0300 passive private transport discovery is built
+and packaged, with live validation pending. See
 [AUDIO-BRINGUP.md](AUDIO-BRINGUP.md).
 
 On c3d9af8, the usual Wi-Fi network was visible and the second join completed

@@ -32,8 +32,8 @@ at0x14cc0 length0x50. APPS↔ADSP partition is valid/stable with17records,
 uncached free0x1ccf8, cached free0x24000. Out429 at0x86030 and in443 at0x86198
 are valid; in443 used2 entries. Partition item13 is2048bytes at0x86300.
 The global-only channel scan still prints zero ADSP/APR channels; this does
-not inspect the private channel table. Next source work: bounded read-only
-private-partition channel/GLINK discovery before choosing APR transport.
+not inspect the private channel table. Passive private-partition transport
+discovery is now built for the next temporary image, described below.
 Amplifier identity, power, format, PLL and volume baseline remain unchanged;
 endpoint flags3 still mean discarded playback/synthetic capture. No physical
 PCM, speaker playback or microphone capture has passed.
@@ -49,11 +49,24 @@ items478–480 and descriptor indices. It validates the observed partition,
 allocation bounds, duplicates, races and note capacity; bridge table266 layout
 is deliberately not decoded with table13 assumptions. No allocation, channel
 opening, FIFO consumption or IPC is added. Actual-source ASan/UBSan tests and
-dry-run application pass. Commit before full build/package. It reuses the
+dry-run application pass. Full source82783138effb704b6ccd25d752c84e4a363cb3a0
+built in work/build/river-82783138effb-akV32e, with no numbered patches skipped.
+Kernel SHA256:800ca8af455d52098704684aafa644283c6a90735f03440bd4d83e96cdd1fd35.
+Verified image outputs/river-adsp-transport-8278313.img is26,716,160 bytes,
+577 command-line bytes,1MiB retained log; all kernel segments verified.
+Image SHA256:592c3e1d9059dff22222c7afd8f0180cecfbe97b3f072e623949cf5355b82b30.
+Manifest outputs/adsp-transport-build-manifest.json. No0300 device boot yet.
+Next physical step: return to fastboot for temporary boot, then home-screen
+confirmation before controls. It reuses the
 same0299 start helper; next fresh-boot test repeats metadata/stage/handshake,
 then start, then --probe to discover records on the ready DSP. Physical PCM
 remains unimplemented.
 
+Pinned source configuration evidence now points to SMD APRV2: river_defconfig
+has SDM450 enabled/core GLINK disabled, audio Makefile includes sdm450auto.conf,
+and that selects APRV2→apr_tal.c. Candidate apr_audio_svc and CORE GET_STATE
+0x1290c/response0x1290d are source-backed, not yet live channel observations.
+Private sources/configs are in work/pcm-transport. See AUDIO-BRINGUP.md links.
 
 ##0299 temporary boot evidence before startup (2026-11-13)
 

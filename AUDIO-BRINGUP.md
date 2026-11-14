@@ -4,7 +4,7 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
-## Attenuation correction prepared (2026-11-13)
+## Attenuation correction verified (2026-11-13)
 
 Patch0293 fixes the runtime CS35L41 volume helper before physical playback.
 The iOS ABI supplies positive attenuation in eighths of a dB. PCM_VOL is a
@@ -67,7 +67,8 @@ with boot ACK mask3. The user confirmed a responsive iOS home screen; the
 read-only audio baseline and PAS/empty-partition survey passed on this boot. It issues the
 same existing L19/L9 votes and adds no ADSP votes or DSP startup. WCNSS startup
 still follows its existing policy even when boot votes fail. CX/XO shared
-ownership policy and authenticated startup remain the next audio work.
+ownership policy and authenticated startup were subsequently implemented and
+verified by0299 below.
 
 ## Authenticated startup verified (patch0299,2026-11-13)
 
@@ -150,7 +151,23 @@ names are reported without assuming table13 control layout.
 Actual-source sanitizer tests pass for the two SMD layouts, GLINK indices,
 padding/unknown/duplicate/malformed allocations, concurrent publication,
 invalid names/CIDs, bounded records/output and zero shared-memory writes.
-Full build, packaging and live private-channel validation are pending.
+The full8278313 kernel build and image verification pass, with no numbered
+patches skipped. The temporary image is26,716,160 bytes,577 command-line
+bytes and retains1MiB of kernel log. Live private-channel validation remains
+pending. Artifact hashes are in `outputs/adsp-transport-build-manifest.json`.
+
+The pinned source points to SMD: River's configuration enables SDM450 and
+disables core GLINK; the audio build includes `sdm450auto.conf`, which selects
+`CONFIG_MSM_QDSP6_APRV2`. `ipc/Kbuild` maps that option to `apr_tal.c`, whose
+ADSP audio channel is `apr_audio_svc`. This is source configuration evidence,
+not yet a live channel observation. After discovery, a bounded APR CORE
+GET_STATE request (0x1290c, response0x1290d) is the next transport check before
+AFE/ASM buffer and codec routing work. No APR request has been sent yet.
+Sources: [River configuration](https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/2dba45b8e247958d5a1b15b33c6064c15af4983e/arch/arm64/configs/river_defconfig),
+[audio configuration](https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/2dba45b8e247958d5a1b15b33c6064c15af4983e/techpack/audio/config/sdm450auto.conf),
+[APR SMD transport](https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/2dba45b8e247958d5a1b15b33c6064c15af4983e/techpack/audio/ipc/apr_tal.c),
+[CORE query](https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/2dba45b8e247958d5a1b15b33c6064c15af4983e/techpack/audio/dsp/q6core.c).
+
 
 ## Verified progress and remaining work (2026-11-13)
 
@@ -163,19 +180,19 @@ Full build, packaging and live private-channel validation are pending.
   LRCLK waveforms were not measured, and no PCM or analog path was enabled.
 - TrustZone PAS1 accepted the exact stock ADSP metadata. Memory setup and
   the full17MiB firmware staging test then passed with matching input hashes.
-  Physical destination readback and executable authentication remain unverified.
+  PAS1 AUTH_AND_RESET subsequently passed and the DSP reported ready0x6
+  with responsive iOS. Physical destination readback was not performed.
 - Partition surveys found an empty APPS↔ADSP partition at SMEM+0x86000.
   Patch0288 then acquired/released remote lockS:3, initialized outbound
   SMP2P item429 and verified the complete block. An independent scan found
   one valid340-byte record at0x86030 and uncachedfree0x188, with no malformed
   records. No IPC, power vote or DSP start was requested. iOS stayed responsive.
 
-The next audio step is correctly acknowledged RPM CX/XO votes with shared
-ownership preserved, followed by authenticated PAS1 startup and remote SMP2P
-negotiation/readiness. APR/QMI, Q6AFE/Q6ASM/SLIMbus PCM transport, codec routing
-and physical microphone capture remain to be implemented. Output is currently
-discarded and input is synthetic; endpoint counters and successful iOS API
-calls establish only the existing software plumbing.
+The next audio step is live private channel discovery, then a bounded APR
+CORE state query over the validated SMD channel. Q6AFE/Q6ASM/SLIMbus PCM
+transport, codec routing and physical microphone capture remain to be
+implemented. Output is currently discarded and input is synthetic; endpoint
+counters and successful iOS API calls establish only software plumbing.
 
 The Wi-Fi/battery audit fixes through patch0291 are committed in `236a880`.
 Their host regressions and full kernel build passed. The packaged image
@@ -183,8 +200,8 @@ was accepted by temporary fastboot boot and the user confirmed responsive
 iOS. Read-only battery publication passed; the Settings Wi-Fi join failed.
 See [WIFI-STATUS.md](WIFI-STATUS.md), [BATTERY-STATUS.md](BATTERY-STATUS.md)
 and [NOTES.md](NOTES.md) for results and artifact hashes. Audio milestones
-above were verified on earlier temporary images; they do not establish a
-physical playback or capture milestone.
+are tied to their named tested images; none establishes a physical playback
+or capture milestone.
 
 ## Diagnostic implementation history
 
