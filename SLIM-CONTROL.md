@@ -81,3 +81,14 @@ Capability/report/query passed. Exact codec elemental address returned
 logical0x8a; CFG1/status0x1a40e, INT_STAT0, IE0x10000, VE0. Two RX and two
 TX messages, no DMA/IRQ enable/data channels. User confirmed responsive iOS.
 Controller/power retained until reboot. Physical routing still pending.
+
+##0314 muted channel lifetime candidate
+
+After verified enumeration, --channel-test connects dynamic codec LA sink0
+to channel144, defines/activates mono48k16-bit, commits, removes, commits and
+disconnects. Parameters come from pinned Madera and SLIMbus scheduler code:
+rootfreq3072000, coefficient3/rootexp0/HARD_ISO0, sample byte0x24, exact
+presence0x83. Fresh TIDs match generic ACK success bit0x20. Unknown completion
+halts cleanup and retains ownership until reboot; known NACK permits cleanup
+of accepted resources. No AFE start, codec/AIF routing, DMA or unmute.
+Host tests/build pass; manager/codec channel behavior awaits hardware test.

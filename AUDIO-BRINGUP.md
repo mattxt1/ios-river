@@ -4,6 +4,13 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+##0314 codec-channel lifetime candidate ready
+
+The verified next image batches codec sink0/shared channel144 connection,
+48k16-bit activation/reconfiguration, removal and disconnection with exact
+ACK ownership. Host sanitizer tests and native build pass; hardware result
+pending. No PCM source or codec/AIF writes are added by this test.
+
 ##0313 capability exchange and Madera logical address verified
 
 The polled controller exchanged capabilities and queried the exact codec

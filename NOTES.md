@@ -5,7 +5,58 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0313 controller capability and codec address PASS (2026-11-14)
+## Active handoff:0314 muted codec channel lifetime image ready (2026-11-14)
+
+0313 capability/query and all previous PCM/QMI stages passed; user confirmed
+responsive after full test. Current phone remains0313, NGD enabled/power
+retained, no sample/data channel yet and amp muted. Do not repeat controls.
+Source068df3747ad16a45369a05a08e69ceccaca4fbee through0314 adds --channel-test/status.
+Require verified live NGD/codec address, exact version/CFG1/IRQ_EN0, no pending
+interrupt/busy TX and known mute before any channel request. Dynamic codec
+LA selects sink port0/shared144. Six stock-defined acknowledged messages:
+CONNECT_SINK, DEF_ACT_CHAN, RECONFIG_NOW, CHAN_CTRL REMOVE, RECONFIG_NOW,
+DISCONNECT_PORT. Fresh TIDs0x72 onward match exact generic ACK length/TID and
+success bit0x20; uncertain replies stop all follow-up. Matched NACK permits
+bounded cleanup only for previously accepted owned connection/definition.
+Unknown ownership stays retained until reboot; no guessed resource reset.
+Normal success requires connected/defined/active all0 after acknowledged
+teardown. No AFE start, PCM source, codec/AIF write or unmute in this test.
+
+Pinned stock slimbus.c blob1140b33cf3144fe761ea8865ac2c2c38e53b28bc confirms
+48k16-bit Madera parameters: rootfreq24576000>>3=3072000, superframe/8=192,
+coeff=48000*192/3072000=3, rootexp0, HARD_ISO0, sample/coeff byte0x24,
+exact presence rate0x83. Driver sink port0 and shared channel144 verified.
+Actual-code ASan/UBSan tests pass for six-command lifetime, each NACK cleanup,
+each wrong-TID/missing-ACK/TX-timeout position, prerequisite/map/IRQ gates.
+Native helper compile/sign and final install pass; new object/kernel contain
+channel code, original log records changed sweet_keys compilation.
+
+Host KDK recovery: iCloud offloaded KDK.pkg, initially blocking directory
+check. Original build later resumed/compiled before interruption (exit143),
+so do not claim it exited success or stopped before compilation. Recovered
+the EXACT same22G74 DMG SHA29866842eef039812888daea4176ce493be153b0d6d1b88f90753d69ea51b7d4;
+Apple Software signature verified. Expanded outside iCloud and unmounted.
+CURRENT KDKROOT=/private/tmp/river-kdk-22G74-qq2pjbum/expanded/KDK.pkg/Payload.
+Use this path for follow-up builds; toolchain/config/version unchanged.
+Final recovered native make install exit0. No build processes remain. Ledger
+work/slim-channel/incremental-provenance.json, compile log incremental-0314.log,
+final install log incremental-0314-recovered.log in existing build job.
+Prior0313 kernel preserved work/slim-enumerate/kernel-6f78bfc.verified.
+
+Image outputs/river-slim-channel-068df37.img: 26820608bytes,
+577cmdline, SHA586588eb68f5be39abf6e8283c110de2e209d3d56fa7d1cc7ffcaf3a225e1b75.
+Kernel SHA7eaac04c74b1cdafbd1450653f203dd91dd2d8f95e53bd7042da65718973e54e.
+Fastboot requested; no0314 hardware test. Temporary boot, responsive home
+confirmation, passive baseline, then run once work/slim-channel/run-device.py.
+Full passing PCM/QMI/NGD/address stages gate channel lifetime test. Independent
+post-state/Wi-Fi reader remain. Physical playback/capture still pending.
+
+Wi-Fi0313 passive native state0/result0, no fresh UI attempt. Public BOOTP
+source audit has explicit service-rank Last but no explicit Never setter;
+this does not identify private iOS configd rank3 owner. No override applied.
+Raw network captures remain private under work/slim-enumerate/*-6f78bfc.txt.
+
+##0313 controller capability and codec address PASS (2026-11-14)
 
 User confirmed0313 home and post-test iOS STILL RESPONSIVE. All previous
 PCM/QMI/readback stages passed. --ngd-enumerate passed source-defined

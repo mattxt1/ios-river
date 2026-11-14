@@ -6,6 +6,7 @@
   and before stopping. Record commits, exact build/boot results, sysctl readbacks,
   and unfinished work. Distinguish verified observations from hypotheses.
 - **Kernel Builds**:
+  - Use the current exact KDK path from the active NOTES.md handoff; the earlier iCloud-backed KDK can be offloaded. The verified22G74 recovery is outside iCloud and does not change the toolchain version.
   - Primary path: Local builds via `tools/river-local-build.sh` (see [LOCAL-BUILD.md](LOCAL-BUILD.md)).
     Requires `KDKROOT=/Users/matttyson/Documents/Codex/2026-11-05/d-2/work/local-build/kdk-full/KDK.pkg/Payload`
     and `RIVER_LOCAL_BUILD_ROOT=/Users/matttyson/Documents/Codex/2026-11-05/d-2/work/local-build`.
