@@ -4,15 +4,15 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
-## Shared PCM/ASM/AFE prerequisite candidate0303
+## Shared PCM map/unmap and ASM setup verified on0303
 
-Source3ca804be adds dedicated retained-page ASM map/unmap, an ASM session
-open/PCM-format/close test, and an AFE SLIMbus0RX read-only parameter query.
-All run explicitly after the successful CORE query and are batched into one
-kernel candidate. Host sanitizer tests and the full kernel build pass. The verified temporary
-image is ready; actual device testing is pending. No actual PCM buffer submission, ADM route, AFE port start,
-SLIMbus activation, codec stream route or physical microphone capture exists
-yet. See the active NOTES.md handoff for exact commands and ownership rules.
+The responsive0303 boot passed exact retained16KiB-page ASM mapping and
+matching-handle unmap, followed by session1/stream1 open, signed stereo48kHz
+16-bit format, and close. The in-band AFE SLIMbus0RX GET received a matched
+DSP status0x2 rejection; the channel stayed healthy, rings consumed, and
+amplifier baseline unchanged. User confirmed iOS remained responsive.
+No physical sample submission, ADM route, AFE port start, SLIMbus activation
+or physical microphone capture has run. See active NOTES.md for exact evidence.
 
 ## Attenuation correction verified (2026-11-13)
 

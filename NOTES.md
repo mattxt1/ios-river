@@ -5,7 +5,30 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0303 temporarily booted; responsive-home check pending (2026-11-13)
+## Active handoff:0303 PCM map/unmap and ASM format passed on hardware (2026-11-13)
+
+User confirmed responsive home before the gated sequence and again after all
+tests. Baseline, exact stock metadata/staging/handshake/start and passive CID6
+layout passed. CORE returned state1 again. --pcm-map passed:
+phase=map_unmap_complete/error0, transactions2, poisoned0, retained16KiB
+page physical0x204a8000, matching handle0xf0b62a58, mapped0/unmapped1.
+--asm-test passed OPEN_WRITE_V3, signed stereo48kHz/16-bit MEDIA_FMT and CLOSE:
+phase=asm_setup_complete/error0, transactions5, format1/closed1/open0.
+--afe-probe returned a matched rejection: phase=afe_get_slimbus_rejected,
+error71,dsp_status0x2,transactions6,poisoned0. This is not a transport timeout;
+it does not prove why the unconfigured SLIMbus GET was rejected.
+Post-query passive CID6 remains OPENED2/2, TXhead=tail0x170,
+RXhead=tail0x1e4, stable valid records, and unchanged amplifier baseline.
+No page is freed/reused; no physical PCM samples or microphone capture ran.
+
+Private evidence: continuation work/pcm-mapping/{baseline,metadata,stage,
+handshake,start,pre-query,core,map,asm,afe,post-query}-3ca804b.txt.
+Current phone is responsive on0303 with authenticated ADSP, owned/open APR,
+retained CX/XO, a completed/unmapped retained page and a closed ASM session.
+All three0303 test operations are one-shot; do not rerun them on this boot.
+Next: implement source-supported ADM/AFE route setup plus bounded SLIMbus
+controller discovery, batching independent stages in the next build/boot.
+Wi-Fi remains secondary; do not forget the fresh-join configuration evidence.
 
 Continuation workspace:
 /Users/matttyson/Documents/Codex/2026-11-13/apr-communication-now-passes-the-dsp
