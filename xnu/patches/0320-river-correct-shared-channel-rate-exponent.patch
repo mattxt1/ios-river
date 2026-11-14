@@ -1,0 +1,20 @@
+diff --git a/bsd/dev/river_adsp_channel.h b/bsd/dev/river_adsp_channel.h
+--- a/bsd/dev/river_adsp_channel.h
++++ b/bsd/dev/river_adsp_channel.h
+@@ -110,11 +110,11 @@
+  uint8_t connect[]={la,0,144,0};
+  error=ri_channel_command(base,0x2d,connect,sizeof(connect),3,false);if(error)goto done;
+  ri_channel.connected=true;
+- /* Stock framer rootfreq=24576000>>3, superframe clocks/8=192.
+-  * 48000*192/3072000=3 => coeff3/rootexp0/HARD_ISO0.
+-  * 16-bit samples/4=4 plus coeff3 bit5; exact presence rate0x83.
+-  * Data-format/aux undefined0, client number is codec LA low5 bits. */
+- uint8_t define[]={la&31,0x24,0,0x83,0,144};phase="define_activate";
++ /* Stock include/linux/slimbus/slimbus.h uses6144 clocks/superframe,
++  * DIV8=768. NGD rootfreq=24576000>>3=3072000, superfreq=4000.
++  * Madera48k uses4k multiplier12 => coeff3/rootexp2/HARD_ISO0.
++  * 16-bit/4=4 plus coeff3 bit5, presence0x83. Earlier192/exp0 was wrong. */
++ uint8_t define[]={la&31,0x24,0x20,0x83,0,144};phase="define_activate";
+  error=ri_channel_command(base,0x21,define,sizeof(define),4,false);if(error)goto done;
+  ri_channel.defined=true;
+  uint8_t commit[]={0,la};phase="activate_reconfigure";

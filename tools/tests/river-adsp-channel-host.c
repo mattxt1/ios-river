@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include "river-stock-slim-properties.h"
 typedef uintptr_t vm_offset_t;
 static struct {bool active,selected,ngd_read;uint32_t hw_version,ngd_offset,ngd_cfg,ngd_int_en,ngd_int_stat;} ri_slim;
 static struct {bool complete;} ri_stream;
@@ -93,7 +94,7 @@ static void channel_response(unsigned length)
  channel_sends++;assert(channel_sends<=8 && b[2]==0xff);
  switch(code){
  case 0x2d:assert(length==7 && b[3]==la && !b[4] && b[5]==144 && !hardware_connected);tid=b[6];break;
- case 0x21:assert(length==9 && b[3]==(la&31) && b[4]==0x24 && !b[5] && b[6]==0x83 && b[8]==144 && hardware_connected && !hardware_defined);tid=b[7];break;
+ case 0x21:{struct slim_ich ref=stock_channel_properties(48000);assert(length==9 && b[3]==(la&31) && b[4]==((ref.prop.sampleszbits>>2)|(ref.coeff==SLIM_COEFF_3?0x20:0)) && b[5]==((ref.rootexp<<4)|ref.prop.prot) && b[6]==ref.prrate && b[8]==144 && hardware_connected && !hardware_defined);tid=b[7];break;}
  case 0x24:assert(length==5 && b[4]==la && hardware_defined);tid=b[3];break;
  case 0x23:assert(length==6 && b[3]==(0x80|(la&31)) && b[5]==144 && hardware_defined);tid=b[4];break;
  case 0x2e:assert(length==6 && b[3]==la && !b[4] && hardware_connected && !hardware_defined);tid=b[5];break;
@@ -126,6 +127,7 @@ static int active_callback(void) {assert(ri_channel.connected && ri_channel.defi
 static int uncertain_callback(void){ri_channel.uncertain=true;return ETIMEDOUT;}
 int main(void)
 {
+ struct slim_ich reference=stock_channel_properties(48000);assert(SLIM_CL_PER_SUPERFRAME_DIV8==768 && reference.rootexp==2 && reference.coeff==SLIM_COEFF_3 && reference.prrate==0x83);
  ngd_baseline_main();
  channel_reset(0,0);assert(!ri_channel_test() && ri_channel.complete);
  assert(ri_channel.commands==6 && ri_channel.acks==6 && !ri_channel.connected && !ri_channel.defined && !ri_channel.active);
