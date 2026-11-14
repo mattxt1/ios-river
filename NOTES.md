@@ -5,7 +5,7 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff: shared PCM/ASM/AFE image ready; fastboot requested (2026-11-13)
+## Active handoff:0303 temporarily booted; responsive-home check pending (2026-11-13)
 
 Continuation workspace:
 /Users/matttyson/Documents/Codex/2026-11-13/apr-communication-now-passes-the-dsp
@@ -51,11 +51,14 @@ segments verified. Image SHA256
 b57d5e9ccdc21589637d995f9c6d7d4d3d94fdddc759b1c8ab4984e1df4a980e.
 Manifest outputs/pcm-build-manifest.json. Updated helper SHA256
 1abcefef019eb90e8833f3569f6508d585a722cadbd8ac16b415c4102cbcd192.
-User has been asked to put River in fastboot; readiness is pending. Do not
-infer readiness from elapsed time. No boot, map, ASM or AFE test has run yet.
-Once ready, verify productriver/image hash, temporary fastboot boot only,
-then wait for responsive-iOS confirmation before controls. Inspect baseline
-first; run work/pcm-mapping/run-device.py only on this fresh candidate.
+User confirmed fastboot readiness. Exact image SHA256 and productriver were
+verified. Temporary fastboot boot completed transfer OKAY(0.607s), boot
+OKAY(0.216s); nothing flashed. Home-screen responsiveness question is pending.
+No metadata/staging/handshake/start, CORE, PCM map, ASM or AFE controls have
+run on this new boot. Wait for the user's responsive-home answer, inspect
+passive baseline first, then use work/pcm-mapping/run-device.py on this fresh
+candidate only. Bounded USB-only boot capture session60062 writes
+work/pcm-mapping/boot-3ca804b-usb.log under the continuation workspace.
 
 Original KDK/worktree metadata were iCloud-offloaded. A standalone minimal
 build checkout uses the same committed tree and original object store. Exact
@@ -64,7 +67,7 @@ KDK22G74 downloaded anew, verified SHA256
 and Apple Software package signature, expanded locally without installation
 at work/pcm-mapping/kdk-local/KDK.pkg/Payload. Original blocked build resumed
 when hydration finished; its duplicate LxsjE0 process tree was explicitly
-stopped. SvUHwO is the only completed candidate. No new image booted yet.
+stopped. SvUHwO is the completed candidate; its temporary boot was accepted as above.
 
 Read-only device check still returns the exact successful CORE state1 on
 1334e8c. Passive Wi-Fi route/SC/DNS snapshot shows configd Never on en0, no
