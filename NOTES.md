@@ -5,7 +5,45 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0300 temporarily booted; home confirmation pending (2026-11-13)
+## Active handoff: live APR SMD channel found;0301 query prepared (2026-11-13)
+
+The user confirmed home responsive on8278313. Baseline, stock metadata,
+17MiB staging and locked handshake passed. Repeated startup passed again:
+four power ACKs/mask0xf, PAS0/0, remote ready0x6 after3polls/1interrupt.
+The user also confirmed iOS remained responsive afterward. Current phone
+stays on8278313 with ADSP ready and retained CX/XO requirements. No APR
+channel has been opened or request sent on this image.
+
+Private evidence work/adsp-transport/{baseline,metadata,stage,handshake,start,
+post-start}-8278313.txt. Passive survey is valid/stable with17records and
+7private SMD channels, no bridge table and no GLINK478–480 records. The APR
+channel is apr_audio_svc, table13 slot6/CID6/flags0x201/refs1, info0x9ac78
+length40, FIFO0x9acb0 length16384 (8192 each direction). Host state0/peer1,
+all four indices0. Other names: LOOPBACK,IPCRTR,DIAG_CNTL,DIAG,
+fastrpcsmd-apps-dsp,apr_apps2. Amplifier baseline remains unchanged and
+playback/capture remain discarded/synthetic. Private capture
+work/audit-device-validation/start-8278313-usb.log is bounded (session17879).
+
+Patch0301 prepares an explicit one-shot --apr CORE GET_STATE0x1290c query.
+It revalidates ready DSP and exact private CID6 packet layout, claims only
+host-CLOSED/peer-OPENING with empty rings, uses byte flags/bit8 doorbell,
+and matches APR V0 addresses/ports/token/opcode/length. Host-only head/RXtail
+and protocol flag writes are checked; peer-owned indices are never reset.
+Open/TX/RX/close waits are bounded. Successful state response retains OPENED
+for later transport work; failures request protocol CLOSED and separately
+report observed acknowledgment. No assumed rollback or retry after ownership.
+No AFE/ASM/SLIMbus commands, sample buffers, codec writes or PCM path added.
+
+Actual-code ASan/UBSan tests combine real private-record lookup, SMP2P reader
+and APR code with hardware models. Ownership gates, exact command, byte flags,
+stale/basic/NACK replies, bounds/partial/wrap/index races, timeouts and close
+failure pass. Helper --apr/--apr-status compiles Wall/Wextra/Werror, signed
+at work/adsp-apr/river-adsp-status. Patch dry-run passes. Commit before full
+build/package. Device test on the next fresh boot repeats startup, confirms
+live closed/empty APR channel, then --apr once and inspects --apr-status plus
+read-only survey. No physical playback/capture has passed.
+
+##0300 temporary boot evidence before live discovery (2026-11-13)
 
 The user returned River to fastboot. Productriver and the exact image SHA256
 592c3e1d9059dff22222c7afd8f0180cecfbe97b3f072e623949cf5355b82b30

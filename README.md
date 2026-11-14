@@ -12,15 +12,16 @@ parts of the port. Do not rely on the device to protect personal data or use it
 for sensitive accounts. Battery capacity remains a voltage/current estimate;
 charging-policy validation is incomplete.
 
-Updated November 13, 2026. `6ac8fd5` (through patch0299) temporarily booted
+Updated November 13, 2026. `8278313` (through patch0300) temporarily booted
 to a user-confirmed responsive home screen. Stock ADSP metadata,17MiB staging,
 locked handshake setup and authenticated startup passed: all four exact power
 ACKs, PAS status0/result0 and remote ready state0x6. Read-only post-start
 surveys work, and the user confirmed the home screen remains responsive
 after startup. Shared CX/XO
 requirements remain enabled until reboot. Physical PCM and microphone capture
-remain unimplemented. Patch0300 passive private transport discovery is built
-and packaged, with live validation pending. See
+remain unimplemented. Private transport discovery passed: apr_audio_svc is CID6 with byte-access
+SMD controls and empty rings. Patch0301 prepares a bounded APR CORE state
+query; full build/device checks are pending. See
 [AUDIO-BRINGUP.md](AUDIO-BRINGUP.md).
 
 On c3d9af8, the usual Wi-Fi network was visible and the second join completed

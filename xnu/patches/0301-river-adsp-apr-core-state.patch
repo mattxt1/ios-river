@@ -1,0 +1,253 @@
+diff --git a/bsd/dev/river_adsp_probe.h b/bsd/dev/river_adsp_probe.h
+--- a/bsd/dev/river_adsp_probe.h
++++ b/bsd/dev/river_adsp_probe.h
+@@ -104,6 +104,7 @@
+ #include "river_adsp_metadata.h"
+ #include "river_adsp_stage.h"
+ #include "river_adsp_start.h"
++#include "river_adsp_apr.h"
+ 
+ static int
+ river_adsp_probe_sysctl SYSCTL_HANDLER_ARGS
+diff --git a/bsd/dev/river_adsp_apr.h b/bsd/dev/river_adsp_apr.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/river_adsp_apr.h
+@@ -0,0 +1,237 @@
++/* One explicit APR CORE GET_STATE on the observed byte-access SMD channel.
++ * No AFE/ASM commands, buffer mapping, codec writes or PCM. ri_adsp_lock owns
++ * this channel. Success retains OPENED for future transport work; failure
++ * attempts protocol CLOSED, never guesses/reset peer-owned ring indices. */
++struct ri_apr_channel { vm_offset_t info, tx, rx, ipc; uint32_t entry; };
++static struct {
++ bool attempted, owned, opened, sent, received, close_requested, close_observed;
++ uint32_t info_offset,fifo_offset,token,state,reply_error;
++ unsigned tx_waits,rx_waits,open_waits,stale,acks,tx_bytes,rx_bytes;
++} ri_apr;
++static char ri_apr_note[1536]="not requested; physical PCM unimplemented";
++static void ri_apr_write8(vm_offset_t address,uint8_t value)
++{ *(volatile uint8_t *)address=value; }
++static bool
++ri_apr_resolve(vm_offset_t smem,struct ri_apr_channel *ch)
++{
++ struct ri_adsp_transport_records r;
++ memset(ch,0,sizeof(*ch));
++ if(!ri_adsp_transport_collect(smem,&r) || r.table[0].bytes!=2048 || r.table[1].offset ||
++    r.info[6].bytes!=40 || r.fifo[6].bytes!=16384)return false;
++ const uint32_t name[4]={0x5f727061,0x69647561,0x76735f6f,0x63}; /* apr_audio_svc */
++ unsigned matches=0;
++ for(unsigned i=0;i<64;i++) {
++  unsigned e=r.table[0].offset+i*32;
++  bool match=true;
++  for(unsigned k=0;k<4;k++) {
++   uint32_t value=ri_rd(smem,e+k*4);
++   if((k==3?(value&0xffff):value)!=name[k])match=false;
++  }
++  if(!match)continue;
++  if(ri_rd(smem,e+20)!=6 || ri_rd(smem,e+24)!=0x201 || ri_rd(smem,e+28)!=1)return false;
++  ch->entry=e;matches++;
++ }
++ if(matches!=1)return false;
++ __asm__ volatile("dmb sy" ::: "memory");
++ if(ri_rd(smem,0x8600c)!=r.end || ri_rd(smem,0x86010)!=r.cached)return false;
++ ch->info=smem+r.info[6].offset;ch->tx=smem+r.fifo[6].offset;ch->rx=ch->tx+8192;
++ return true;
++}
++static bool
++ri_apr_dsp_ready(vm_offset_t smem)
++{
++ struct ri_adsp_remote remote;
++ return !ri_adsp_remote_snapshot(smem,&remote) && remote.outbound && remote.inbound &&
++     remote.slave && remote.version_features==1 && (remote.state&3)==2;
++}
++static bool
++ri_apr_indices(const struct ri_apr_channel *ch)
++{
++ uint32_t th=ri_rd(ch->info,16),tt=ri_rd(ch->info,12);
++ uint32_t rh=ri_rd(ch->info,36),rt=ri_rd(ch->info,32);
++ return th<8192 && tt<8192 && rh<8192 && rt<8192 && !((th|tt|rh|rt)&3);
++}
++static void
++ri_apr_notify(const struct ri_apr_channel *ch)
++{
++ __asm__ volatile("dmb sy" ::: "memory");ri_wr(ch->ipc,0,0x100);
++}
++static void
++ri_apr_set_state(const struct ri_apr_channel *ch,uint32_t state)
++{
++ for(unsigned i=4;i<=6;i++)ri_apr_write8(ch->info+i,state==2?1:0);
++ ri_wr(ch->info,0,state);ri_apr_write8(ch->info+10,1);ri_apr_notify(ch);
++}
++static void
++ri_apr_ack_flags(const struct ri_apr_channel *ch)
++{
++ /* These remote producer flags are cleared by the local consumer per SMD. */
++ for(unsigned i=28;i<=30;i++)ri_apr_write8(ch->info+i,0);
++}
++static int
++ri_apr_result(const char *phase,int error)
++{
++ snprintf(ri_apr_note,sizeof(ri_apr_note),
++     "phase=%s error=%d attempted=%u channel=apr_audio_svc cid=6 info=%#x fifo=%#x owned=%u opened=%u token=%u sent=%u received=%u dsp_state=%#x reply_error=%#x open_polls=%u tx_polls=%u rx_polls=%u stale=%u ack_only=%u tx_bytes=%u rx_bytes=%u close_requested=%u close_observed=%u pcm_transport=0 playback=discarded capture=synthetic",
++     phase,error,ri_apr.attempted,ri_apr.info_offset,ri_apr.fifo_offset,ri_apr.owned,
++     ri_apr.opened,ri_apr.token,ri_apr.sent,ri_apr.received,ri_apr.state,ri_apr.reply_error,
++     ri_apr.open_waits,ri_apr.tx_waits,ri_apr.rx_waits,ri_apr.stale,ri_apr.acks,
++     ri_apr.tx_bytes,ri_apr.rx_bytes,ri_apr.close_requested,ri_apr.close_observed);
++ printf("RIVER APR: %s\n",ri_apr_note);return error;
++}
++enum { RI_APR_BAD=-2, RI_APR_NACK=-1, RI_APR_WAIT=0, RI_APR_STATE=1, RI_APR_STALE=2, RI_APR_ACK_ONLY=3 };
++static int
++ri_apr_decode(const uint32_t *packet,unsigned bytes,uint32_t token,uint32_t *value)
++{
++ if(!packet || !value || !token || bytes<20 || bytes>512 || (bytes&3))return RI_APR_BAD;
++ uint32_t header=packet[0]&0xffff;
++ if((header&0xfcff)!=0x50 || (packet[0]>>16)!=bytes)return RI_APR_BAD;
++ /* Different services/ports/tokens are never our CORE response. */
++ if(header!=0x150 || packet[1]!=0x403 || packet[2]!=0x503 || packet[3]!=token)return RI_APR_STALE;
++ if(packet[4]==0x1290d) {
++  if(bytes!=24)return RI_APR_BAD;
++  *value=packet[5];return RI_APR_STATE;
++ }
++ if(packet[4]==0x110e8) {
++  if(bytes!=28)return RI_APR_BAD;
++  if(packet[5]!=0x1290c)return RI_APR_STALE;
++  *value=packet[6];return *value?RI_APR_NACK:RI_APR_ACK_ONLY;
++ }
++ return RI_APR_STALE;
++}
++static int
++ri_apr_receive(const struct ri_apr_channel *ch,uint32_t token,uint32_t *value)
++{
++ if(ri_rd(ch->info,0)!=2 || ri_rd(ch->info,20)!=2 || !ri_apr_indices(ch))return RI_APR_BAD;
++ uint32_t head=ri_rd(ch->info,36),tail=ri_rd(ch->info,32);
++ if(head>=8192 || tail>=8192 || ((head|tail)&3))return RI_APR_BAD;
++ unsigned available=(head-tail)&8191;
++ if(available<20)return RI_APR_WAIT;
++ __asm__ volatile("dmb sy" ::: "memory");
++ uint32_t bytes=ri_rd(ch->rx,tail);
++ if(bytes<20 || bytes>512 || (bytes&3))return RI_APR_BAD;
++ if(available<20+bytes)return RI_APR_WAIT;
++ uint32_t packet[128]={0};
++ for(unsigned i=0;i<bytes;i+=4)packet[i/4]=ri_rd(ch->rx,(tail+20+i)&8191);
++ int result=ri_apr_decode(packet,bytes,token,value);
++ if(result==RI_APR_BAD)return result; /* Leave malformed framing alone. */
++ __asm__ volatile("dmb sy" ::: "memory");
++ ri_wr(ch->info,32,(tail+20+bytes)&8191);
++ ri_apr_write8(ch->info+9,1);ri_apr_ack_flags(ch);ri_apr_notify(ch);
++ ri_apr.rx_bytes+=20+bytes;
++ return result;
++}
++static void
++ri_apr_close(vm_offset_t smem,const struct ri_apr_channel *ch)
++{
++ struct ri_apr_channel current;
++ if(!ri_apr.owned || !ri_apr_resolve(smem,&current) || current.info!=ch->info || current.tx!=ch->tx)return;
++ ri_apr.close_requested=true;ri_apr_set_state(ch,0);ri_apr.opened=false;
++ for(unsigned i=0;i<100;i++) {
++  uint32_t peer=ri_rd(ch->info,20);
++  if((peer==0 || peer==1) && !(ri_rd(ch->info,8)&0x00ff0000)) {
++   ri_apr.close_observed=true;ri_apr_ack_flags(ch);break;
++  }
++  ri_wait(5);
++ }
++}
++static int
++ri_apr_query_impl(void)
++{
++ lck_mtx_assert(&ri_adsp_lock,LCK_MTX_ASSERT_OWNED);
++ if(ri_apr.attempted)return EALREADY;
++ vm_offset_t smem=river_smd_smem;
++ if(!ri_adsp_start.ready || !ri_adsp_start.authenticated || !smem || !ri_apr_dsp_ready(smem))
++  return ri_apr_result("dsp_gate",EBUSY);
++ struct ri_apr_channel ch;
++ if(!ri_apr_resolve(smem,&ch))return ri_apr_result("layout_gate",EBUSY);
++ ri_apr.info_offset=(uint32_t)(ch.info-smem);ri_apr.fifo_offset=(uint32_t)(ch.tx-smem);
++ /* Claim only the observed CLOSED host / OPENING peer and empty rings. */
++ if(ri_rd(ch.info,0)!=0 || ri_rd(ch.info,20)!=1 || !ri_apr_indices(&ch) ||
++    ri_rd(ch.info,16) || ri_rd(ch.info,12) || ri_rd(ch.info,36) || ri_rd(ch.info,32))
++  return ri_apr_result("ownership_gate",EBUSY);
++ vm_offset_t ipc=ml_io_map_unmappable(0x0b010000,0x4000,VM_WIMG_IO);
++ if(!ipc)return ri_apr_result("ipc_map",ENOMEM);
++ struct ri_apr_channel recheck;
++ if(!ri_apr_dsp_ready(smem) || !ri_apr_resolve(smem,&recheck) ||
++    recheck.info!=ch.info || recheck.tx!=ch.tx || ri_rd(ch.info,0)!=0 ||
++    ri_rd(ch.info,20)!=1 || !ri_apr_indices(&ch) || ri_rd(ch.info,16) ||
++    ri_rd(ch.info,12) || ri_rd(ch.info,36) || ri_rd(ch.info,32)) {
++  ml_io_unmap(ipc,0x4000);return ri_apr_result("pre_open_recheck",EBUSY);
++ }
++ ch.ipc=ipc+0x1008;
++ ri_apr.attempted=ri_apr.owned=true;ri_apr.token=0x52410001;
++ ri_apr_result("opening",0);
++ ri_apr_write8(ch.info+11,0);ri_wr(ch.info,16,0);ri_wr(ch.info,32,0);
++ ri_apr_ack_flags(&ch);ri_apr_set_state(&ch,1);
++ int error=ETIMEDOUT;
++ for(unsigned i=0;i<500;i++) {
++  ri_apr.open_waits++;
++  if(!ri_apr_dsp_ready(smem) || !ri_apr_indices(&ch)) {error=EIO;break;}
++  uint32_t peer=ri_rd(ch.info,20);
++  if(peer==2) {ri_apr_ack_flags(&ch);ri_apr_set_state(&ch,2);ri_apr.opened=true;error=0;break;}
++  if(peer!=1) {error=EIO;break;}
++  ri_wait(10);
++ }
++ if(error)goto failed;
++ ri_wait(200); /* Matching APR TAL service-initialization settle. */
++ if(!ri_apr_dsp_ready(smem)) {error=EBUSY;goto failed;}
++ /* 20-byte SMD packet header followed by the20-byte APR V0 CORE command. */
++ uint32_t frame[10]={20,0,0,0,0,(20u<<16)|0x250,0x503,0x403,0x52410001,0x1290c};
++ bool space=false;
++ for(unsigned i=0;i<100;i++) {
++  ri_apr.tx_waits++;
++  if(ri_rd(ch.info,0)!=2 || ri_rd(ch.info,20)!=2 || !ri_apr_indices(&ch)) {error=EIO;goto failed;}
++  uint32_t head=ri_rd(ch.info,16),tail=ri_rd(ch.info,12);
++  if(head>=8192 || tail>=8192 || ((head|tail)&3)) {error=EIO;goto failed;}
++  if(((tail-head-4)&8191)>=sizeof(frame)) {space=true;break;}
++  ri_wait(5);
++ }
++ if(!space) {error=ETIMEDOUT;goto failed;}
++ uint32_t head=ri_rd(ch.info,16);
++ if(head>=8192 || (head&3)) {error=EIO;goto failed;}
++ for(unsigned i=0;i<sizeof(frame);i+=4)ri_wr(ch.tx,(head+i)&8191,frame[i/4]);
++ __asm__ volatile("dmb sy" ::: "memory");
++ ri_wr(ch.info,16,(head+sizeof(frame))&8191);ri_apr_write8(ch.info+8,1);
++ ri_apr_notify(&ch);ri_apr.sent=true;ri_apr.tx_bytes=sizeof(frame);
++ ri_apr_result("query_sent",0);
++ error=ETIMEDOUT;
++ for(unsigned i=0;i<200;i++) {
++  ri_apr.rx_waits++;
++  if(!ri_apr_dsp_ready(smem)) {error=EIO;break;}
++  uint32_t value=0;
++  int result=ri_apr_receive(&ch,ri_apr.token,&value);
++  if(result==RI_APR_STATE) {
++   ri_apr.received=true;ri_apr.state=value;error=value?0:EAGAIN;break;
++  }
++  if(result<0) {ri_apr.reply_error=value;error=EIO;break;}
++  if(result==RI_APR_STALE)ri_apr.stale++;
++  if(result==RI_APR_ACK_ONLY)ri_apr.acks++;
++  ri_wait(5);
++ }
++ if(error)goto failed;
++ ri_apr_result("core_state",0);ml_io_unmap(ipc,0x4000);return 0;
++failed:
++ ri_apr_result("failed_before_close",error);
++ ri_apr_close(smem,&ch);
++ ri_apr_result("failed",error);ml_io_unmap(ipc,0x4000);return error;
++}
++static int
++river_adsp_apr_sysctl SYSCTL_HANDLER_ARGS
++{
++ int value=0,error=sysctl_handle_int(oidp,&value,0,req);
++ if(error || !req->newptr)return error;
++ if(value!=1)return EINVAL;
++ lck_mtx_lock(&ri_adsp_lock);error=ri_apr_query_impl();lck_mtx_unlock(&ri_adsp_lock);return error;
++}
++static int
++river_adsp_apr_status_sysctl SYSCTL_HANDLER_ARGS
++{
++ lck_mtx_lock(&ri_adsp_lock);
++ int error=sysctl_handle_string(oidp,ri_apr_note,sizeof(ri_apr_note),req);
++ lck_mtx_unlock(&ri_adsp_lock);return error;
++}
++SYSCTL_PROC(_debug, OID_AUTO, river_adsp_apr, CTLTYPE_INT | CTLFLAG_RW | CTLFLAG_LOCKED,
++    NULL, 0, river_adsp_apr_sysctl, "I", "Explicit one-shot SMD APR CORE state query; no PCM");
++SYSCTL_PROC(_debug, OID_AUTO, river_adsp_apr_status, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
++    NULL, 0, river_adsp_apr_status_sysctl, "A", "Last APR CORE state query outcome");

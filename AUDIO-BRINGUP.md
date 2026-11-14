@@ -138,7 +138,7 @@ pinned Motorola `msm8953.dtsi`, `msm8953-regulator.dtsi`,
 `clock-rpm.c`, `msm8953-smp2p.dtsi`, `msm_smp2p.c` and `subsys-pil-tz.c`,
 revision2dba45b8e247958d5a1b15b33c6064c15af4983e.
 
-## Private transport discovery prepared (patch0300)
+## Private transport discovery verified (patch0300)
 
 Live startup created a private item13 channel table that the existing global
 scan cannot inspect. Patch0300 adds bounded read-only private SMD table
@@ -153,15 +153,18 @@ padding/unknown/duplicate/malformed allocations, concurrent publication,
 invalid names/CIDs, bounded records/output and zero shared-memory writes.
 The full8278313 kernel build and image verification pass, with no numbered
 patches skipped. The temporary image is26,716,160 bytes,577 command-line
-bytes and retains1MiB of kernel log. Fastboot accepted its verified temporary boot; a home-screen confirmation
-is pending before startup controls. Live private-channel validation remains
-pending. Artifact hashes are in `outputs/adsp-transport-build-manifest.json`.
+bytes and retains1MiB of kernel log. Live validation passed on8278313: startup again reached ready0x6, then the
+passive survey found7valid private SMD channels and no GLINK478–480 records.
+`apr_audio_svc` is table13 slot6, CID6, flags0x201, refs1, with40-byte controls
+at0x9ac78 and16KiB FIFO at0x9acb0. Host state0/peer1 and all ring indices0.
+The user confirmed responsive iOS afterward. No ring bytes were consumed or
+channel opened. Other private names are LOOPBACK, IPCRTR, DIAG_CNTL, DIAG,
+fastrpcsmd-apps-dsp and apr_apps2. The amplifier baseline stayed unchanged.
 
 The pinned source points to SMD: River's configuration enables SDM450 and
 disables core GLINK; the audio build includes `sdm450auto.conf`, which selects
 `CONFIG_MSM_QDSP6_APRV2`. `ipc/Kbuild` maps that option to `apr_tal.c`, whose
-ADSP audio channel is `apr_audio_svc`. This is source configuration evidence,
-not yet a live channel observation. After discovery, a bounded APR CORE
+ADSP audio channel is `apr_audio_svc`. That source configuration now matches live discovery. A bounded APR CORE
 GET_STATE request (0x1290c, response0x1290d) is the next transport check before
 AFE/ASM buffer and codec routing work. No APR request has been sent yet.
 Sources: [River configuration](https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/2dba45b8e247958d5a1b15b33c6064c15af4983e/arch/arm64/configs/river_defconfig),
@@ -169,6 +172,32 @@ Sources: [River configuration](https://github.com/LineageOS/android_kernel_motor
 [APR SMD transport](https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/2dba45b8e247958d5a1b15b33c6064c15af4983e/techpack/audio/ipc/apr_tal.c),
 [CORE query](https://github.com/LineageOS/android_kernel_motorola_sdm632/blob/2dba45b8e247958d5a1b15b33c6064c15af4983e/techpack/audio/dsp/q6core.c).
 
+
+## APR CORE query prepared (patch0301)
+
+The explicit `--apr` operation validates the live ready DSP and the observed
+CID6/flags0x201/40-byte/16KiB private SMD layout. It refuses existing ownership
+or nonempty rings, rechecks after mapping IPC, follows byte-flag OPENING→OPENED
+and sends one APR V0 CORE GET_STATE with a distinct nonzero token. Responses
+must match addresses, ports, token, opcode and lengths. Basic success ACKs
+are not mistaken for a state response; stale packets are counted, errors are
+reported, malformed framing remains unconsumed. TX reserves4 bytes and all
+memory access/consumption is bounded. Peer-owned indices are never reset.
+
+Opening waits at most500×10ms, then a matching stock200ms service settle;
+TX space100×5ms and response200×5ms. Success retains the owned OPENED channel
+without an asynchronous RX worker; it is a one-time transport check, not
+continuous liveness or PCM service. Failure requests protocol CLOSED and
+waits100×5ms for peer/flag acknowledgment, reporting any unverified cleanup.
+No retry is allowed after claiming ownership that boot. Shared power policy
+is unchanged. No AFE/ASM/SLIMbus commands, sample-buffer mapping or audio
+output/capture paths are enabled. `--apr-status` reads the separate outcome.
+
+Actual-code sanitizer tests pass for owned discovery and rechecks, exact
+wire command/byte flags, stale/basic/NACK replies, malformed/partial/wrapped
+frames, index races, wait bounds and close failures. The iOS helper compiles
+with Wall/Wextra/Werror and normal ad-hoc signing; patch application passes.
+Full kernel build, packaging and live APR validation remain pending.
 
 ## Verified progress and remaining work (2026-11-13)
 
