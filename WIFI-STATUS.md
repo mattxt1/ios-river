@@ -293,3 +293,21 @@ DHCP/publication entries are historical; do not assign them to this boot.
 Requested fresh user join while0316 audio correction builds. No Wi-Fi code
 or route/rank/DNS overrides applied. Private evidence work/codec-route/
 wifi-{native,config,dns}-c305b28.txt and wifi-monitor-c305b28.txt.
+
+##0315 fresh spinner join captured before reboot (2026-11-14)
+
+User confirmed post-audio iOS responsive (reply tes), then reported Wi-Fi
+spinner/no error and requested logs before fastboot. All five USBSSH reads
+completed exit0: scalar57B,monitor20030B,configuration7811B,DNS752B,
+kernel262144B. Private evidence work/codec-route/join-*-c305b28.txt,
+SHA/size manifest join-capture-manifest.json. No further active audio controls.
+Current scalar en0state4/association_result1; new monitor growth records
+associated->DHCPACK/address config and helper service/systemDNS publication.
+Kernel records PTK/GTK installed once/M4DMA and protected DHCPOFFER probe.
+Native table contains en0 default route but lacks connected/localIPv4route;
+configdPID35 still owns interface rank3(Never). NWIen0 absent/generalIPv4
+empty. Seven default DNS records have zero nameservers/A/AAAA, no scoped or
+service resolvers. This supports failure after keyed association in native
+network configuration, not successful usable Wi-Fi. It does not identify
+private configd policy owner. No rank/route/DNS override or Wi-Fi patch.
+User notified capture complete and can move to fastboot for verified0316.

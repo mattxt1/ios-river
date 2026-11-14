@@ -23,7 +23,10 @@ SHA56890ade85bcdf267747f95154b395534892e823f2366a9592d8dda5e028578f.
 Kernel SHA6641561cb1480523bd7f67eeae1719924dae72cca9e2c045ae4ddec194f9e8a1.
 Existing helperc305b28 unchanged; payload segments verified. Prior kernel
 preserved work/codec-route/kernel-c305b28.verified. Fastboot requested after
-Wi-Fi attempt; no0316 boot yet.0315 post-test responsiveness reply pending.
+Wi-Fi attempt; no0316 boot yet. User confirmed0315 post-test responsive.
+Fresh spinner/no-error Wi-Fi join logs captured successfully before reboot;
+state4/result1 and DHCPACK but native rankNever/NWI absent/empty resolvers.
+User notified capture complete; awaiting fastboot readiness.
 Phone0315 retains muted amp/QMIpower/NGD; all PCM and data channels cleaned.
 Do not retry active controls on0315.
 
@@ -6963,3 +6966,21 @@ Wi-Fi ioctl/kernel hang from that attempt. Separate config/monitor/kernel
 reads succeeded. Private captures wifi-join-{check,config,monitor}-3fc706c.txt
 and kernel-wifi-followup-3fc706c.txt preserve the evidence. The0305 image is
 ready and fastboot has been requested after the Wi-Fi attempt finishes.
+
+##0315 fresh spinner join captured before reboot (2026-11-14)
+
+User confirmed post-audio iOS responsive (reply tes), then reported Wi-Fi
+spinner/no error and requested logs before fastboot. All five USBSSH reads
+completed exit0: scalar57B,monitor20030B,configuration7811B,DNS752B,
+kernel262144B. Private evidence work/codec-route/join-*-c305b28.txt,
+SHA/size manifest join-capture-manifest.json. No further active audio controls.
+Current scalar en0state4/association_result1; new monitor growth records
+associated->DHCPACK/address config and helper service/systemDNS publication.
+Kernel records PTK/GTK installed once/M4DMA and protected DHCPOFFER probe.
+Native table contains en0 default route but lacks connected/localIPv4route;
+configdPID35 still owns interface rank3(Never). NWIen0 absent/generalIPv4
+empty. Seven default DNS records have zero nameservers/A/AAAA, no scoped or
+service resolvers. This supports failure after keyed association in native
+network configuration, not successful usable Wi-Fi. It does not identify
+private configd policy owner. No rank/route/DNS override or Wi-Fi patch.
+User notified capture complete and can move to fastboot for verified0316.

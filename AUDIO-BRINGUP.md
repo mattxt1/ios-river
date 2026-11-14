@@ -598,4 +598,4 @@ route_seen0,all codec/AIF/amp/clock/pin restoration successful, channel fully
 removed/disconnected, mute retained. No active-route DSPPCM submitted.
 Cirrus DS1085F2 Table4-7 bit15 is x_STSn enable status;0316 corrects only
 status handling and adds explicit mixer-enabled observation and host tests.
-Physical playback and capture remain pending. Post-test iOS check pending.
+Physical playback and capture remain pending. User confirmed post-test iOS responsive.
