@@ -5,7 +5,7 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0318 AFE-before-channel + Wi-Fi observer ready (2026-11-14)
+## Active handoff:0318 temporarily booted; home check pending (2026-11-14)
 
 0317 full prior stages/codec clocks and route passed; active PCM AFEstart
 returned matched DSPstatus1 before any submission. Complete unmap/codec/
@@ -34,7 +34,10 @@ KDKROOT remains /private/tmp/river-kdk-22G74-qq2pjbum/expanded/KDK.pkg/Payload.
 Kernel SHAa883dcd595a0376fa372dd2e421700d827413b661c29d83f80f7ff667e99c5ff.
 Image outputs/river-codec-pcm-order-24942bc.img:26839040bytes,577cmdline,
 SHA8a8be9f559a03527cc96e2726749a337e3e6cf9e8b8794a3f4243685cf9735bd.
-Fastboot requested; no0318 boot yet. Temporary boot only; never flash.
+User confirmed fastboot ready. Exact image hash and productriver verified.
+Temporary transfer OKAY0.615s, boot OKAY0.216s; no flash.
+Current phone0318; home responsiveness asked, no active0318 controls run.
+USB-only capture session95819:work/codec-pcm-order/boot-24942bc-usb.log.
 
 Wi-Fi secondary: rget read-only fingerprint proves currently installed
 river-net71728B SHA807a0190cac9c3dbb3ce685418f0235af95dc025b9192ba0275fa93dbb7b44ba,
