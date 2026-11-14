@@ -2,7 +2,7 @@ diff --git a/bsd/dev/river_adsp_ngd.h b/bsd/dev/river_adsp_ngd.h
 new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/river_adsp_ngd.h
-@@ -0,0 +1,165 @@
+@@ -0,0 +1,168 @@
 +/* One source-defined polled NGD capability exchange and Madera address query.
 + * Register-message fallback, no BAM/DMA/data channels or interrupt enable.
 + * ri_adsp_lock owns this experiment; successful controller/power stay enabled. */
@@ -143,10 +143,13 @@ new file mode 100644
 +  ri_ngd.uncertain=error!=ENXIO && error!=EREMOTE;
 +  /* Only our own config0->1 transition may be disabled. IRQ mask remains0
 +   * and no DMA mapping ever exists. Do not clear a malformed RX frame. */
-+  if(ri_rd(base,0)==1 && !ri_rd(base,0x10)) {
++  uint32_t current_cfg=ri_rd(base,0);
++  if(!current_cfg)ri_ngd.disabled=true;
++  else if(current_cfg==1 && !ri_rd(base,0x10)) {
 +   ri_wr(base,0,0);ri_ngd_barrier();ri_ngd.disabled=ri_rd(base,0)==0;
 +  }
-+  ri_ngd.enabled=!ri_ngd.disabled;ri_ngd.restore_error=ri_ngd.disabled?0:EIO;
++  ri_ngd.cfg=ri_rd(base,0);ri_ngd.enabled=!ri_ngd.disabled;
++  ri_ngd.restore_error=ri_ngd.disabled?0:EIO;
 + }
 + ml_io_unmap(mmio,0x4000);return ri_ngd_result(phase,error);
 +}

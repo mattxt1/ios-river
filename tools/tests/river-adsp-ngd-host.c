@@ -23,7 +23,7 @@ static void ri_wr(vm_offset_t p,unsigned o,uint32_t v)
 {
  assert(p==(vm_offset_t)regs+0x1000);writes++;
  assert(o!=0x10 && o!=8); /* no interrupt enable or message-DMA setup */
- if(o==0){assert(v==0 || v==1);if(mode==16 && !v)return;raw(0,v);if(v){raw(4,0x40e);if(mode!=2){uint8_t cap[]={0xc7,0,0x20,0xd9,0xc5,1,1};receive(cap,7);}}return;}
+ if(o==0){assert(v==0 || v==1);if(mode==17 && v==1)return;if(mode==16 && !v)return;raw(0,v);if(v){raw(4,0x40e);if(mode!=2){uint8_t cap[]={0xc7,0,0x20,0xd9,0xc5,1,1};receive(cap,7);}}return;}
  if(o==0x18){assert(v && !(v&0x3fffffff) || v==0x1000000 || v==0x10000000 || v==0x11000000);regs[0x1014/4]&=~v;return;}
  assert(o>=0x30 && o<0x50 && !(o&3));unsigned index=(o-0x30)/4;tx[index]=v;
  unsigned length=tx[0]&31;
@@ -67,7 +67,7 @@ int main(void)
  reset(0);raw(0x10,1);assert(ri_ngd_enumerate()==EBUSY && !writes);
  reset(0);raw(0x14,0x40000000);assert(ri_ngd_enumerate()==EBUSY && !writes);
  reset(12);assert(ri_ngd_enumerate()==ENOMEM && !writes && !ri_ngd.attempted);
- unsigned modes[]={2,3,4,5,6,7,8,9,10,11,16};
+ unsigned modes[]={2,3,4,5,6,7,8,9,10,11,16,17};
  for(unsigned i=0;i<sizeof(modes)/sizeof(modes[0]);i++){
   reset(modes[i]);int error=ri_ngd_enumerate();
   assert(error==(mode==2 || mode==3 || mode==9 || mode==16?ETIMEDOUT:mode==7?ENXIO:mode==8?EREMOTE:mode==11?ENOTSUP:EIO));
