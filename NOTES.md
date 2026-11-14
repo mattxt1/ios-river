@@ -5,7 +5,44 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0308 zero-PCM DSP completion verified, responsive (2026-11-14)
+## Active handoff:0309 SLIMbus IPC/QMI candidate ready (2026-11-14)
+
+0308 PCM consumption and clean teardown passed and user confirmed responsive
+post-test iOS. Current phone remains0308 with no further active controls.
+Committed0309 source6548eeca29043c2db98d6656e63cafe76146cc9b adds explicit --slim-discover,
+--slim-power and read-only --slim-status. CID2 ownership is claimed only for
+unique exact IPCRTR table entry, known40-byte/16KiB byte-access layout,
+CLOSED0/OPENING1 and empty rings with a second pre-open check. It never resets
+peer-owned indices. V1 HELLO advertises only supported V1, learns peer node
+from reply and discovers exact service0x301/version1/instance0 (encoded1).
+Control frames, service changes, SMD lengths and router identities are
+bounded/validated. Matching DATA flow-control requests receive RESUME_TX.
+QMI uses distinct client0x52560001, fresh transaction IDs and exact node/port/
+message/transaction/TLV result validation. Selected hardware instance0 with
+ADSP master mode2 precedes synchronous power ACTIVE2. Acknowledged active
+request and owned channel are retained until reboot; uncertain completion
+blocks further use. No SLIMbus MMIO/codec routing/unmute or sample changes.
+Discovery failure closes only owned CID2; no APR channel reset.
+
+Actual-code ASan/UBSan tests pass for HELLO, service discovery, exact QMI
+select/power, flow ACK, ring wrap, unsupported versions, malformed replies,
+DSP NACK, missing service, timeout and prerequisite gates. Native helper
+compile/sign and incremental kernel install pass, sweet_keys compiled,
+new control diagnostics linked. Prior0308 verified kernel preserved at
+work/pcm-restart/kernel-bc61fe7.verified; isolated build now through0309.
+Ledger work/slim-control/incremental-provenance.json.
+Image outputs/river-slim-control-6548eec.img: 26802176bytes,
+577cmdline, SHA99543b45acf277028410fa17ee6283edd77037b25912104e30e3dd51452fcc84.
+Kernel SHA9a651590f85e64f2b08845051fbe1d92aa413b82359bfd9b4ba3ac3707354256.
+Fastboot requested; no0309 hardware test yet. After temporary boot and
+responsive-home confirmation inspect passive baseline, then run once
+work/slim-control/run-device.py. It repeats0308 PCM and requires clean exact
+completion before discovery; successful service discovery gates QMI power.
+Wi-Fi reader is included; current0308 passive snapshot is unassociated.
+Physical playback and capture remain pending; next hardware controller work
+requires acknowledged power and source-defined register/clock checks.
+
+##0308 zero-PCM DSP completion verified, responsive (2026-11-14)
 
 User confirmed0308 home responsive. Stock startup/CORE/map-unmap/ASM and
 exact AFE SET/GET/cold ADM route passed. Combined --pcm-silence passed:

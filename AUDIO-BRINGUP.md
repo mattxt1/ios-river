@@ -4,6 +4,13 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+##0309 SLIMbus control candidate ready
+
+The next verified image batches repeat PCM validation with CID2 IPCRTR
+HELLO/service discovery, then SLIMbus QMI select-instance and power requests.
+Host tests and kernel/helper builds pass. No0309 hardware result yet.
+No SLIMbus MMIO or codec routing is attempted by this candidate.
+
 ##0308 zero-PCM completion verified with responsive iOS
 
 The DSP consumed four mapped4096byte zero-filled buffers with exact successful
