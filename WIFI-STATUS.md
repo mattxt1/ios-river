@@ -318,3 +318,12 @@ Installed daemon fingerprint lacks existing tracked SCwrite/readback logging.
 0318 embeds recompiled tracked observer with same entitlements and source
 behavior; no live restart or network override. Verify installed hash after
 boot before fresh join. See active NOTES.md for hashes and private evidence.
+
+##0318 spinner with verified observer
+
+Fresh join state4/result1; all writes accepted, globalIPv4 present immediately
+and absent by observer end; serviceIPv4/DNS present at end but absent in later
+native snapshot. Configd rankNever, no connected/local route/NWI/resolvers.
+This localizes disappearance after acceptance; policy owner unresolved.
+Kernel log partial/SSH timeout, other four diagnostic reads complete.
+No network override applied; private work/codec-pcm-order/join-* captures.

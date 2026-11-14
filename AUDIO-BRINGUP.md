@@ -746,3 +746,30 @@ observer hash before fresh Wi-Fi join/log collection. Existing monitor history
 is not current join proof. After active-route PCM PASS: bounded quiet tone,
 real iOS backend, physical mic. Playback/capture remain pending.
 
+
+##0318 AFE prepared, controller guard stopped, responsive (2026-11-14)
+
+User confirmed home and post-sequence iOS responsive. Known standalone PCM
+session4 passed4/4 and all QMI/enum prerequisites. New order AFE SET/GET/START
+PASSED before codec channel activation: live_pcm phaseafe_prepared,error0,
+session5,afe_started1. Channel test then rejected initial controller ownership
+(error16) before attempted/commands/codec/PCM writes. No uncertainty. Outer
+owned AFE cleanup executed; no PCM mapping allocated or sample submitted.
+Old channel note predates AFE cleanup and shows1; current0318 codec status
+lacks final DSP flags, so do not interpret that stored snapshot as live state.
+Source cleanup sets afe_started false only after matched STOP. Next0319 adds
+explicit final flags and captures exact preflight registers (0318 ownership
+failure note's zero cfg/status did NOT read those registers). Do not invent
+which guard failed. Current phone0318; no active retries, amp mute retained,
+QMIpower/NGD retained. Private work/codec-pcm-order/*-24942bc.txt.
+
+Installed Wi-Fi logger hash verified exact962ae614...; observer active.
+User fresh join spinner; native state4/result1. All SC writes accepted0errors;
+globalIPv4 readback immediate present1/end0, serviceIPv4/DNS present at both
+observer points, but subsequent native config has neither serviceIPv4/DNS,
+no connected/local route, configdPID35 rank3Never/NWIen0 absent/empty DNS.
+This proves accepted publication subsequently disappears; owner/path still
+unidentified, no override. Raw monitor/config/scalar/DNS captures complete;
+kernel capture partial196545B/SSH255 timeout after data, not a failed join
+or proven phone hang. Private join-*-24942bc.txt; current user responsive.
+
