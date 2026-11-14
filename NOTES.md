@@ -5,7 +5,31 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0312 QRTR endpoint and powered NGD candidate ready (2026-11-14)
+## Active handoff:0312 PCM/QMI power/NGD readback PASS, responsive (2026-11-14)
+
+User confirmed0312 home and post-test iOS STILL RESPONSIVE. All prerequisite
+and four zero-PCM completions passed with complete route/mapping cleanup.
+QRTR discovery passed: peer5, versions0xa/commonV1, service0x301 encoded
+instance1, node5/port3. Exact QMI select instance0/ADSP master mode2 and power
+ACTIVE2 both returned result0/error0. CID2 owned/open, no uncertainty;
+frames8/servers5, TX216bytes/RX568bytes, live rings consumed/stable.
+Power request intentionally retained until reboot.
+--slim-ngd passed read-only stable version0x01050000, NGD offset0x1000,
+CFG0, STATUS0x40c, INT_EN0, INT_STAT0, IE0x10000, VE0. Mapping unmapped;
+no controller register writes, interrupt clear, RX consumption, reset or BAM.
+Amp muted0x10 and all other surveyed baseline registers match.
+No physical codec stream, audible samples or microphone capture.
+Evidence work/slim-powered/{baseline,metadata,stage,handshake,start,pre-query,
+core,map,asm,afe,post-query,afe-config,adm-route,pcm-silence,post-stream,
+slim-discover,slim-power,slim-ngd,post-slim,wifi-monitor}-77eb1a5.txt.
+Current phone0312: APR and QRTR owned/open, known PCM page unmapped/retained,
+AFE/ASM/ADM all closed, SLIM power retained/controller disabled, mute held.
+Do not repeat one-shot tests. Next implementation batches polled NGD enable,
+source-defined master-capability/report-satellite exchange and exact codec
+logical-address query. Keep message DMA/interrupt routing disabled and amp
+muted. Wi-Fi stays secondary; no newer UI success or workaround applied.
+
+##0312 QRTR endpoint and powered NGD candidate ready (2026-11-14)
 
 0310 again passed four zero-PCM completions with full teardown and mute hold.
 Its received HELLO is valid IPCRTR V1/checksum0xe110, from node5 to broadcast,

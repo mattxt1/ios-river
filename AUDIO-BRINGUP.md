@@ -4,6 +4,13 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+##0312 SLIMbus service, QMI power and hardware version verified
+
+PCM passed again. SLIMbus service node5/port3, QMI instance0 selection and
+power ACTIVE all passed; powered NGD version0x01050000 readback succeeded.
+Controller remains disabled and amp muted. User confirmed responsive iOS.
+Next is capability exchange and codec logical address before physical routing.
+
 ##0312 QRTR endpoint and powered controller snapshot candidate ready
 
 0310 exposed valid HELLO control ports0xfffffffe, matching QRTR. The new

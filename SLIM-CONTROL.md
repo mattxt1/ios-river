@@ -56,3 +56,10 @@ cell-index1 NGD registers. It reads CFG/STATUS/INT_EN/INT_STAT/IE/VE, without
 controller writes, RX-message consumption, reset, IRQ clear or BAM setup.
 Snapshot map is0x0c140000/0x4000; version upper16 chooses stock0x800/0x1000.
 Host tests and build pass; firmware QMI and actual MMIO results are pending.
+
+##0312 hardware verified
+
+Peer5/service0x301/encoded instance1/node5/port3 discovered. QMI SELECT and
+ACTIVE result0/error0. NGD version0x01050000, offset0x1000, CFG0, STATUS0x40c,
+INT_EN0, INT_STAT0, IE0x10000, VE0. No MMIO writes. PCM and all teardown passed;
+user confirmed responsive iOS. Power vote retained until reboot.
