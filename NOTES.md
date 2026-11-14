@@ -17,7 +17,10 @@ Image outputs/river-codec-route-c305b28.img is26820608bytes,577cmdline;
 SHA35b8563890b2aefb31dbc8c7187b129f9d058bbf9a376bec00df4183d7786da6.
 Kernel SHAb7fdf450234ac09e34ede71fbc13a4974bcecbab6f124a6e07d94442240b001f.
 Native helper compiled/signed and embedded; kernel payload segments verified.
-Temporary boot requested, awaiting user fastboot readiness; no0315 boot yet.
+User confirmed fastboot ready. Productriver and exact image hash verified.
+Temporary boot accepted: transfer OKAY0.610s, boot OKAY0.216s, no flash.
+Home responsiveness confirmation pending; no active0315 controls run.
+USB-only capture session94867; evidence work/codec-route/boot-c305b28-usb.log.
 
 0315 --codec-route owns the channel test once, activates codec sink0/channel144,
 then invokes existing verified muted FLL/AIF clock setup and a bounded codec
