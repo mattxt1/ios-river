@@ -10,8 +10,15 @@
 Kernel source3fc706c1db3d2dd8a57a3ef9454a13ea042b2cb6 adds0304;
 helper source3eee0a6a5da0439bd83a198b55d84b67cfeb152c adds a bounded
 read-only Wi-Fi monitor/hash reader and optional RiverFiles packaging.
-Build work/build/river-3fc706c1db3d-TK5NtT is running in the continuation
-workspace with the verified local KDK. No0304 image is packaged/booted yet.
+Build work/build/river-3fc706c1db3d-TK5NtT hit ENOSPC during XNU compilation.
+Task-generated abandoned duplicate LxsjE0 and the verified/redundant downloaded
+KDK DMG were removed; extracted KDK, source, completed kernels, all images and
+evidence were preserved. Free space recovered to5.8GiB. Every committed patch
+input and generated route/PCM header was checked unchanged. No linked kernel
+existed in this isolated job. Compilation/linking resumed explicitly using
+its same build_xnu function and flags, avoiding dependency fetch/patch reapply;
+resume-build.log records this recovery separately from the failed build.log.
+No0304 image is packaged/booted yet; do not report original helper exit success.
 Current phone remains user-confirmed responsive on0303 after PCM/ASM success.
 No more0303 active commands are needed; its operations are one-shot.
 

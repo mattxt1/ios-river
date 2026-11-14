@@ -55,3 +55,19 @@ Madera mixer/AIF routing and a verified locked/muted amplifier transition.
 The existing discarded/synthetic device endpoints must not be advertised as
 physical playback/capture while these are absent. Capture follows validated
 playback with its own buffer and completion ownership.
+
+##0303 verified;0304 staged route tests
+
+The responsive0303 boot verified the16KiB map/unmap and ASM format/close
+prerequisites.0304 implements explicit source-defined AFE config, inactive
+ADM matrix route/teardown and muted AFE start/route/stop tests, not production
+sample streaming. A rejected GET is kept separate from accepted configuration.
+ADM COPP0 is valid; unresolved resources stay owned and block further tests.
+Hardware-facing tests hold amplifier mute until reboot, including volume
+updates, and avoid speaker/QUP locks during APR waits.
+
+The stock SLIMbus APPS NGD has a separate QMI service0x301/version1/instance0
+power interface before MMIO enable/capability exchange. Do not infer that an
+AFE ACK has initialized the APPS satellite, allocated a codec logical address
+or connected its shared channels. New read-only diagnostic helper reports
+fixed monitor paths to investigate the independent Wi-Fi configuration gap.
