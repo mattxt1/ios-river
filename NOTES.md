@@ -5,7 +5,33 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff: SMD opened/request consumed;0302 framing/diagnostics prepared (2026-11-13)
+## Active handoff:0302 built/temporarily booted; home confirmation pending (2026-11-13)
+
+Source1334e8cb0bbf5c1667cafbc6a2010ba5c5b01387 through0302 passed full
+build work/build/river-1334e8cb0bbf-L6pqRY with no numbered patches skipped.
+Kernel SHA256:9750e2afc8f4e45a031387165f049bb8d533a1ff55c95d301953450840fca761.
+Verified image outputs/river-apr-framing-1334e8c.img is26,732,544 bytes,
+577 command-line bytes,1MiB retained log; all kernel segments verified.
+Image SHA256:606deab55f37f2f304390961e84b0306834abecaca4a633d35578a40799b335b.
+Manifest outputs/apr-framing-build-manifest.json. Helper unchanged from0301.
+
+The user volunteered fastboot readiness during the build. After build/package
+completed, productriver and image SHA were verified; temporary transfer/boot
+both returned OKAY. Nothing flashed. USB capture bounded session48616 writes
+work/audit-device-validation/boot-1334e8c-usb.log. A responsive-home question
+is pending before any firmware/start/APR controls. No controls have run on
+this new boot. Fresh baseline, metadata/stage/handshake/start, pre-query passive
+layout check, --apr once, then full --apr-status/--probe/audio baseline are next.
+Use new private SSH socket /private/tmp/river-audio-cm-1334e8c/control with the
+already-approved key/host validation. Save evidence work/adsp-apr-framing.
+
+0301 actual failure remains unresolved: request consumed,56queued bytes left
+unconsumed, EIO at RXpoll2, iOS remained responsive.0302 broadens only the
+source-supported declared APR framing and adds header plus live ready-gate
+diagnostics; do not assume parser rejection or live DSP readiness from the
+old historical start status. Physical PCM/capture remain unimplemented.
+
+##0301 failure evidence and0302 source validation (2026-11-13)
 
 The user confirmed responsive home on3e9f5cd. Baseline, stock metadata,
 17MiB staging, handshake and ADSP startup passed (four exact power ACKs,

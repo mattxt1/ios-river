@@ -236,8 +236,9 @@ Actual-source ASan/UBSan tests reproduce0301's fixed-framing/CLOSING limits
 and pass0302's extensions, padding/length bounds, address/token checks,
 readiness failure with queued RX, partial/wrap/races, errors and close/no-ACK.
 The device's queued bytes have not been recovered; compatibility fixtures
-do not prove their format or the actual failure cause. Full build, packaging
-and live validation of0302 are pending.
+do not prove their format or the actual failure cause. Full1334e8c build and image verification pass; temporary fastboot boot returned
+OKAY. Home-screen confirmation is pending before controls. Live validation
+of0302 remains pending. Artifact hashes: `outputs/apr-framing-build-manifest.json`.
 
 ## Verified progress and remaining work (2026-11-13)
 
