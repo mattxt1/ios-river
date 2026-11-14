@@ -108,7 +108,11 @@ rechecks, authentication and shutdown errors, delayed feature negotiation and
 readiness, fatal-before-ready, bounded timeout, allocation/header races and
 malformed SMEM. The updated iOS helper compiles with Wall/Wextra/Werror and
 is signed ad hoc with its existing privilege model. Patch application passes.
-Full kernel build, packaging and device startup validation are pending.
+Full6ac8fd5 kernel build passed, with no numbered project patches skipped.
+The verified temporary image is26,716,160 bytes with577 command-line bytes
+and1MiB retained log; all kernel segments verify against the new kernel.
+Device startup validation remains pending. See the local manifest
+`outputs/adsp-start-build-manifest.json` for artifact hashes.
 
 The stock driver uses PAS1, an80MHz crypto source and the same CX/XO proxy
 requirements. Its XO branch is shared by LPASS, USB and WLAN; it assumes

@@ -117,6 +117,7 @@ static int64_t river_scm(unsigned service,unsigned command,unsigned nargs,
   if(scenario==3)inbound(0x101,2);
   if(scenario==4)inbound(1,0);
   if(scenario==5) {inbound(1,2);smem[0x86188/4]^=1;}
+  if(scenario==8)inbound(0,0);
   return auth_status;
  }
  assert(command==6 && auth_calls==1);shutdown_calls++;*result=shutdown_result;
@@ -127,7 +128,10 @@ static void ri_wait(unsigned ms)
  assert(ms==20 && adsp_owned && !rpm_owned);waits++;
  if(scenario==3 && waits==3)inbound(1,2); /* remote accepts features0 */
  if(scenario==4 && waits==3)inbound(1,2); /* delayed ready */
+ if(scenario==7)inbound(((waits+1)<<8)|1,2); /* changing unsupported offer */
+ if(scenario==8 && waits==3)inbound(1,2); /* initialized after publication */
 }
+static int quiet_printf(const char *format,...) __attribute__((format(printf,1,2)));
 static int quiet_printf(const char *format,...){(void)format;return 0;}
 #define printf quiet_printf
 #include "adsp-start-actual.h"
@@ -171,6 +175,8 @@ int main(void)
  reset(3);assert(start()==0 && waits==3 && doorbells==2 && ri_adsp_start.remote_fv==1);
  reset(4);assert(start()==0 && waits==3 && doorbells<=4);
  reset(5);assert(start()==EIO && shutdown_calls==1);
+ reset(7);assert(start()==ETIMEDOUT && waits==500 && doorbells==4 && shutdown_calls==1);
+ reset(8);assert(start()==0 && waits==3 && ri_adsp_start.ready);
  reset(6);assert(start()==EIO && rpm_calls==4 && !auth_calls && !shutdown_calls);
  for(unsigned i=5;i<=6;i++) {
   reset(0);fail_map=i;assert(start()==EBUSY && rpm_calls==4 && !auth_calls);

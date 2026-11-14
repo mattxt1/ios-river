@@ -5,7 +5,7 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0298 responsive;0299 startup host-verified (2026-11-13)
+## Active handoff:0299 startup image ready; fastboot requested (2026-11-13)
 
 The user confirmed the home screen is responsive on678e917. Read-only SSH
 baseline work/rpm-transport/baseline-678e917.txt shows amplifier identity and
@@ -30,11 +30,29 @@ Actual-source host sanitizer tests pass, including all gates, every vote failure
 pre-auth rechecks, PAS failures, negotiation/ready/fatal/timeout and malformed
 SMEM. Updated phone helper --start/--start-status compiles Wall/Wextra/Werror
 and is signed at work/adsp-start/river-adsp-status.0299 dry-run application passes.
-Commit source before full build, then package with the new helper. Device test
+Source is committed, built and packaged with the new helper. Device test
 must repeat exact metadata/stage and locked handshake init on the fresh boot,
 then run --start only after all gates pass. Record real PAS and SMP2P outcomes;
 readiness or an increasing output counter would not prove physical playback.
-Full build/package/device validation of0299 remains pending.
+Full source commit6ac8fd5bdaaff27615088feac1419f463f3176a4 built successfully
+in work/build/river-6ac8fd5bdaaf-bCDgyx. No numbered patches skipped.
+Kernel SHA256:9ef7eabf8ff45ab0d6ff6e6836d29479844bb71ede6c000bba4250545b143d6b.
+Verified temporary image outputs/river-adsp-start-6ac8fd5.img:
+26,716,160 bytes,577 command-line bytes,1MiB retained log, all kernel segments
+verified. Image SHA256:
+7490a8e9e7b3985205d433d59f319d69e802a5d3d76b132a8a6fd5e94b45f433.
+Manifest outputs/adsp-start-build-manifest.json includes new helper hash
+(e39ae8eadf524170ce851e6d7c50e35dde09dbc0d311fea3b0d0d8afb7ac279f).
+No0299 device boot/start yet. A fastboot request is pending with the user.
+Next physical step: fastboot for temporary boot,
+then home responsiveness confirmation, read-only baseline and exact metadata
+/stage/handshake/start sequence. Do not run --start until each prior operation
+reports success. Read --start-status and --probe afterward; startup may retain
+DSP running on success or report one shutdown attempt on failure. Keep power
+policy and actual PAS/remote outcomes explicit. Source review for future APR
+transport fetched directory metadata only; guessed source paths404, no new
+APR implementation or verified transport finding yet.
+
 
 ##0298 boot evidence before UI confirmation (2026-11-13)
 
