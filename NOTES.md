@@ -5,7 +5,63 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0304 routing image temporarily booted; home check pending (2026-11-13)
+## Active handoff:0304 AFE SET accepted;0305 readback candidate ready (2026-11-14)
+
+User confirmed0304 home responsive. Initial baseline SSH stalled before
+connection because the approved key had become iCloud compressed/dataless.
+In-place brctl download restored it; no key contents were displayed/copied.
+Shell-only SSH and passive baseline then passed. This is a host-file stall,
+not evidence of a phone/driver lockup; earlier similar timeouts remain
+historically uncertain. Capture baseline-retry-3fc706c.txt is the valid one.
+
+0304 exact startup/CORE/map/unmap/ASM-format-close passed again. AFE SET
+opcode0x100ef accepted the mono48k/16-bit/channel144 config. Its following
+GET returned status0 but failed the local strict readback checker:
+phase=afe_config_mismatch/error5, configured0, poisoned0, transactions8,
+RXheader0x540181 (84-byte APR,32-byte header ->52-byte payload),
+source0x404/destination0x504, token0x52420008/opcode0x10106.
+No ADM open/matrix or AFE start was sent. No mute hold engaged. Passive CID6
+is OPENED2/2 with consumed TX0x20c/RX0x288 and unchanged amplifier baseline.
+Evidence: continuation work/pcm-routing/{baseline-retry,metadata,stage,
+handshake,start,pre-query,core,map,asm,afe,post-query,afe-config,post-config,
+kernel-post-config}-3fc706c.txt. No0304 controls should be repeated.
+
+The old GET requested36bytes while requiring exactly24parameter bytes and
+40total payload bytes. Its actual52byte reply matches a larger capacity, but
+response contents were not retained, so do not claim which comparison failed.
+0305 corrects GET capacity to24 and validates the self-declared24byte record,
+exact module/parameter/reserved/config fields and bounded available bytes;
+additional bounded transport tail is ignored. Diagnostics now retain reply
+word count, module/parameter/size and six known config words. No readback
+success or hardware route is assumed from SET acceptance.
+
+0305 source34a024356e818873f2f88b2d9f990a1937cf81c4 is built/packaged,
+not booted. Host ASan/UBSan route regressions, extended-tail/malformed record
+cases, full0304/0305 patch application and real speaker helper tests pass.
+To save build time, the verified0304 kernel was preserved separately at
+work/pcm-routing/kernel-3fc706c.verified. Only the committed0305 header patch
+was applied to the same isolated tree. Exact native make install with the
+same compiler/KDK/config and original Python venv passed; log proves
+sweet_keys recompiled and new diagnostics linked. Ledger:
+work/afe-readback/incremental-provenance.json. The old3fc job directory now
+contains0305 inputs/kernel; do not mistake its directory name for source.
+Kernel SHA2566b09b3cc5f86a7cca30eacec71807cd76673ca1aaaadb9cc7ca009bc3a68defb.
+Verified outputs/river-afe-readback-34a0243.img is26,802,176bytes/577cmdline,
+1MiB log, all kernel payload segments verified. Image SHA256
+69074119883fb8f934b5a4f32c3589c3c967fbbdd22b3305a01252baa4b2acd0.
+Manifest outputs/afe-readback-build-manifest.json; helpers unchanged from0304.
+Fresh-boot runner work/afe-readback/run-device.py is prepared, not run.
+
+Native Wi-Fi reader works. Live river-net hash matches original embedded
+71,728byte/SHA256807a0190cac9c3dbb3ce685418f0235af95dc025b9192ba0275fa93dbb7b44ba.
+The job remains monitor en0 --default/KeepAlive. Bounded log contains prior
+accepted DHCP leases/renewal but has no timestamps; do not assign those
+entries to this boot. Current direct scalar state0/result0 is unassociated.
+Fresh route/DNS captures are private. User has been asked to try a join while
+the small rebuild runs; response is pending. Capture that evidence before
+requesting fastboot for0305 if feasible. No new Wi-Fi rank/route/DNS change.
+
+##0304 build/temporary boot record before validation (2026-11-13)
 
 Kernel source3fc706c1db3d2dd8a57a3ef9454a13ea042b2cb6 adds0304;
 helper source3eee0a6a5da0439bd83a198b55d84b67cfeb152c adds a bounded

@@ -238,3 +238,15 @@ Expected embedded baseline river-net is71,728bytes/SHA256
 807a0190cac9c3dbb3ce685418f0235af95dc025b9192ba0275fa93dbb7b44ba.
 Compare the new reader's live hash before assuming the observer or source
 version is running. No Wi-Fi connectivity/configuration fix is claimed.
+
+
+## Native monitor diagnostics on0304
+
+The reader ran successfully and confirmed the baseline embedded helper hash
+and monitor en0 --default KeepAlive job. Historical log entries include DHCP
+ACK/renewal success, but are untimestamped and cannot establish current-boot
+connectivity. Current scalar state0/result0 is unassociated; fresh join/UI
+evidence was requested while the audio readback correction built.
+Some host SSH timeouts were traced to an iCloud-offloaded approved key before
+connection. In-place hydration fixed that case. Do not infer a kernel lock
+problem from those timeouts. No rank/route/DNS override was applied.

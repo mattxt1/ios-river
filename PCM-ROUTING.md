@@ -71,3 +71,13 @@ power interface before MMIO enable/capability exchange. Do not infer that an
 AFE ACK has initialized the APPS satellite, allocated a codec logical address
 or connected its shared channels. New read-only diagnostic helper reports
 fixed monitor paths to investigate the independent Wi-Fi configuration gap.
+
+##0305 readback correction
+
+0304 AFE SET was accepted. GET returned success with52payload bytes versus
+our old exact40byte expectation, so dependent routes were withheld.0305 uses
+24parameter-data bytes of GET capacity and validates the self-declared24byte
+record plus available bounds, preserving exact IDs/reserved/config checks.
+Known field diagnostics distinguish future length and value mismatches.
+Additional transport tail is ignored within the already bounded APR reply.
+Synthetic padded fixtures are host tests, not recovered device payloads.

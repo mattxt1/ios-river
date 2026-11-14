@@ -4,6 +4,15 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+## AFE SET accepted; readback correction0305 ready
+
+0304 repeated PCM map/unmap and ASM format/close successfully. AFE accepted
+SET and returned GET status0, but the local checker rejected its larger
+response; no ADM or AFE start followed.0305 corrects GET capacity and parses
+the declared record with explicit config diagnostics. Tests and incremental
+kernel compile/link/install pass; image is verified and ready for a fresh boot.
+Physical playback/capture remain unimplemented. See active NOTES.md.
+
 ## AFE/ADM candidate0304 built and temporarily booted
 
 0303 hardware mapping/session prerequisites passed.0304 batches AFE port
