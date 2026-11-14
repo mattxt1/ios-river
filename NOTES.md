@@ -12,8 +12,7 @@ Its received HELLO is valid IPCRTR V1/checksum0xe110, from node5 to broadcast,
 control source/destination0xfffffffe.0311 corrects the firmware endpoint on
 both RX and HELLO/RESUME_TX, preserving strict DATA/QMI checks. HELLO sends
 to broadcast with only V1 supported. Primary Linux qrtr.h independently
-confirms0xfffffffe control/0xffffffff broadcast constants. Current phone
-still0310; no active retry; post-test user responsiveness answer pending.
+confirms0xfffffffe control/0xffffffff broadcast constants. User confirmed0310 remained responsive after the full sequence; no active retry.
 
 0312 batches read-only NGD snapshot after exact QMI ACTIVE acknowledgment,
 using stock ngd_slim_power_up ordering. --slim-ngd requires completed/clean
@@ -34,8 +33,12 @@ work/slim-powered/incremental-provenance.json; isolated tree now0312.
 Image outputs/river-slim-powered-77eb1a5.img: 26802176bytes,
 577cmdline, SHAea8cf61c225b2a1df52402bacfe2c9fa026ada54f5c232625d3fac89f35e58b0.
 Kernel SHA7ca4dba2e482866cebd2f9e115ed46542de6013ccf804afafb97e9f7c6b0ff7a.
-Fastboot requested. No0312 hardware result. After temporary boot/responsive
-home confirmation inspect passive baseline and run once
+User confirmed fastboot readiness. Exact hash/productriver verified;
+temporary transfer OKAY0.611s, boot OKAY0.216s, no flash.0312 accepted.
+Current phone is0312; home responsiveness confirmation pending. No DSP/PCM/
+SLIM or MMIO controls run. USB-only capture session93166 writes
+work/slim-powered/boot-77eb1a5-usb.log. After responsive home confirmation
+inspect passive baseline and run once
 work/slim-powered/run-device.py. It batches exact PCM completion -> service
 discovery -> QMI select/power -> acknowledged-power register snapshot; each
 stage gates its dependent control. Failure still permits independent passive
