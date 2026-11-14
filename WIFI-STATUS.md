@@ -280,5 +280,5 @@ and no scoped/service resolvers. Interface IPv4 and Link Active are present;
 no State service IPv4 entity appears in the enumerated native snapshot.
 Evidence work/pcm-stream/{wifi-followup,network-followup,dns-followup,
 wifi-monitor-followup}-98dcdb1.txt. This is a fresh same-boot associated
-snapshot, but the user's UI result is still pending. No workaround applied.
+snapshot. The user subsequently confirmed Settings showed a spinner. No workaround applied.
 Next image ready; fastboot requested after user's Wi-Fi attempt.

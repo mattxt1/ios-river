@@ -12,7 +12,7 @@ The existing native /usr/local/bin/dmesg recovered exact DSP status0x9
 (ADSP_EALREADY per pinned apr_audio-v2.h); prior unmap replaced status in the
 stream sysctl. Evidence work/pcm-stream/kernel-native-98dcdb1.txt. Do not
 infer STOP retained/cleared configuration merely from that status.
-User post-test responsiveness and requested Wi-Fi join result remain pending.
+User confirmed0306 remained responsive and its Wi-Fi join showed a spinner.
 No active0306 retries. All mappings/resources closed and mute retained.
 
 Source bc61fe78761dcf0b7d1edb909bb2dc5f30cb01f7 through0308 combines the hot AFE/ASM/ADM
@@ -30,9 +30,11 @@ new diagnostics linked. Isolated tree now through0308, not directory3fc.
 Prior0306 kernel preserved. Ledger work/pcm-restart/incremental-provenance.json.
 Image outputs/river-pcm-combined-bc61fe7.img: 26802176bytes,
 577cmdline, SHA48b825b54c636b562216b7db29632c70f7ccd4bac99d737125c3d9aa3310ffb9.
-Kernel SHAd43691a100cf061fa142e129c2af644042149d357125e732a473d2fc9fd7ca9b. No0308 phone tests yet.
-Next: after any Wi-Fi attempt, request fastboot; temporary boot, responsive
-home confirmation, manual passive baseline, then run once
+Kernel SHAd43691a100cf061fa142e129c2af644042149d357125e732a473d2fc9fd7ca9b. User confirmed fastboot readiness. Exact image SHA/productriver verified;
+temporary transfer OKAY0.609s, boot OKAY0.216s; no flash.0308 accepted.
+Responsive-home confirmation is pending; no DSP/PCM controls yet. USB-only
+boot capture session51833 writes work/pcm-restart/boot-bc61fe7-usb.log.
+Next: responsive home confirmation, manual passive baseline, then run once
 work/pcm-restart/run-device.py. Never flash. Reboot before repeated controls.
 Physical playback, microphone capture and SLIMbus/Madera stream remain pending.
 
@@ -46,7 +48,7 @@ and no scoped/service resolvers. Interface IPv4 and Link Active are present;
 no State service IPv4 entity appears in the enumerated native snapshot.
 Evidence work/pcm-stream/{wifi-followup,network-followup,dns-followup,
 wifi-monitor-followup}-98dcdb1.txt. This is a fresh same-boot associated
-snapshot, but the user's UI result is still pending. No workaround applied.
+snapshot. The user subsequently confirmed Settings showed a spinner. No workaround applied.
 Next image ready; fastboot requested after user's Wi-Fi attempt.
 
 ##0306 stopped cleanly at second AFE start (2026-11-14)
