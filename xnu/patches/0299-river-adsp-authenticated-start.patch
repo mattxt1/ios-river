@@ -1,0 +1,266 @@
+diff --git a/bsd/dev/river_adsp_probe.h b/bsd/dev/river_adsp_probe.h
+--- a/bsd/dev/river_adsp_probe.h
++++ b/bsd/dev/river_adsp_probe.h
+@@ -101,6 +101,7 @@
+ #include "river_adsp_handshake.h"
+ #include "river_adsp_metadata.h"
+ #include "river_adsp_stage.h"
++#include "river_adsp_start.h"
+ 
+ static int
+ river_adsp_probe_sysctl SYSCTL_HANDLER_ARGS
+diff --git a/bsd/dev/river_adsp_start.h b/bsd/dev/river_adsp_start.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/river_adsp_start.h
+@@ -0,0 +1,250 @@
++/* Explicit PAS1 startup of the already verified/staged stock image.
++ * Shared power policy: retain active+sleep CX TURBO and XO enabled until
++ * reboot, including failures. Never guess inherited votes or unvote to zero.
++ * No LPASS MMIO, codec/amp writes or PCM transport. ri_adsp_lock owns state. */
++struct ri_adsp_remote {
++ bool outbound, inbound, slave;
++ uint32_t version_features, state;
++};
++/* Read only the observed APPS/ADSP uncached partition. Allocation publication
++ * may race this snapshot: EAGAIN is retryable, malformed stable data is not. */
++static int
++ri_adsp_remote_snapshot(vm_offset_t smem, struct ri_adsp_remote *remote)
++{
++ memset(remote,0,sizeof(*remote));
++ const unsigned part=0x86000, table=0xff080;
++ if(ri_rd(smem,0xff000)!=0x434f5424 || ri_rd(smem,0xff004)!=1 ||
++    ri_rd(smem,0xff008)!=7 || ri_rd(smem,table)!=part ||
++    ri_rd(smem,table+4)!=0x24000 || ri_rd(smem,table+8)!=0 ||
++    ri_rd(smem,table+12)!=0x20000 || ri_rd(smem,table+16)!=32 ||
++    ri_rd(smem,part)!=0x54525024 || ri_rd(smem,part+4)!=0x20000 ||
++    ri_rd(smem,part+8)!=0x24000) return EIO;
++ uint32_t end=ri_rd(smem,part+12), cached=ri_rd(smem,part+16);
++ if(end<32 || end>cached || cached>0x24000 || ((end|cached)&7)) return EIO;
++ __asm__ volatile("dmb sy" ::: "memory");
++ unsigned cursor=32, records=0;
++ int error=0;
++ while(cursor<end && records++<512) {
++  if(end-cursor<16) {error=EIO;break;}
++  unsigned header=part+cursor;
++  uint32_t first=ri_rd(smem,header), bytes=ri_rd(smem,header+4), pads=ri_rd(smem,header+8);
++  unsigned id=first>>16, pad_data=pads&0xffff, pad_header=pads>>16;
++  if((first&0xffff)!=0xa5a5 || !bytes || (bytes&7) || (pad_header&7) ||
++     pad_data>bytes || pad_header>end-cursor-16 || bytes>end-cursor-16-pad_header) {
++   error=EIO;break;
++  }
++  unsigned data=header+16+pad_header, actual=bytes-pad_data;
++  if(id==429 || id==443) {
++   bool *present=id==429?&remote->outbound:&remote->inbound;
++   if(*present || actual!=340) {error=EIO;break;}
++   *present=true;
++   uint32_t magic=ri_rd(smem,data), fv=ri_rd(smem,data+4);
++   uint32_t pids=ri_rd(smem,data+8), entries=ri_rd(smem,data+12);
++   unsigned total=entries&0xffff, used=entries>>16;
++   if(id==443 && (!magic || !(fv&255))) {error=EAGAIN;break;}
++   if(magic!=0x504d5324 || (fv&255)!=1 || pids!=(id==429?0x20000u:2u) ||
++      total!=16 || used>total) {error=EIO;break;}
++   __asm__ volatile("dmb sy" ::: "memory");
++   if(id==429) {
++    /* Only our initialized featureless master-kernel block may be owned. */
++    static const uint32_t name[]={0x7473616d,0x6b2d7265,0x656e7265,0x6c};
++    if(data!=0x86030 || fv!=1 || used!=1 || ri_rd(smem,data+16)!=0 ||
++       ri_rd(smem,data+36)!=0) {error=EIO;break;}
++    for(unsigned i=0;i<4;i++) if(ri_rd(smem,data+20+i*4)!=name[i]) error=EIO;
++   } else {
++    static const uint32_t name[]={0x76616c73,0x656b2d65,0x6c656e72,0};
++    remote->version_features=fv;
++    for(unsigned i=0;i<used;i++) {
++     unsigned entry=data+20+i*20;
++     bool match=true;
++     for(unsigned k=0;k<4;k++) if(ri_rd(smem,entry+k*4)!=name[k]) match=false;
++     if(match) {
++      if(remote->slave) {error=EIO;break;}
++      remote->slave=true;remote->state=ri_rd(smem,entry+16);
++     }
++    }
++   }
++   __asm__ volatile("dmb sy" ::: "memory");
++   if(ri_rd(smem,data)!=magic || ri_rd(smem,data+4)!=fv ||
++      ri_rd(smem,data+8)!=pids || ri_rd(smem,data+12)!=entries) error=EAGAIN;
++   if(error)break;
++  }
++  cursor+=16+pad_header+bytes;
++ }
++ if(!error && cursor!=end)error=EIO;
++ __asm__ volatile("dmb sy" ::: "memory");
++ if(ri_rd(smem,part+12)!=end || ri_rd(smem,part+16)!=cached)error=EAGAIN;
++ return error;
++}
++static struct {
++ bool attempted, auth_requested, authenticated, ready, shutdown_requested, stopped;
++ unsigned vote_attempts, vote_acks, polls, interrupts;
++ uint32_t last_request_id, remote_fv, remote_state;
++ uint32_t crypto_cmd,crypto_cfg,crypto_vote,crypto_core,crypto_axi,crypto_ahb;
++ int64_t query_status;
++ uint64_t query_result;
++ int last_rpm;
++ int64_t auth_status, shutdown_status;
++ uint64_t auth_result, shutdown_result;
++} ri_adsp_start;
++static char ri_adsp_start_note[1536]="not requested; physical PCM unimplemented";
++static int
++ri_adsp_start_result(const char *phase,int error)
++{
++ snprintf(ri_adsp_start_note,sizeof(ri_adsp_start_note),
++     "phase=%s error=%d attempted=%u power_policy=retained_until_reboot cx_active_sleep_level=384 xo_active_sleep=1 vote_attempt_mask=%#x vote_ack_mask=%#x last_request_id=%u last_rpm=%d shutdown_query_status=%lld shutdown_query_result=%llu crypto=%#x,%#x,%#x,%#x,%#x,%#x firmware_start_requested=%u auth_status=%lld auth_result=%llu authenticated=%u remote_features_version=%#x remote_state=%#x polls=%u interrupts=%u ready=%u shutdown_requested=%u shutdown_status=%lld shutdown_result=%llu stopped=%u pcm_transport=0 playback=discarded capture=synthetic",
++     phase,error,ri_adsp_start.attempted,ri_adsp_start.vote_attempts,ri_adsp_start.vote_acks,
++     ri_adsp_start.last_request_id,ri_adsp_start.last_rpm,
++     (long long)ri_adsp_start.query_status,(unsigned long long)ri_adsp_start.query_result,
++     ri_adsp_start.crypto_cmd,ri_adsp_start.crypto_cfg,ri_adsp_start.crypto_vote,
++     ri_adsp_start.crypto_core,ri_adsp_start.crypto_axi,ri_adsp_start.crypto_ahb,
++     ri_adsp_start.auth_requested,
++     (long long)ri_adsp_start.auth_status,(unsigned long long)ri_adsp_start.auth_result,
++     ri_adsp_start.authenticated,ri_adsp_start.remote_fv,ri_adsp_start.remote_state,
++     ri_adsp_start.polls,ri_adsp_start.interrupts,ri_adsp_start.ready,
++     ri_adsp_start.shutdown_requested,(long long)ri_adsp_start.shutdown_status,
++     (unsigned long long)ri_adsp_start.shutdown_result,ri_adsp_start.stopped);
++ printf("RIVER ADSP START: %s\n",ri_adsp_start_note);
++ return error;
++}
++static bool
++ri_adsp_crypto_ready(void)
++{
++ vm_offset_t rcg=ml_io_map_unmappable(0x01814000,0x4000,VM_WIMG_IO);
++ vm_offset_t vote=ml_io_map_unmappable(0x01844000,0x4000,VM_WIMG_IO);
++ bool ready=false;
++ if(rcg && vote) {
++  ri_adsp_start.crypto_cmd=ri_rd(rcg,0x2004);
++  ri_adsp_start.crypto_cfg=ri_rd(rcg,0x2008);
++  ri_adsp_start.crypto_vote=ri_rd(vote,0x1004);
++  ri_adsp_start.crypto_core=ri_rd(rcg,0x201c);
++  ri_adsp_start.crypto_axi=ri_rd(rcg,0x2020);
++  ri_adsp_start.crypto_ahb=ri_rd(rcg,0x2024);
++  ready=!(ri_adsp_start.crypto_cmd&1) && ri_adsp_start.crypto_cfg==0x113 &&
++      (ri_adsp_start.crypto_vote&7)==7 && !(ri_adsp_start.crypto_core&0x80000000) &&
++      !(ri_adsp_start.crypto_axi&0x80000000) && !(ri_adsp_start.crypto_ahb&0x80000000);
++ }
++ if(rcg)ml_io_unmap(rcg,0x4000);
++ if(vote)ml_io_unmap(vote,0x4000);
++ return ready;
++}
++static int
++ri_adsp_start_impl(void)
++{
++ lck_mtx_assert(&ri_adsp_lock,LCK_MTX_ASSERT_OWNED);
++ if(ri_adsp_start.attempted) return EALREADY; /* Preserve outcome, never retry. */
++ if(!ri_adsp_metadata_accepted || !ri_adsp_image_staged || ri_adsp_stage_open ||
++    ri_adsp_stage_failed || !ri_adsp_handshake_created || !river_gpu_pas_ready())
++  return ri_adsp_start_result("prerequisites",EBUSY);
++ int error=ri_adsp_probe_impl();
++ vm_offset_t smem=river_smd_smem;
++ struct ri_adsp_remote remote;
++ if(error || !smem || !ri_adsp_caps_ok || !ri_adsp_smem_ok || ri_adsp_channels)
++  return ri_adsp_start_result("probe",error?error:EBUSY);
++ error=ri_adsp_remote_snapshot(smem,&remote);
++ if(error || !remote.outbound || remote.inbound)
++  return ri_adsp_start_result("ownership",error?error:EBUSY);
++ /* Refuse startup unless both the start and emergency-stop services exist. */
++ ri_adsp_start.query_status=river_scm(6,1,1,0x42000206,0,0,&ri_adsp_start.query_result);
++ if(ri_adsp_start.query_status || ri_adsp_start.query_result!=1 || !ri_adsp_crypto_ready())
++  return ri_adsp_start_result("shutdown_or_crypto_gate",EBUSY);
++ vm_offset_t aux=ml_io_map_unmappable(0x60000,0x8000,VM_WIMG_IO);
++ vm_offset_t ipc_page=ml_io_map_unmappable(0x0b010000,0x4000,VM_WIMG_IO);
++ if(!aux || !ipc_page) {error=ENOMEM;goto out;}
++ vm_offset_t ipc=ipc_page+0x1008;
++ lck_mtx_lock(&ri_rpm_lock);
++ if(!ri_rpm_layout(smem) || !ri_rpm_channel.ready) {
++  lck_mtx_unlock(&ri_rpm_lock);error=EBUSY;goto out;
++ }
++ ri_adsp_start.attempted=true;
++ /* Board-normal maximum CX level; this platform floor intentionally takes
++  * ownership for the boot. Preserve other keys, and never clear these votes.
++  * 100mA is the stock proxy load and meets S2's 100mA HPM threshold. */
++ const struct ri_rpm_kv cx[]={{0x6e657773,1},{0x6c766c76,384},{0x616d,100}};
++ const struct ri_rpm_kv xo[]={{0x62616e45,1}};
++ for(unsigned i=0;i<4;i++) {
++  bool clock=i>=2;
++  ri_adsp_start.vote_attempts|=1u<<i;
++  ri_adsp_start.last_rpm=ri_rpm_request_locked(aux,ipc,false,i&1,
++      clock?0x306b6c63:0x61706d73,clock?0:2,clock?xo:cx,clock?1:3,
++      &ri_adsp_start.last_request_id);
++  if(ri_adsp_start.last_rpm!=RI_RPM_REPLY_ACK) {
++   error=ri_adsp_start.last_rpm==RI_RPM_REQUEST_TIMEOUT?ETIMEDOUT:EIO;
++   break;
++  }
++  ri_adsp_start.vote_acks|=1u<<i;
++ }
++ lck_mtx_unlock(&ri_rpm_lock);
++ if(error) {ri_adsp_start_result("power_votes",error);goto cleanup;}
++ /* No remote allocation or takeover is allowed between initial gate/start. */
++ error=ri_adsp_remote_snapshot(smem,&remote);
++ if(error || !remote.outbound || remote.inbound || !ri_adsp_crypto_ready()) {
++  error=error?error:EBUSY;ri_adsp_start_result("pre_auth_recheck",error);goto cleanup;
++ }
++ ri_adsp_start.auth_requested=true;
++ __asm__ volatile("dsb sy" ::: "memory");
++ ri_adsp_start.auth_status=river_scm(2,5,1,1,0,0,&ri_adsp_start.auth_result);
++ ri_adsp_start.authenticated=!ri_adsp_start.auth_status&&!ri_adsp_start.auth_result;
++ if(!ri_adsp_start.authenticated) {error=EIO;goto stop;}
++ __asm__ volatile("dmb sy" ::: "memory");ri_wr(ipc,0,0x400);
++ ri_adsp_start.interrupts++;
++ uint32_t notified_fv=0;
++ error=ETIMEDOUT;
++ for(unsigned i=0;i<500;i++) {
++  ri_adsp_start.polls++;
++  int snapshot=ri_adsp_remote_snapshot(smem,&remote);
++  if(snapshot && snapshot!=EAGAIN) {error=snapshot;break;}
++  if(!snapshot && !remote.outbound) {error=EIO;break;}
++  if(!snapshot && remote.inbound) {
++   ri_adsp_start.remote_fv=remote.version_features;
++   ri_adsp_start.remote_state=remote.state;
++   if(remote.slave && (remote.state&1)) {error=EIO;break;}
++   if(remote.version_features==1 && remote.slave && (remote.state&2)) {
++    ri_adsp_start.ready=true;error=0;break;
++   }
++   /* Features0 is our supported subset. Notify once per new remote offer,
++    * at most four times total; never rewrite the remote block or flags. */
++   if(remote.version_features!=notified_fv && ri_adsp_start.interrupts<4) {
++    notified_fv=remote.version_features;
++    __asm__ volatile("dmb sy" ::: "memory");ri_wr(ipc,0,0x400);
++    ri_adsp_start.interrupts++;
++   }
++  }
++  ri_wait(20);
++ }
++ if(!error) {ri_adsp_start_result("ready",0);goto cleanup;}
++stop:
++ /* Failed authentication has an uncertain remote outcome too. Attempt one
++  * PAS1 shutdown, reporting its actual result; retain the shared power floor. */
++ ri_adsp_start.shutdown_requested=true;
++ ri_adsp_start.shutdown_status=river_scm(2,6,1,1,0,0,&ri_adsp_start.shutdown_result);
++ ri_adsp_start.stopped=!ri_adsp_start.shutdown_status&&!ri_adsp_start.shutdown_result;
++ ri_adsp_start_result(ri_adsp_start.stopped?"failed_stopped":"failed_stop_unverified",error);
++cleanup:
++ ml_io_unmap(aux,0x8000);ml_io_unmap(ipc_page,0x4000);
++ return error;
++out:
++ if(aux)ml_io_unmap(aux,0x8000);
++ if(ipc_page)ml_io_unmap(ipc_page,0x4000);
++ return ri_adsp_start_result("mapping_or_transport_gate",error);
++}
++static int
++river_adsp_start_sysctl SYSCTL_HANDLER_ARGS
++{
++ int value=0,error=sysctl_handle_int(oidp,&value,0,req);
++ if(error || !req->newptr)return error;
++ if(value!=1)return EINVAL;
++ lck_mtx_lock(&ri_adsp_lock);error=ri_adsp_start_impl();lck_mtx_unlock(&ri_adsp_lock);
++ return error;
++}
++static int
++river_adsp_start_status_sysctl SYSCTL_HANDLER_ARGS
++{
++ lck_mtx_lock(&ri_adsp_lock);
++ int error=sysctl_handle_string(oidp,ri_adsp_start_note,sizeof(ri_adsp_start_note),req);
++ lck_mtx_unlock(&ri_adsp_lock);return error;
++}
++SYSCTL_PROC(_debug, OID_AUTO, river_adsp_start, CTLTYPE_INT | CTLFLAG_RW | CTLFLAG_LOCKED,
++    NULL, 0, river_adsp_start_sysctl, "I", "Explicit one-shot stock ADSP start; power floors retained until reboot");
++SYSCTL_PROC(_debug, OID_AUTO, river_adsp_start_status, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
++    NULL, 0, river_adsp_start_status_sysctl, "A", "Last ADSP startup outcome; no PCM transport");

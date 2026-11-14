@@ -12,15 +12,17 @@ parts of the port. Do not rely on the device to protect personal data or use it
 for sensitive accounts. Battery capacity remains a voltage/current estimate;
 charging-policy validation is incomplete.
 
-Updated November 13, 2026. `c3d9af8` is the latest device-tested kernel
-(through patch0297). Its temporary boot reached a responsive iOS home screen.
-The usual Wi-Fi network is visible; the first join timed out during WPA and
+Updated November 13, 2026. `678e917` is the latest device-tested kernel
+(through patch0298), with a responsive iOS home screen and both exact boot
+RPM ACKs verified. Patch0299 prepares explicit authenticated ADSP startup;
+host tests and helper compilation pass, with full build/device checks pending.
+On c3d9af8, the usual Wi-Fi network was visible; the first join timed out during WPA and
 the second completed WPA with driver state4/result1. Native IP/DNS setup
 remains incomplete. Earlier bb395d6 testing produced a Settings checkmark and
 numeric HTTP200 through en0; ordinary DNS still failed. Patch0298 adds serialized, bounded RPM request transport for the audio
 loader; host sanitizer checks, full kernel build and image verification pass.
 Its temporary boot also produced both exact RPM ACKs and transport ready1;
-home-screen responsiveness confirmation remains pending. Source changes can
+the user confirmed the home screen remains responsive. Source changes can
 be newer than the last phone test; see [NOTES.md](NOTES.md) for dated evidence,
 build IDs, hashes and limitations. [RIVER.md](RIVER.md) records earlier bring-up.
 

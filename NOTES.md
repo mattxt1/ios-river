@@ -5,7 +5,38 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0298 exact boot ACKs pass; UI confirmation pending (2026-11-13)
+## Active handoff:0298 responsive;0299 startup host-verified (2026-11-13)
+
+The user confirmed the home screen is responsive on678e917. Read-only SSH
+baseline work/rpm-transport/baseline-678e917.txt shows amplifier identity and
+baseline format/PLL/power unchanged, no physical audio transport and flags3.
+work/rpm-transport/adsp-prereq-678e917.txt verifies PAS1 support/capabilities,
+zero ADSP legacy channels and an empty valid uncached partition at0x86000.
+Both exact boot RPM ACKs and ready1/mask3 already passed. Current phone stays
+on this responsive image; no new device writes were issued this turn.
+
+Patch0299 adds explicit one-shot authenticated startup after existing metadata,
+stage and handshake gates. It adopts retained active/sleep CX384/swen1/ma100
+and XO1 for the boot, serializes four exact-ACK RPM requests, rechecks ownership
+and crypto clocks, invokes PAS1 AUTH_AND_RESET, then polls validated SMP2P
+slave-kernel ready/fatal with feature subset0. Readiness wait is500×20ms;
+secure calls themselves are synchronous. Any post-auth failure attempts PAS1
+shutdown once and records actual results. No power rollback/unvote is attempted;
+partial/uncertain votes persist and startup cannot retry after voting begins.
+This policy has increased-power/suspend limitations; see AUDIO-BRINGUP.md.
+No codec/amp writes, LPASS MMIO or PCM path were added.
+
+Actual-source host sanitizer tests pass, including all gates, every vote failure,
+pre-auth rechecks, PAS failures, negotiation/ready/fatal/timeout and malformed
+SMEM. Updated phone helper --start/--start-status compiles Wall/Wextra/Werror
+and is signed at work/adsp-start/river-adsp-status.0299 dry-run application passes.
+Commit source before full build, then package with the new helper. Device test
+must repeat exact metadata/stage and locked handshake init on the fresh boot,
+then run --start only after all gates pass. Record real PAS and SMP2P outcomes;
+readiness or an increasing output counter would not prove physical playback.
+Full build/package/device validation of0299 remains pending.
+
+##0298 boot evidence before UI confirmation (2026-11-13)
 
 The new678e917 temporary boot was accepted by fastboot after productriver
 and image SHA verification. Live USB logs verify exact ACK result1 for

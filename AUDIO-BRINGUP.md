@@ -63,34 +63,60 @@ The full678e917 kernel build passed. Its temporary image packaged with all
 kernel segments verified (26,697,728 bytes,577 command-line bytes,1MiB
 retained log). Temporary fastboot boot returned OKAY. Live USB diagnostics
 verify exact ACKs for IDs1380515841/1380515842 and shared transport ready1
-with boot ACK mask3. Home-screen responsiveness confirmation is pending. It issues the
+with boot ACK mask3. The user confirmed a responsive iOS home screen; the
+read-only audio baseline and PAS/empty-partition survey passed on this boot. It issues the
 same existing L19/L9 votes and adds no ADSP votes or DSP startup. WCNSS startup
 still follows its existing policy even when boot votes fail. CX/XO shared
 ownership policy and authenticated startup remain the next audio work.
 
-## Power policy for the next startup change
+## Authenticated startup prepared (patch0299,2026-11-13)
 
-The stock MSM8953 ADSP node uses PAS1, an80MHz crypto source, XO and CX at
-TURBO level384 with100000uA proxy load. CX is RPM `smpa` resource2; this is a
-voltage-level request, not384 microvolts. XO is the shared `clk0` resource0
-branch, `Enab=1`, shared by LPASS, USB and WLAN voters. The stock clock driver
-aggregates active/sleep peers and assumes clocks enabled at handoff; it does
-not recover the inherited APPS vote from an RPM readback.
+The explicit `river-adsp-status --start` operation requires accepted stock
+metadata, a completed hash-verified17MiB stage, the owned outbound429 record,
+no existing ADSP legacy channels or inbound443 record, PAS start/stop support,
+known enabled crypto clocks and the shared RPM ready ledger. It rechecks
+ownership and crypto state immediately before PAS1 AUTH_AND_RESET. It is not
+invoked automatically at boot. `--start-status` reads the separate outcome.
 
-The stock regulator exposes separate `vlvl` and `vfl` (floor-level) keys and
-an S2 floor regulator, each constrained through TURBO. A persistent TURBO
-floor is a possible bring-up policy that avoids replacing an unknown normal
-`vlvl` request. This is a design candidate, not a tested hardware policy.
-Before enabling it, confirm firmware semantics and all required enable/load
-fields; do not assume the floor alone starts the rail. Likewise, enabling XO
-must retain active/sleep requirements for existing USB/WLAN users. Do not
-unvote either shared resource to zero as cleanup without known ownership.
-Any retained floor must be explicitly reported as a power/suspend limitation,
-not described as restored state. No CX/XO vote was added by0298.
+The experimental power policy retains active and sleep CX at the board-normal
+TURBO level384 with enable1 and stock100mA proxy load, and shared XO enabled1.
+CX is RPM `smpa` resource2 with `vlvl`, not raw microvolts; XO is `clk0`
+resource0 with `Enab`. All four transactions require exact ACKs under the
+shared transport mutex. The persistent policy intentionally adopts those
+APPS requirements for the rest of the boot. It does not recover the inherited
+vote, implement dynamic consumer aggregation or claim rollback. Existing
+unrelated keys are left alone. A failed or partially acknowledged sequence
+retains its attempted votes, reports attempted/ACK masks and cannot be retried
+that boot. No unvote-to-zero or invented baseline restoration is performed.
+This can increase power use and constrains suspend; thermal/suspend behavior
+is unvalidated. Earlier `vfl` floor-key ideas were not implemented.
 
-Source evidence is in the pinned Motorola kernel's `msm8953.dtsi`,
-`msm8953-regulator.dtsi`, `pm8953-rpm-regulator.dtsi`, `rpm-smd-regulator.c`,
-`clock-gcc-8953.c` and `clock-rpm.c` (revision2dba45b8e247958d5a1b15b33c6064c15af4983e).
+After secure authentication succeeds, startup sends bounded SMP2P doorbells
+(bit10) and reads the observed uncached APPS↔ADSP partition. It validates
+allocation bounds, unique records, version/PIDs, stable headers and the exact
+`slave-kernel` entry. Our supported feature subset is0; readiness requires the
+remote to converge to version1/features0 and set ready bit1 without fatal
+bit0. Polling is limited to500×20ms and at most four doorbells. This does not
+bound the synchronous secure-monitor calls themselves. A failed auth, fatal,
+malformed snapshot or readiness timeout triggers one PAS1 shutdown attempt;
+its actual status/result is reported. Shared power remains retained. A ready
+result is one observed startup state, not continuous liveness monitoring.
+
+Actual-code ASan/UBSan tests pass for all prerequisite/clock/ownership gates,
+the exact active/sleep power plan, every vote failure/timeout, pre-auth
+rechecks, authentication and shutdown errors, delayed feature negotiation and
+readiness, fatal-before-ready, bounded timeout, allocation/header races and
+malformed SMEM. The updated iOS helper compiles with Wall/Wextra/Werror and
+is signed ad hoc with its existing privilege model. Patch application passes.
+Full kernel build, packaging and device startup validation are pending.
+
+The stock driver uses PAS1, an80MHz crypto source and the same CX/XO proxy
+requirements. Its XO branch is shared by LPASS, USB and WLAN; it assumes
+clocks enabled at handoff and does not recover inherited APPS votes. Source:
+pinned Motorola `msm8953.dtsi`, `msm8953-regulator.dtsi`,
+`pm8953-rpm-regulator.dtsi`, `rpm-smd-regulator.c`, `clock-gcc-8953.c`,
+`clock-rpm.c`, `msm8953-smp2p.dtsi`, `msm_smp2p.c` and `subsys-pil-tz.c`,
+revision2dba45b8e247958d5a1b15b33c6064c15af4983e.
 
 ## Verified progress and remaining work (2026-11-13)
 
