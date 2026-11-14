@@ -5,7 +5,7 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0317 active-route PCM image ready (2026-11-14)
+## Active handoff:0317 temporarily booted; home check pending (2026-11-14)
 
 0316 muted codec route PASSED with full restoration and user-confirmed
 post-test responsive iOS. Phone remains0316, amplifier muted, QMIpower/NGD
@@ -41,7 +41,10 @@ Image outputs/river-codec-pcm-b9fe8ea.img:26820608bytes,577cmdline,
 SHAef320c4243c5f8f867d6a7f0d1f68ba74b7a783c86a69cc5ee950bad07a94df4.
 Kernel SHAc858038ec1b4ee5a19a02173de746f5fffb7f37e3d6d0bc4f250c956b41acd31.
 Payload segments verified, native helperb9fe8ea and existing WiFireader.
-Fastboot readiness requested; no0317 boot yet. Temporary boot only/no flash.
+User confirmed fastboot ready. Exact image hash/productriver verified.
+Temporary transfer OKAY0.611s, boot OKAY0.216s; no flash.
+Current phone0317; home responsiveness asked, no active0317 controls run.
+USB-only capture session70768:work/codec-pcm/boot-b9fe8ea-usb.log.
 
 Next: verify productriver/hash, USBcapture work/codec-pcm/capture-boot.py,
 boot exact image, ask home responsiveness, inspect passive baseline via
