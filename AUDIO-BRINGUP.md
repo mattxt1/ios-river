@@ -551,3 +551,41 @@ The remaining sequence is:
 
 Temporary fastboot boot only. No partition flashing is needed for this work.
 See the active entry in NOTES.md for exact build and live test results.
+
+##0315 muted codec route image ready (2026-11-14)
+
+0314 channel lifetime passed with clean teardown; user confirmed iOS STILL
+RESPONSIVE afterward. Phone remains0314; do not repeat one-shot controls.
+0315 source c305b28c674e0ba331fd03f513add0336861fbe2 is committed and native
+incremental build exited0 using recovered exact22G74 KDK outside iCloud.
+Changed sweet_keys compilation and new codec-route kernel strings verified.
+Existing build job and provenance: work/codec-route/incremental-provenance.json.
+Image outputs/river-codec-route-c305b28.img is26820608bytes,577cmdline;
+SHA35b8563890b2aefb31dbc8c7187b129f9d058bbf9a376bec00df4183d7786da6.
+Kernel SHAb7fdf450234ac09e34ede71fbc13a4974bcecbab6f124a6e07d94442240b001f.
+Native helper compiled/signed and embedded; kernel payload segments verified.
+Temporary boot requested, awaiting user fastboot readiness; no0315 boot yet.
+
+0315 --codec-route owns the channel test once, activates codec sink0/channel144,
+then invokes existing verified muted FLL/AIF clock setup and a bounded codec
+data-route callback before restoring data registers, clock state and channel.
+Read-only SPI preflight rejects foreign source/rate/port/GPIO before clock writes.
+Snapshots22 digital registers; routes SLIMRX1 source0x38 to both AIF1 TX slots
+at0dB, GP10 native TXDAT,48k16-bit stereo slots, enables muted amp ASPRX1.
+Requires RXport0 active, codec FLL lock, amp PLL lock and AMP_EN0/mute1.
+Cleanup clears sources before rate restoration; persistent restore fault
+retains rate protection and amp mute until reboot. No analog/mic enable.
+Actual-code sanitizer tests passed route writes/locks, each ignored write,
+restoration failures, preflight rejection and channel callback cleanup.
+No new PCM is submitted while this codec route is active yet. Earlier PCM
+prerequisite remains separate; physical playback/capture are pending.
+
+After temporary boot, require user responsive-home confirmation and inspect
+passive start/stream/slim/ngd/channel/codec-route statuses plus amp baseline.
+Then run work/codec-route/run-device.py ONCE: PCM prerequisites, discovery,
+power, enum, --codec-route/status, channel/status and independent Wi-Fi reader.
+Do not run --channel-test first: it would consume the route's one-shot gate.
+Ask post-sequence responsiveness. Next: zeroPCM while route active, bounded
+quiet tone, real device backend, then microphone capture. No unmute this boot.
+Wi-Fi remains secondary; no new UI join result or code change since0314.
+
