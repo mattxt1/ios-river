@@ -63,3 +63,14 @@ Peer5/service0x301/encoded instance1/node5/port3 discovered. QMI SELECT and
 ACTIVE result0/error0. NGD version0x01050000, offset0x1000, CFG0, STATUS0x40c,
 INT_EN0, INT_STAT0, IE0x10000, VE0. No MMIO writes. PCM and all teardown passed;
 user confirmed responsive iOS. Power vote retained until reboot.
+
+##0313 polled controller/address candidate
+
+After successful0312 prerequisites, --ngd-enumerate claims only exact disabled
+NGD, enables CFG1 with IRQ_EN0, and polls register messages. It requires master
+capability and logical-address assignment before source-defined satellite
+report, then queries exact Madera elemental address with unique TID0x71.
+No BAM/DMA, message queues, data channel, codec or AIF routing. Successful
+controller is retained; on error only own CFG transition is disabled.
+Malformed receive messages are not acknowledged. Host tests/build pass;
+actual capability exchange and codec address are pending hardware validation.

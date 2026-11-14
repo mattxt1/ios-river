@@ -5,7 +5,46 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0312 PCM/QMI power/NGD readback PASS, responsive (2026-11-14)
+## Active handoff:0313 polled capability/codec address image ready (2026-11-14)
+
+0312 passed PCM, QMI SELECT/ACTIVE and powered NGD readback; user confirmed
+responsive iOS. Current phone remains0312 with controller disabled/power
+retained, no active retries. Source6f78bfc6b5d158026555b274e69ecf4a8a93dc90 through0313 adds
+--ngd-enumerate and --ngd-status. Prerequisites include completed/clean PCM,
+known mute, live selected/active QMI, exact0312 hardware version0x01050000
+and clean disabled NGD at0x1000. Fresh version/config/IRQ/status ownership
+checks precede CFG0->1. IRQ mask remains0, message queues/DMA never enabled.
+Poll bounded raw status for master capability (source-user type6/code0) and
+assigned address bit, then source-defined REPORT_SATELLITE (d9/c5,ver1/prot1)
+and exact ADDR_QUERY for Madera00:00:60:63:fa:01, transaction0x71. Require exact
+returned EA/TID/length and non-0xff logical address. TX register fallback
+matches stock msm_send_msg_buf; no codec data channel or AIF changes.
+Successful controller stays enabled until reboot for continuation. Failure
+attempts only owned CFG1->0 (or recognizes already0); no malformed RX clear,
+no IRQ enable/reset/BAM. Uncertain state blocks retries. Diagnostic metadata
+records control progress/address/IRQ/IE/VE and restoration outcome.
+
+Actual-code ASan/UBSan tests pass: complete capability/report/address,
+malformed/foreign/negative replies, missing capability, TX/address timeouts,
+power/ownership/map gates, failed enable and failed disable. Native helper
+compile/sign passed. Initial build and accidental duplicate used unchanged
+source and completed exit0; neither packaged. Final cleanup correction was
+copied only after both exited. Final native install exit0, changed sweet_keys
+compiled, new diagnostics linked, applied header matches tested patch source.
+Ledger work/slim-enumerate/incremental-provenance.json. Prior0312 kernel
+preserved work/slim-powered/kernel-77eb1a5.verified; isolated tree now0313.
+Image outputs/river-slim-enumerate-6f78bfc.img: 26804224bytes,
+577cmdline, SHA94b638e8ffd343b2373675ced9a7b1a5c642f7df22cfdd7399faf3f28e1f54a2.
+Kernel SHA134ee80e7d2a4c20aab046b59b102f23f741c4538feb62946d83aec489fdf909.
+Fastboot requested; no0313 hardware tests yet. Temporary boot only, responsive
+home confirmation, passive baseline, then run once
+work/slim-enumerate/run-device.py. Batches full PCM/QMI/powered readback then
+polled capability and codec query; each dependent stage is gated on success.
+Wi-Fi current0312 passive state0/result0; private native snapshots captured.
+No fresh UI attempt or override. Physical playback and microphone capture
+remain pending; no /dev backend or audible samples added.
+
+##0312 PCM/QMI power/NGD readback PASS, responsive (2026-11-14)
 
 User confirmed0312 home and post-test iOS STILL RESPONSIVE. All prerequisite
 and four zero-PCM completions passed with complete route/mapping cleanup.

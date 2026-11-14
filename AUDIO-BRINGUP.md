@@ -4,6 +4,14 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+##0313 controller capability/codec address candidate ready
+
+The verified next image batches polled NGD enable, master capability,
+satellite report and exact Madera logical-address query after the passing
+PCM/QMI/powered readback stages. Host tests and final kernel/helper builds
+pass. IRQ and message DMA stay disabled, amplifier muted; hardware result
+pending. Physical playback/capture remain pending.
+
 ##0312 SLIMbus service, QMI power and hardware version verified
 
 PCM passed again. SLIMbus service node5/port3, QMI instance0 selection and
