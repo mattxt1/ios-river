@@ -5,14 +5,21 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0301 APR query image built and verified (2026-11-13)
+## Active handoff:0301 temporarily booted; home confirmation pending (2026-11-13)
 
-The user confirmed home responsive on8278313. Baseline, stock metadata,
+The user returned River to fastboot. The exact APR image SHA and productriver
+were verified; temporary fastboot boot of outputs/river-adsp-apr-3e9f5cd.img
+completed transfer/boot OKAY. No partition flashed. A home-screen confirmation
+is pending before controls. USB boot capture is bounded at
+work/audit-device-validation/boot-3e9f5cd-usb.log (session27282). No metadata,
+staging, handshake, ADSP start or APR request has run on this new boot.
+
+Previously the user confirmed home responsive on8278313. Baseline, stock metadata,
 17MiB staging and locked handshake passed. Repeated startup passed again:
 four power ACKs/mask0xf, PAS0/0, remote ready0x6 after3polls/1interrupt.
-The user also confirmed iOS remained responsive afterward. Current phone
-stays on8278313 with ADSP ready and retained CX/XO requirements. No APR
-channel has been opened or request sent on this image.
+The user also confirmed iOS remained responsive afterward. That prior boot
+had ADSP ready with retained CX/XO requirements, but no APR channel was
+opened or request sent. Startup must be repeated on the new3e9f5cd boot.
 
 Private evidence work/adsp-transport/{baseline,metadata,stage,handshake,start,
 post-start}-8278313.txt. Passive survey is valid/stable with17records and
@@ -47,8 +54,8 @@ bytes,577 command-line bytes,1MiB retained log; all kernel segments verified.
 Image SHA256:55c7d9667d87a7c2d0420a8a595fed59ffc068b08c865d945515f95b85bd748e.
 Manifest outputs/adsp-apr-build-manifest.json; new helper SHA256
 ab5b8b2465173e84598f6a37f6b0a53b4bb8caae8051eadf2a6a474ebbfbe0c1.
-No0301 device boot/APR query yet. Next physical step: fastboot for temporary
-boot, then responsive home confirmation before controls.
+0301 temporary boot is accepted; its home-screen confirmation is pending.
+Wait for that reply before active controls. No APR query has been sent.
 Device test on the next fresh boot repeats startup, confirms
 live closed/empty APR channel, then --apr once and inspects --apr-status plus
 read-only survey. No physical playback/capture has passed.

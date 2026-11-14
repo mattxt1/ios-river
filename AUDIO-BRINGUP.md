@@ -199,7 +199,9 @@ frames, index races, wait bounds and close failures. The iOS helper compiles
 with Wall/Wextra/Werror and normal ad-hoc signing; patch application passes.
 Full3e9f5cd kernel build and packaging passed; no numbered patches skipped,
 all kernel segments verified. Temporary image size26,732,544 bytes with577
-command-line bytes and1MiB retained log. Live APR validation is pending;
+command-line bytes and1MiB retained log. Fastboot accepted its verified
+temporary boot; home-screen confirmation is pending before controls. Live
+APR validation is pending;
 artifact hashes are in `outputs/adsp-apr-build-manifest.json`.
 
 ## Verified progress and remaining work (2026-11-13)
