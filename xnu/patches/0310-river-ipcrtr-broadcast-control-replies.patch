@@ -1,0 +1,46 @@
+diff --git a/bsd/dev/river_adsp_slim.h b/bsd/dev/river_adsp_slim.h
+--- a/bsd/dev/river_adsp_slim.h
++++ b/bsd/dev/river_adsp_slim.h
+@@ -6,6 +6,7 @@
+  uint32_t info_offset,fifo_offset,peer,node,port,versions,capability;
+  uint32_t seen_instance,seen_node,seen_port,last_type,last_source,last_destination,last_size;
+  uint32_t qmi_message,qmi_txn,qmi_result,qmi_error;
++ uint32_t last_source_port,last_destination_port,last_flags,last_control[5];
+  unsigned frames,servers,tx_bytes,rx_bytes,open_polls,rx_polls;
+ } ri_slim;
+ static struct ri_apr_channel ri_slim_channel;
+@@ -14,7 +15,7 @@
+ ri_slim_result(const char *phase,int error)
+ {
+  snprintf(ri_slim_note,sizeof(ri_slim_note),
+-  "phase=%s error=%d attempted=%u owned=%u opened=%u cid=2 info=%#x fifo=%#x hello=%u peer=%u versions=%#x capability=%#x service=%u service_id=0x301 instance=1 node=%u port=%u seen_instance=%#x seen_node=%u seen_port=%u power_attempted=%u selected=%u power_active_retained=%u uncertain=%u qmi_message=%#x qmi_txn=%u qmi_result=%u qmi_error=%u frames=%u servers=%u tx_bytes=%u rx_bytes=%u open_polls=%u rx_polls=%u last_type=%u last_source=%u last_destination=%u last_size=%u close_requested=%u close_observed=%u mmio_accessed=0 codec_stream=0 amp_unmuted=0",
++  "phase=%s error=%d attempted=%u owned=%u opened=%u cid=2 info=%#x fifo=%#x hello=%u peer=%u versions=%#x capability=%#x service=%u service_id=0x301 instance=1 node=%u port=%u seen_instance=%#x seen_node=%u seen_port=%u power_attempted=%u selected=%u power_active_retained=%u uncertain=%u qmi_message=%#x qmi_txn=%u qmi_result=%u qmi_error=%u frames=%u servers=%u tx_bytes=%u rx_bytes=%u open_polls=%u rx_polls=%u last_type=%u last_source=%u last_destination=%u last_size=%u last_source_port=%#x last_destination_port=%#x last_flags=%#x last_control=%#x,%#x,%#x,%#x,%#x close_requested=%u close_observed=%u mmio_accessed=0 codec_stream=0 amp_unmuted=0",
+   phase,error,ri_slim.attempted,ri_slim.owned,ri_slim.opened,ri_slim.info_offset,
+   ri_slim.fifo_offset,ri_slim.hello,ri_slim.peer,ri_slim.versions,ri_slim.capability,
+   ri_slim.service,ri_slim.node,ri_slim.port,ri_slim.seen_instance,ri_slim.seen_node,
+@@ -22,7 +23,9 @@
+   ri_slim.qmi_message,ri_slim.qmi_txn,ri_slim.qmi_result,ri_slim.qmi_error,
+   ri_slim.frames,ri_slim.servers,ri_slim.tx_bytes,ri_slim.rx_bytes,ri_slim.open_polls,
+   ri_slim.rx_polls,ri_slim.last_type,ri_slim.last_source,ri_slim.last_destination,
+-  ri_slim.last_size,ri_slim.close_requested,ri_slim.close_observed);
++  ri_slim.last_size,ri_slim.last_source_port,ri_slim.last_destination_port,ri_slim.last_flags,
++  ri_slim.last_control[0],ri_slim.last_control[1],ri_slim.last_control[2],ri_slim.last_control[3],
++  ri_slim.last_control[4],ri_slim.close_requested,ri_slim.close_observed);
+  printf("RIVER SLIM: %s\n",ri_slim_note);return error;
+ }
+ static bool
+@@ -91,11 +94,13 @@
+     packet[5]>128 || bytes!=32+((packet[5]+3)&~3u))return EIO;
+  uint32_t type=packet[1],src=packet[2],sport=packet[3],dst=packet[6],dport=packet[7];
+  ri_slim.last_type=type;ri_slim.last_source=src;ri_slim.last_destination=dst;ri_slim.last_size=packet[5];
++ ri_slim.last_source_port=sport;ri_slim.last_destination_port=dport;ri_slim.last_flags=packet[4];
+  const uint32_t *data=packet+8;
++ if(type!=1 && packet[5]==20)memcpy(ri_slim.last_control,data,sizeof(ri_slim.last_control));
+  if(!src || src==1 || src==0xffffffff)return EIO;
+  if(type!=1) {
+   if(packet[4] || sport!=0xffff || dport!=0xffff || packet[5]!=20 || data[0]!=type ||
+-     (dst!=1 && !(type==2 && dst==0)))return EIO;
++     (dst!=1 && dst!=0xffffffff && !(type==2 && dst==0)))return EIO;
+   if(type==2) {
+    if(ri_slim.hello && ri_slim.peer!=src)return EIO;
+    bool extended=ri_slim_checksum(data)==0xe110;

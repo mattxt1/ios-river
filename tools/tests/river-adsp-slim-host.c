@@ -45,11 +45,14 @@ static void response_to_tx(const uint32_t *f)
  if(f[6]==2) {
   assert(f[0]==52 && f[8]==0xffff && !f[11] && f[12]==0xffff && f[13]==2 && f[15]==2);
   assert(ri_slim_checksum(f+13)==0xe110);
-  uint32_t hello[]={1,2,5,0xffff,0,20,0,0xffff,2,0xe110,10,0,0};hello[9]=ri_slim_checksum(hello+8);
+  uint32_t hello[]={1,2,5,0xffff,0,20,0xffffffff,0xffff,2,0xe110,10,0,0};hello[9]=ri_slim_checksum(hello+8);
   if(scenario==4)hello[0]=3;
   if(scenario==5){hello[10]=8;hello[9]=0xe110;hello[9]=ri_slim_checksum(hello+8);}
+  if(scenario==11)hello[6]=7;
+  if(scenario==12)hello[3]=1;
+  if(scenario==13)hello[7]=1;
   queue(hello,sizeof(hello));
-  if(scenario!=6){uint32_t srv[]={1,4,5,0xffff,0,20,1,0xffff,4,0x301,1,5,42};queue(srv,sizeof(srv));}
+  if(scenario!=6){uint32_t srv[]={1,4,5,0xffff,0,20,0xffffffff,0xffff,4,0x301,1,5,42};queue(srv,sizeof(srv));}
  } else if(f[6]==7) {assert(f[13]==7 && f[14]==1 && f[15]==0x52560001);flow_acks++;}
  else {
   assert(f[6]==1 && f[8]==0x52560001 && f[11]==5 && f[12]==42);
@@ -93,6 +96,10 @@ int main(void)
   if(mode==8)assert(ri_slim.qmi_result==1 && ri_slim.qmi_error==0x22 && !ri_slim.selected);
   if(mode==10)assert(ri_slim.selected);
  }
+ for(unsigned m=11;m<=13;m++) {reset(m);assert(ri_slim_discover()==EIO && !ri_slim.hello && ri_slim.close_observed);}
+ reset(0);assert(ri_slim_discover()==0);assert(ri_slim.last_destination==0xffffffff && ri_slim.last_control[1]==0x301);
+ uint32_t foreign[]={1,4,5,0xffff,0,20,7,0xffff,4,0x301,1,5,42};assert(ri_slim_decode(foreign,sizeof(foreign),0,0)==EIO);
+ uint32_t wrong_data[]={1,1,5,42,0,14,0xffffffff,0x52560001,0,0,0,0};assert(ri_slim_decode(wrong_data,sizeof(wrong_data),0x20,1)==EIO);
  reset(0);raw(river_smd_smem+0x8ab58,16,4);assert(ri_slim_discover()==EBUSY && !tx_count);
  reset(0);raw(river_smd_smem,0x86300+64+24,0x101);assert(ri_slim_discover()==EBUSY);
  reset(0);assert(ri_slim_discover()==0);unsigned offset=8180;raw(ri_slim_channel.info,16,offset);raw(ri_slim_channel.info,12,offset);raw(ri_slim_channel.info,36,offset);raw(ri_slim_channel.info,32,offset);assert(ri_slim_power()==0 && ri_slim.active);

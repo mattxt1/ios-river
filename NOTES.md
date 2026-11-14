@@ -5,7 +5,33 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0309 SLIMbus IPC/QMI candidate ready (2026-11-14)
+## Active handoff:0309 PCM passed; IPC broadcast HELLO correction (2026-11-14)
+
+User confirmed0309 home responsive. All prerequisite and combined PCM tests
+passed again: four submitted/completed16KiB, full teardown/unmap success,
+muted amp and unchanged other surveyed baseline registers. --slim-discover
+opened CID2, sent72bytes consumed by peer, then local decoder rejected the
+first V1 control HELLO: type2,source5,destination0xffffffff,size20. No frame
+was consumed, no service accepted, no QMI select or power command sent.
+Owned CID2 closed with peerCLOSING4 observed, host0; TX0x48/0x48, RX0x1b0/0
+retained. APR/PCM remains clean; amplifier mute retained. User confirmed
+STILL RESPONSIVE after full test. Do not retry one-shot controls on this boot.
+Evidence work/slim-control/{baseline,metadata,stage,handshake,start,pre-query,
+core,map,asm,afe,post-query,afe-config,adm-route,pcm-silence,post-stream,
+slim-discover,post-slim,wifi-monitor}-6548eec.txt.
+
+Stock ipc_router_core.c defines DUMMY_DEST_NODE0xffffffff and processes
+control messages independently of DATA destination forwarding.0310 accepts
+broadcast control destinations alongside local1 (HELLO also initial0),
+while preserving exact ports/type/size/source and strict DATA/QMI endpoints.
+Adds last control words, ports and flags to status before validation so a
+future rejected reply is reviewable. Actual-code ASan/UBSan tests pass with
+broadcast HELLO/service advertisements, and retain rejection of foreign
+unicast controls, incorrect control ports and broadcast QMI DATA.
+Native build not run yet. Fresh temporary boot needed for discovery retry.
+Physical playback and microphone capture remain pending.
+
+##0309 SLIMbus IPC/QMI candidate ready (2026-11-14)
 
 0308 PCM consumption and clean teardown passed and user confirmed responsive
 post-test iOS. Current phone remains0308 with no further active controls.
