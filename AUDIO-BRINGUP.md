@@ -118,7 +118,8 @@ PAS1 AUTH_AND_RESET status0/result0, remote version1/features0 and
 `slave-kernel=0x6` (ready plus proxy-unvote), after3polls and1interrupt.
 The documented CX/XO policy retains those requirements; it does not honor
 proxy-unvote yet. No shutdown was requested. Post-start SSH and read-only
-surveys worked; user home-screen confirmation after startup is pending.
+surveys worked, and the user confirmed the iOS home screen remained
+responsive after startup.
 
 Post-start private SMEM contains17valid/stable records, including a2048-byte
 channel table (item13) at0x86300. The current global-only channel count remains
@@ -135,6 +136,21 @@ pinned Motorola `msm8953.dtsi`, `msm8953-regulator.dtsi`,
 `pm8953-rpm-regulator.dtsi`, `rpm-smd-regulator.c`, `clock-gcc-8953.c`,
 `clock-rpm.c`, `msm8953-smp2p.dtsi`, `msm_smp2p.c` and `subsys-pil-tz.c`,
 revision2dba45b8e247958d5a1b15b33c6064c15af4983e.
+
+## Private transport discovery prepared (patch0300)
+
+Live startup created a private item13 channel table that the existing global
+scan cannot inspect. Patch0300 adds bounded read-only private SMD table
+metadata,40/88-byte control layouts and FIFO index reporting, plus GLINK
+items478–480 and descriptor indices. It reports invalid/duplicate records,
+changing snapshots, invalid names/CIDs and truncated output. It does not
+allocate, open a channel, consume ring bytes or send IPC. Table266 bridge
+names are reported without assuming table13 control layout.
+
+Actual-source sanitizer tests pass for the two SMD layouts, GLINK indices,
+padding/unknown/duplicate/malformed allocations, concurrent publication,
+invalid names/CIDs, bounded records/output and zero shared-memory writes.
+Full build, packaging and live private-channel validation are pending.
 
 ## Verified progress and remaining work (2026-11-13)
 

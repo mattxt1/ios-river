@@ -1,0 +1,167 @@
+diff --git a/bsd/dev/river_adsp_probe.h b/bsd/dev/river_adsp_probe.h
+--- a/bsd/dev/river_adsp_probe.h
++++ b/bsd/dev/river_adsp_probe.h
+@@ -25,6 +25,7 @@
+ }
+ #include "river_adsp_startup_survey.h"
+ #include "river_adsp_partition.h"
++#include "river_adsp_transport_survey.h"
+ 
+ static int
+ ri_adsp_probe_impl(void)
+@@ -96,6 +97,7 @@
+      "\nlegacy_tables=%u adsp_channels=%u apr_channels=%u malformed=%u no_channels_does_not_prove_dsp_off=1",tables,channels,apr,malformed);
+  ri_adsp_startup_survey(smem,freeoff);
+  ri_adsp_partition_survey(smem);
++ ri_adsp_transport_survey(smem);
+  return error;
+ }
+ #include "river_adsp_handshake.h"
+diff --git a/bsd/dev/river_adsp_transport_survey.h b/bsd/dev/river_adsp_transport_survey.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/river_adsp_transport_survey.h
+@@ -0,0 +1,143 @@
++/* Read-only discovery of SMD and GLINK records in the observed private
++ * APPS/ADSP uncached partition. No allocation, ring consumption or IPC.
++ * ri_adsp_lock serializes the shared diagnostic note. */
++struct ri_adsp_record { uint32_t offset, bytes; };
++struct ri_adsp_transport_records {
++ struct ri_adsp_record table[2], info[64], fifo[64], glink[3];
++ uint32_t end, cached;
++ unsigned count;
++};
++static bool
++ri_adsp_transport_collect(vm_offset_t smem, struct ri_adsp_transport_records *r)
++{
++ memset(r,0,sizeof(*r));
++ const unsigned part=0x86000, toc=0xff080;
++ if(ri_rd(smem,0xff000)!=0x434f5424 || ri_rd(smem,0xff004)!=1 ||
++    ri_rd(smem,0xff008)!=7 || ri_rd(smem,toc)!=part ||
++    ri_rd(smem,toc+4)!=0x24000 || ri_rd(smem,toc+8) ||
++    ri_rd(smem,toc+12)!=0x20000 || ri_rd(smem,toc+16)!=32 ||
++    ri_rd(smem,part)!=0x54525024 || ri_rd(smem,part+4)!=0x20000 ||
++    ri_rd(smem,part+8)!=0x24000)return false;
++ r->end=ri_rd(smem,part+12);r->cached=ri_rd(smem,part+16);
++ if(r->end<32 || r->end>r->cached || r->cached>0x24000 ||
++    ((r->end|r->cached)&7))return false;
++ __asm__ volatile("dmb sy" ::: "memory");
++ unsigned cursor=32;
++ while(cursor<r->end && r->count<512) {
++  if(r->end-cursor<16)return false;
++  unsigned h=part+cursor;
++  uint32_t first=ri_rd(smem,h), bytes=ri_rd(smem,h+4), pads=ri_rd(smem,h+8);
++  unsigned id=first>>16, header_pad=pads>>16, data_pad=pads&0xffff;
++  if((first&0xffff)!=0xa5a5 || !bytes || (bytes&7) || (header_pad&7) ||
++     data_pad>bytes || header_pad>r->end-cursor-16 ||
++     bytes>r->end-cursor-16-header_pad)return false;
++  struct ri_adsp_record *item=NULL;
++  if(id==13 || id==266)item=&r->table[id==266];
++  if(id>=14 && id<78)item=&r->info[id-14];
++  if(id>=338 && id<402)item=&r->fifo[id-338];
++  if(id>=478 && id<=480)item=&r->glink[id-478];
++  if(item) {
++   if(item->offset)return false; /* Ambiguous ownership/duplicate item. */
++   item->offset=h+16+header_pad;item->bytes=bytes-data_pad;
++  }
++  if(ri_rd(smem,h)!=first || ri_rd(smem,h+4)!=bytes || ri_rd(smem,h+8)!=pads)return false;
++  r->count++;cursor+=16+header_pad+bytes;
++ }
++ __asm__ volatile("dmb sy" ::: "memory");
++ return cursor==r->end && ri_rd(smem,part+12)==r->end && ri_rd(smem,part+16)==r->cached;
++}
++static bool ri_adsp_transport_truncated;
++static bool ri_adsp_transport_append(const char *format,...) __attribute__((format(printf,1,2)));
++static bool
++ri_adsp_transport_append(const char *format,...)
++{
++ size_t used=strlen(ri_adsp_note), room=sizeof(ri_adsp_note)-used;
++ if(room<=64) {ri_adsp_transport_truncated=true;return false;}
++ __builtin_va_list args;
++ __builtin_va_start(args,format);
++ int count=vsnprintf(ri_adsp_note+used,room-64,format,args);
++ __builtin_va_end(args);
++ if(count<0 || (size_t)count>=room-64) {
++  ri_adsp_transport_truncated=true;return false;
++ }
++ return true;
++}
++static void
++ri_adsp_transport_survey(vm_offset_t smem)
++{
++ struct ri_adsp_transport_records r;
++ ri_adsp_transport_truncated=false;
++ bool valid=ri_adsp_transport_collect(smem,&r);
++ if(!ri_adsp_transport_append("\nprivate_transport_records_valid=%u records=%u readonly=1 ring_bytes_consumed=0 ipc_sent=0",
++     valid,r.count) || !valid)goto finish;
++ unsigned channels=0, apr=0;
++ for(unsigned t=0;t<2;t++) {
++  const struct ri_adsp_record *table=&r.table[t];
++  if(!ri_adsp_transport_append("\nprivate_table=%u present=%u offset=%#x bytes=%u",
++      t?266:13,table->offset!=0,table->offset,table->bytes))goto finish;
++  if(!table->offset || table->bytes!=2048)continue;
++  for(unsigned i=0;i<64;i++) {
++   unsigned pos=table->offset+i*32;
++   uint32_t refs=ri_rd(smem,pos+28), flags=ri_rd(smem,pos+24), cid=ri_rd(smem,pos+20);
++   if(!refs)continue;
++   char name[21];bool terminated=false;
++   for(unsigned word=0;word<5;word++) {
++    uint32_t value=ri_rd(smem,pos+word*4);
++    for(unsigned b=0;b<4;b++) {
++     unsigned char c=(value>>(b*8))&255;
++     if(!c)terminated=true;
++     name[word*4+b]=terminated?0:(c>=32&&c<=126?(char)c:'?');
++    }
++   }
++   name[20]=0;
++   bool stable=refs==ri_rd(smem,pos+28) && flags==ri_rd(smem,pos+24) && cid==ri_rd(smem,pos+20);
++   bool entry=stable && terminated && name[0] && cid<64;
++   if(!ri_adsp_transport_append("\nprivate_channel table=%u slot=%u name=%s cid=%u flags=%#x refs=%u entry_valid=%u",
++       t?266:13,i,name,cid,flags,refs,entry))goto finish;
++   if(!entry)continue;
++   channels++;if(!strcmp(name,"apr_audio_svc"))apr++;
++   if(t==1) {
++    if(!ri_adsp_transport_append(" bridge_layout_not_decoded=1"))goto finish;
++    continue;
++   }
++   const struct ri_adsp_record *info=&r.info[cid], *fifo=&r.fifo[cid];
++   bool info_valid=info->offset && (info->bytes==40 || info->bytes==88);
++   bool fifo_valid=fifo->offset && fifo->bytes>=128 && fifo->bytes<=0x20000 &&
++       !(fifo->bytes&(fifo->bytes-1));
++   if(!ri_adsp_transport_append(" info=%#x/%u fifo=%#x/%u layout_valid=%u",
++       info->offset,info->bytes,fifo->offset,fifo->bytes,info_valid&&fifo_valid))goto finish;
++   if(info_valid) {
++    unsigned half=info->bytes/2, tail=info->bytes==88?36:12, head=tail+4;
++    uint32_t tx=ri_rd(smem,info->offset), rx=ri_rd(smem,info->offset+half);
++    uint32_t th=ri_rd(smem,info->offset+head),tt=ri_rd(smem,info->offset+tail);
++    uint32_t rh=ri_rd(smem,info->offset+half+head),rt=ri_rd(smem,info->offset+half+tail);
++    bool indices=fifo_valid && th<fifo->bytes/2 && tt<fifo->bytes/2 &&
++        rh<fifo->bytes/2 && rt<fifo->bytes/2;
++    if(!ri_adsp_transport_append(" states=%u,%u tx_head_tail=%#x,%#x rx_head_tail=%#x,%#x indices_in_range=%u",
++        tx,rx,th,tt,rh,rt,indices))goto finish;
++   }
++  }
++ }
++ if(!ri_adsp_transport_append("\nprivate_channels=%u private_apr_audio_names=%u cached_records_scanned=0",channels,apr))goto finish;
++ for(unsigned i=0;i<3;i++)
++  if(!ri_adsp_transport_append("\nprivate_glink_item=%u present=%u offset=%#x bytes=%u",
++      478+i,r.glink[i].offset!=0,r.glink[i].offset,r.glink[i].bytes))goto finish;
++ if(r.glink[0].offset && r.glink[0].bytes==32) {
++  unsigned d=r.glink[0].offset;
++  uint32_t tr=ri_rd(smem,d),tw=ri_rd(smem,d+4),rr=ri_rd(smem,d+8),rw=ri_rd(smem,d+12);
++  bool indices=r.glink[1].offset && r.glink[2].offset && r.glink[1].bytes && r.glink[2].bytes &&
++      tr<r.glink[1].bytes && tw<r.glink[1].bytes && rr<r.glink[2].bytes && rw<r.glink[2].bytes &&
++      !((tr|tw|rr|rw)&7);
++  if(!ri_adsp_transport_append("\nprivate_glink_indices tx_read_write=%#x,%#x rx_read_write=%#x,%#x in_range_aligned=%u",
++      tr,tw,rr,rw,indices))goto finish;
++ }
++ {
++  bool stable=ri_rd(smem,0x8600c)==r.end && ri_rd(smem,0x86010)==r.cached;
++  (void)ri_adsp_transport_append("\nprivate_transport_snapshot_stable=%u",stable);
++ }
++finish:
++ if(ri_adsp_transport_truncated) {
++  size_t n=strlen(ri_adsp_note);
++  snprintf(ri_adsp_note+n,sizeof(ri_adsp_note)-n,"\nprivate_transport_output_truncated=1");
++ }
++}

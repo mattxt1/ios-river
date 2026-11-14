@@ -38,10 +38,22 @@ Amplifier identity, power, format, PLL and volume baseline remain unchanged;
 endpoint flags3 still mean discarded playback/synthetic capture. No physical
 PCM, speaker playback or microphone capture has passed.
 
-A question is pending for home responsiveness after ADSP startup. Continue
-independent source/docs work while waiting; no additional active device
-controls before that reply. Update status with the user's answer. The running
+The user confirmed iOS remains responsive after ADSP startup. Startup and
+post-start responsiveness are now both verified. No further startup request
+is needed on this boot. The running
 image is outputs/river-adsp-start-6ac8fd5.img, source through0299; do not flash.
+
+Patch0300 is prepared and host-verified: bounded passive discovery of private
+SMD table13/266 channel names, info40/88 layouts and FIFO indices, plus GLINK
+items478–480 and descriptor indices. It validates the observed partition,
+allocation bounds, duplicates, races and note capacity; bridge table266 layout
+is deliberately not decoded with table13 assumptions. No allocation, channel
+opening, FIFO consumption or IPC is added. Actual-source ASan/UBSan tests and
+dry-run application pass. Commit before full build/package. It reuses the
+same0299 start helper; next fresh-boot test repeats metadata/stage/handshake,
+then start, then --probe to discover records on the ready DSP. Physical PCM
+remains unimplemented.
+
 
 ##0299 temporary boot evidence before startup (2026-11-13)
 

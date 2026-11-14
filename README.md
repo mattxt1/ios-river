@@ -16,7 +16,8 @@ Updated November 13, 2026. `6ac8fd5` (through patch0299) temporarily booted
 to a user-confirmed responsive home screen. Stock ADSP metadata,17MiB staging,
 locked handshake setup and authenticated startup passed: all four exact power
 ACKs, PAS status0/result0 and remote ready state0x6. Read-only post-start
-surveys work; post-start home-screen confirmation is pending. Shared CX/XO
+surveys work, and the user confirmed the home screen remains responsive
+after startup. Shared CX/XO
 requirements remain enabled until reboot. Physical PCM and microphone capture
 remain unimplemented; APR transport discovery is next. See
 [AUDIO-BRINGUP.md](AUDIO-BRINGUP.md).
