@@ -5,7 +5,68 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0320 active muted PCM PASS (2026-11-14)
+## Active handoff: local-storage migration complete;0320 PCM PASS (2026-11-14)
+
+User explicitly requested this and ALL future work outside iCloud because
+Download Now repeatedly offloaded the same files. Canonical workspace:
+/Users/matttyson/Developer/Codex/2026-11-13/apr-communication-now-passes-the-dsp
+Canonical authoritative source:
+/Users/matttyson/Developer/Codex/2026-11-12/get-the-latest-from-my-ios-2/outputs/ios-river
+All future tools must use explicit canonical local working directories.
+Documents/Codex is now a compatibility SYMLINK to Developer/Codex, so new
+projectless default-path files land locally too. Global ~/.codex/AGENTS.md
+records the user's future-work preference. Original cloud tree preserved:
+/Users/matttyson/Documents/Codex-iCloud-archive-2026-11-14
+Historical archive links are read-only recovery references, never new work.
+Resident work was cloned using APFS, size/residency verified; missing tracked
+files recovered from exact latest source bundle, all uncommitted0321 changes
+retained. Local Git fsck full passed. Boot image and installed kernel matched
+known0320 SHA exactly; relocated stream tests and build-script syntax pass.
+NSFileManager confirms root/workspace/local key are NOT iCloud items.
+Cloud-only historical placeholders remain in the archive with inventories;
+this is not a claim all past offloaded caches were downloaded. No originals
+deleted. Migration records at Developer/codex-migration-*.json[l], workspace
+work/local-storage-migration.json. Active build missing small log/script
+recovery attempted; optional historical log failures recorded separately.
+
+SSH key recovered resident to Developer/Codex/.device-ssh/id_ed25519, directory
+0700/key0600. ssh-keygen parse and authenticated USB read-only codec status
+passed using that key. Private contents never printed or placed in Git.
+Legacy local SSH paths now link to this secure local identity. No further
+Download Now needed. Device is still0320 after previous full active muted
+PCM PASS4/4, all cleanup verified, amp muted/QMIpower/NGD retained. No new
+active device controls during migration. Post-test responsive question and
+Wi-Fi join result remain pending; user migration request took priority.
+The four empty Wi-Fi follow-up captures timed out before authentication while
+the old key was dataless; do NOT interpret them as phone/network failures.
+
+Verified22G74 KDK moved from /private/tmp to persistent local dependency:
+/Users/matttyson/Developer/Codex/.dependencies/river-kdk-22G74/expanded/KDK.pkg/Payload
+Old /private/tmp path is a compatibility symlink. Same version/signature/hash
+provenance; no toolchain change. Source recovery cache moved local under
+Developer/Codex/.dependencies/river-tone-source-cache. Current runner and
+packaging scripts now reference local source/key paths. Existing incremental
+build cloned resident including source/objects; exact source/kernel verified.
+Do not discard/rebuild it solely because old dirname names a prior commit.
+
+0321 quiet-tone change remains UNCOMMITTED/HARDWARE-UNVALIDATED. Kernel patch,
+helper and tests were preserved locally. Host tests (before migration) pass
+actual attenuation/deadline-mute/fault gating, tone stream buffer reuse/ramp,
+EOS identity/empty-payload validation and cleanup plus route regressions.
+Relocated stream test also passed. No0321 native build yet. New code uses
+600Hz +/-2048 sine,5ms ramps, fixed-24dB digital gain,4zero completions before
+output enable,16tone buffers, exact renderedEOS,500ms independent mute
+watchdog; output stop before DSP teardown. Audit before commit/build. Source
+generator was stopped only after kernel patch creation when it blocked on
+cloud helper source; helper edit completed from verified source archive, no
+repeated generation. Exact cached Git objects restored from verified bundle
+to recover original metadata before local clone. Preserve provenance.
+Next: finish tone audit/test/commit/nativebuild/package on LOCAL paths, verify
+concrete image before requesting fastboot; batch Wi-Fi reads on next boot.
+Physical audible playback and microphone remain pending; real iOS backend
+still discards playback/synthesizes capture. Do not claim sound from zeroPCM.
+
+##0320 active muted PCM PASS (2026-11-14)
 
 User confirmed0320 home responsive. Full sequence PASSED including corrected
 48k exponent2 channel activation with AFE already started, codec/AIF route,

@@ -37,3 +37,5 @@
 - Keep device dumps, serial numbers, private keys, firmware, and downloaded Apple artifacts out of Git.
 
 - **0320 correction**: Historical SLIMbus192-clock divisor/rootexp0 claims are superseded. Stock header uses6144 clocks/superframe (DIV8=768);48k mono16 uses coeff3/rootexp2, DEF_ACT payload byte0x20. 0320 corrected active-route zeroPCM passed4/4 with full cleanup. Audible playback/capture still pending. Read newest active NOTES.md.
+
+- **Local storage (user requirement,2026-11-14)**: Use `/Users/matttyson/Developer/Codex` and explicit canonical working directories for all future source/build/work/deliverables. Documents/Codex is only a compatibility symlink; the original cloud archive is historical recovery material. SSH identity is `.device-ssh/id_ed25519` under the local root. Persistent current KDKROOT is `/Users/matttyson/Developer/Codex/.dependencies/river-kdk-22G74/expanded/KDK.pkg/Payload`. Do not resume Download Now loops or use cloud-linked historical caches as active work. Read latest active NOTES.md.
