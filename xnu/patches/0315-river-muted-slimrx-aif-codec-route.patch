@@ -1,0 +1,302 @@
+diff --git a/bsd/dev/river_codec_clock.h b/bsd/dev/river_codec_clock.h
+--- a/bsd/dev/river_codec_clock.h
++++ b/bsd/dev/river_codec_clock.h
+@@ -15,6 +15,19 @@
+ static vm_offset_t ri_clock_mclk_obs;
+ static char ri_clock_note[1024] = "not requested";
+ 
++static int (*ri_clock_data_test)(void);
++static bool ri_clock_data_restored=true;
++static bool
++ri_codec_path_reg_write_allowed(uint16_t reg)
++{
++ if(reg>=0x700 && reg<=0x70f)return true;
++ return reg==0x505 || reg==0x509 || reg==0x50a || reg==0x5f5 || reg==0x1712 || reg==0x1713;
++}
++static bool
++ri_codec_path_reg_read_allowed(uint16_t reg)
++{
++ return ri_codec_path_reg_write_allowed(reg) || reg==0x5d2 || reg==0x5e5 || reg==0x5f6 || reg==0x5f7;
++}
+ static bool
+ ri_i2s_reg_allowed(uint16_t reg)
+ {
+@@ -28,7 +41,7 @@
+ static bool
+ ri_clock_read_allowed(uint16_t reg)
+ {
+- if (reg == 0 || reg == 1 || reg == 0x1881 || ri_i2s_reg_allowed(reg)) return true;
++ if (ri_codec_path_reg_read_allowed(reg) || reg == 0 || reg == 1 || reg == 0x1881 || ri_i2s_reg_allowed(reg)) return true;
+  for (unsigned i = 0; i < RC_COUNT; i++) if (reg == ri_clock_regs[i]) return true;
+  return false;
+ }
+@@ -36,7 +49,7 @@
+ ri_clock_write_allowed(uint16_t reg)
+ {
+  /* Restrict codec writes to the 32k/FLL controls used by this experiment. */
+- return ri_i2s_reg_allowed(reg) || reg == 0x100 || reg == 0x171 || reg == 0x172 || reg == 0x173 || reg == 0x174 ||
++ return ri_codec_path_reg_write_allowed(reg) || ri_i2s_reg_allowed(reg) || reg == 0x100 || reg == 0x171 || reg == 0x172 || reg == 0x173 || reg == 0x174 ||
+         reg == 0x175 || reg == 0x176 || reg == 0x179 || reg == 0x17a || reg == 0x185;
+ }
+ static uint16_t
+@@ -112,7 +125,7 @@
+  bool modified = false, route_touched = false, route_restored = true;
+  uint32_t route_before[2] = {0};
+  const char *phase = "snapshot";
+- if(i2s) { ri_i2s_touched=false;ri_i2s_codec_restored=true;ri_i2s_amp_restored=true;ri_i2s_amp_locked=false; }
++ if(i2s) { ri_clock_data_restored=true;ri_i2s_touched=false;ri_i2s_codec_restored=true;ri_i2s_amp_restored=true;ri_i2s_amp_locked=false; }
+  if (ri_clock_read(0) != 0x6360 || ri_clock_read(0) != 0x6360 || ri_clock_read(1) != 1) {
+   error = ENXIO; phase = "identity"; goto release;
+  }
+@@ -199,6 +212,7 @@
+  locked = ri_clock_wait_lock(true, &raw);
+  error = locked ? 0 : ETIMEDOUT;
+  if(locked && i2s) { phase="i2s_clock";error=ri_i2s_drive(); }
++ if(!error && i2s && ri_clock_data_test) {phase="codec_data_route";error=ri_clock_data_test();}
+ restore:
+  if(i2s) ri_i2s_stop_codec();
+  /* Cleanup is unconditional after the first attempted codec write, even
+diff --git a/bsd/dev/river_codec_i2s.h b/bsd/dev/river_codec_i2s.h
+--- a/bsd/dev/river_codec_i2s.h
++++ b/bsd/dev/river_codec_i2s.h
+@@ -176,7 +176,12 @@
+  if(!ri_clock_write(0x501,(ri_i2s_codec_saved[3]&~7u)|0x20)) ok=false;
+  if(!ri_clock_write(0x502,ri_i2s_codec_saved[4]&~7u)) ok=false;
+  if(!ri_clock_write(0x101,ri_i2s_codec_saved[0]&~0x40u)) ok=false;
+- for(unsigned i=0;i<16;i++) if(!ri_clock_write(ri_i2s_codec_regs[i],ri_i2s_codec_saved[i])) ok=false;
++ for(unsigned i=0;i<16;i++) {
++  /* If data sources could not be restored, leave their sample-rate field
++   * unchanged with clocks/outputs disabled until reboot. */
++  if(!ri_clock_data_restored && ri_i2s_codec_regs[i]==0x102) {ok=false;continue;}
++  if(!ri_clock_write(ri_i2s_codec_regs[i],ri_i2s_codec_saved[i]))ok=false;
++ }
+  for(unsigned i=0;i<16;i++) {
+   uint16_t mask=(ri_i2s_codec_regs[i]==0x1710||ri_i2s_codec_regs[i]==0x1714)?0x7fff:0xffff;
+   if((ri_clock_read(ri_i2s_codec_regs[i])&mask)!=(ri_i2s_codec_saved[i]&mask)) ok=false;
+@@ -187,7 +192,7 @@
+ ri_i2s_restore_amp(void)
+ {
+  if(!ri_i2s_touched) return;
+- bool ok=ri_i2s_codec_restored;
++ bool ok=ri_i2s_codec_restored && ri_clock_data_restored;
+  if(ok) {
+   // Clock consumers first; stage enable and original mute state last.
+   const unsigned order[]={3,4,5,6,7,8,2,0,1};
+@@ -199,6 +204,7 @@
+  }
+  if(!ok) {
+   // Retain protective mute/output-disable and slave clocks on cleanup failure.
++  (void)ri_i2s_amp_write(0x4800,0);
+   (void)ri_i2s_amp_write(0x2024,ri_i2s_amp_saved[1]|0x10);
+   (void)ri_i2s_amp_write(0x2018,ri_i2s_amp_saved[0]&~1u);
+   (void)ri_i2s_amp_write(0x4808,(ri_i2s_amp_saved[4]&~0x33u));
+diff --git a/bsd/dev/river_adsp_channel.h b/bsd/dev/river_adsp_channel.h
+--- a/bsd/dev/river_adsp_channel.h
++++ b/bsd/dev/river_adsp_channel.h
+@@ -1,6 +1,7 @@
+ /* One acknowledged mono48k/16-bit channel144 lifetime on codec sink port0.
+  * Exact stock Madera/scheduler/NGD parameters. No AFE start, DMA, codec/AIF
+  * writes or unmute. ri_adsp_lock serializes manager transactions. */
++static int (*ri_channel_active_test)(void);
+ static struct {
+  bool attempted,connected,defined,active,uncertain,complete;
+  unsigned tid,commands,acks,failed_opcode,failed_tid,failed_status,cleanup_error;
+@@ -97,7 +98,9 @@
+  error=ri_channel_command(base,0x24,commit,sizeof(commit),0,false);if(error)goto done;
+  ri_channel.active=true;
+  /* No sample source or AFE port is started by this channel-lifetime test. */
+- ri_wait(5);phase="channel_lifetime_complete";
++ ri_wait(5);
++ if(ri_channel_active_test) {phase="active_callback";error=ri_channel_active_test();if(error)goto done;}
++ phase="channel_lifetime_complete";
+ done:
+  ri_channel_cleanup(base);
+  ri_channel.cfg=ri_rd(base,0);ri_channel.status=ri_rd(base,4);ri_channel.interrupts=ri_rd(base,0x14);
+diff --git a/bsd/dev/river_adsp_codec_route.h b/bsd/dev/river_adsp_codec_route.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/river_adsp_codec_route.h
+@@ -0,0 +1,172 @@
++/* Muted physical codec interface preparation while the proven channel is
++ * active. Existing FLL/I2S code owns clock snapshots and restoration.
++ * No DSP samples, analog outputs or amplifier output-stage enable. */
++static struct {
++ bool attempted,touched,seen,restored,complete;
++ unsigned bad_reg;
++ uint16_t port_map,port_before,port_live,rate,fll;
++ uint32_t amp_irq;
++ int clock_error,channel_error;
++} ri_codec_path;
++static const uint16_t ri_codec_path_regs[]={
++ 0x505,0x509,0x50a,0x5f5,
++ 0x700,0x701,0x702,0x703,0x704,0x705,0x706,0x707,
++ 0x708,0x709,0x70a,0x70b,0x70c,0x70d,0x70e,0x70f,0x1712,0x1713
++};
++static char ri_codec_path_note[1536]="not requested; physical PCM/capture pending";
++static bool
++ri_codec_path_restore_write(uint16_t reg,uint16_t value)
++{
++ for(unsigned i=0;i<3;i++)if(ri_clock_write(reg,value))return true;
++ if(!ri_codec_path.bad_reg)ri_codec_path.bad_reg=reg;return false;
++}
++static int
++ri_codec_path_io(void)
++{
++ uint16_t saved[22];ri_codec_path.restored=true;
++ for(unsigned i=0;i<22;i++)saved[i]=ri_clock_read(ri_codec_path_regs[i]);
++ for(unsigned i=0;i<22;i++) {
++  uint16_t mask=ri_codec_path_regs[i]==0x1712?0x7fff:0xffff;
++  if(saved[i]==0xffff || (ri_clock_read(ri_codec_path_regs[i])&mask)!=(saved[i]&mask)) {
++   ri_codec_path.bad_reg=ri_codec_path_regs[i];return EIO;
++  }
++ }
++ ri_codec_path.port_map=ri_clock_read(0x5d2);ri_codec_path.port_before=ri_clock_read(0x5f7);
++ ri_codec_path.rate=ri_clock_read(0x5e5);
++ /* Port0, SAMPLE_RATE_1, no other RX/TX path or AIF output/mixer client.
++  * Rate fields stay unchanged; both mono mixer inputs use source0x38. */
++ if((ri_codec_path.port_map&63) || (ri_codec_path.rate&0x78) || saved[3] ||
++    ri_clock_read(0x5f6) || ri_clock_read(0x519) || ri_clock_read(0x51a) ||
++    (ri_clock_read(0x102)&31)!=3 || (ri_clock_read(0x503)&0x7800) ||
++    (saved[20]&0x1ff)>1 || !(saved[21]&0x8000))return EBUSY;
++ for(unsigned i=4;i<20;i+=2)if(saved[i]&255)return EBUSY;
++ if(!ri_i2s_quiet() || !ri_i2s_amp_locked)return EBUSY;
++ uint16_t pin_before=ri_clock_read(0x501),tx_before=ri_clock_read(0x519);
++ ri_codec_path.touched=true;ri_codec_path.restored=false;ri_clock_data_restored=false;
++ int error=0;
++ /* Stock 0dB mixer gain is raw0x40 at shift1. TXDATA is GP10 native0.
++  * Keep AMP_EN0/mute1; enable only the amplifier digital ASPRX1 receiver. */
++ if(!ri_clock_write(0x505,(saved[0]&~0x1fffu)|32) ||
++    !ri_clock_write(0x509,saved[1]&~63u) || !ri_clock_write(0x50a,(saved[2]&~63u)|1) ||
++    !ri_clock_write(0x701,(saved[5]&~0xfeu)|0x80) ||
++    !ri_clock_write(0x709,(saved[13]&~0xfeu)|0x80) ||
++    !ri_clock_write(0x700,(saved[4]&~255u)|0x38) ||
++    !ri_clock_write(0x708,(saved[12]&~255u)|0x38) ||
++    !ri_clock_write(0x1712,saved[20]&~0x1ffu) ||
++    !ri_clock_write(0x1713,saved[21]&~0xe000u) ||
++    !ri_clock_write(0x5f5,saved[3]|1) ||
++    !ri_i2s_amp_write(0x4800,0x10000) ||
++    !ri_clock_write(0x519,3) || !ri_clock_write(0x501,pin_before&~0x20u)) {
++  error=EIO;goto restore;
++ }
++ for(unsigned i=0;i<20;i++) {
++  ri_codec_path.port_live=ri_clock_read(0x5f7);ri_codec_path.fll=ri_clock_read(0x1881);
++  if(!ri_i2s_quiet() || !ri_cs35l41_rd(0x10098,&ri_codec_path.amp_irq) ||
++     (ri_codec_path.amp_irq&0x10) || ri_codec_path.amp_irq==0xffffffff ||
++     !(ri_codec_path.fll&0x100) || ri_codec_path.fll==0xffff ||
++     ri_clock_read(0x519)!=3 || (ri_clock_read(0x501)&0x20) ||
++     (ri_clock_read(0x700)&255)!=0x38 || (ri_clock_read(0x708)&255)!=0x38) {
++   error=EIO;goto restore;
++  }
++  if(!(ri_codec_path.port_live&1)) {error=ENXIO;goto restore;}
++  ri_wait(5);
++ }
++ ri_codec_path.seen=true;
++restore:
++ {
++  bool restored=ri_i2s_amp_write(0x4800,0);
++  if(!ri_codec_path_restore_write(0x501,pin_before|0x20))restored=false;
++  if(!ri_codec_path_restore_write(0x519,tx_before))restored=false;
++  if(!ri_codec_path_restore_write(0x1713,saved[21]|0x8000))restored=false;
++  if(!ri_codec_path_restore_write(0x1712,(saved[20]&~0x1ffu)|1))restored=false;
++  /* Clear source selections and wait >125us before clock/sample-rate restore. */
++  if(!ri_codec_path_restore_write(0x700,saved[4]&~255u))restored=false;
++  if(!ri_codec_path_restore_write(0x708,saved[12]&~255u))restored=false;
++  ri_wait(1);
++  if(!ri_codec_path_restore_write(0x5f5,saved[3]))restored=false;
++  for(unsigned i=0;i<22;i++)if(!ri_codec_path_restore_write(ri_codec_path_regs[i],saved[i]))restored=false;
++  if(!ri_codec_path_restore_write(0x501,pin_before))restored=false;
++  for(unsigned i=0;i<22;i++) {
++   uint16_t mask=ri_codec_path_regs[i]==0x1712?0x7fff:0xffff;
++   if((ri_clock_read(ri_codec_path_regs[i])&mask)!=(saved[i]&mask)) {
++    restored=false;if(!ri_codec_path.bad_reg)ri_codec_path.bad_reg=ri_codec_path_regs[i];
++   }
++  }
++  ri_codec_path.restored=restored;ri_clock_data_restored=restored;
++  if(!restored)error=EIO;
++ }
++ return error;
++}
++static int
++ri_codec_path_preflight(void)
++{
++ struct ri_codec_saved_pins pins;
++ int error=ri_codec_bus_take(&pins,ri_codec_path_note,sizeof(ri_codec_path_note));
++ if(error)return error;
++ /* Reject foreign source selections before the FLL helper changes rate1. */
++ if(ri_clock_read(0)!=0x6360 || ri_clock_read(0)!=0x6360 || ri_clock_read(1)!=1)error=ENXIO;
++ if(!error && ((ri_clock_read(0x5d2)&63) || (ri_clock_read(0x5e5)&0x78) ||
++    ri_clock_read(0x5f5) || ri_clock_read(0x5f6) || ri_clock_read(0x519) ||
++    ri_clock_read(0x51a) || (ri_clock_read(0x1712)&0x1ff)>1 ||
++    !(ri_clock_read(0x1713)&0x8000)))error=EBUSY;
++ for(unsigned reg=0x700;!error && reg<=0x70e;reg+=2)if(ri_clock_read(reg)&255)error=EBUSY;
++ if(!ri_codec_bus_release(&pins))error=EIO;
++ return error;
++}
++static int
++ri_codec_path_clock(void)
++{
++ lck_mtx_lock(&ri_codec_lock);lck_mtx_lock(&ri_speaker_lock);
++ uint32_t mute=0;
++ int error=EBUSY;
++ if(ri_afe_mute_hold && ri_cs35l41_rd(0x2024,&mute) && (mute&0x10) && !ri_clock_attempted) {
++  error=ri_codec_path_preflight();
++  if(!error) {
++   ri_clock_data_test=ri_codec_path_io;
++   error=ri_clock_run_impl(true,true,true);ri_clock_data_test=NULL;
++  }
++ }
++ ri_codec_path.clock_error=error;
++ lck_mtx_unlock(&ri_speaker_lock);lck_mtx_unlock(&ri_codec_lock);return error;
++}
++static int
++ri_codec_path_run(void)
++{
++ if(ri_codec_path.attempted)return EALREADY;
++ if(!ri_stream.complete || !ri_route_ready() || !ri_route.muted || !ri_afe_mute_hold ||
++    !ri_ngd.address_valid || !ri_ngd.enabled || ri_ngd.uncertain || ri_channel.attempted)return EBUSY;
++ ri_codec_path.attempted=true;
++ ri_channel_active_test=ri_codec_path_clock;
++ int error=ri_channel_test();ri_channel_active_test=NULL;ri_codec_path.channel_error=error;
++ ri_codec_path.complete=!error && ri_codec_path.seen && ri_codec_path.restored &&
++  ri_channel.complete && ri_i2s_codec_restored && ri_i2s_amp_restored;
++ if(!error && !ri_codec_path.complete)error=EIO;
++ snprintf(ri_codec_path_note,sizeof(ri_codec_path_note),
++  "phase=%s error=%d attempted=%u complete=%u route_seen=%u touched=%u route_restored=%u bad_reg=%#x port_map=%#x port_before=%#x port_live=%#x rate=%#x fll=%#x amp_irq=%#x clock_error=%d channel_error=%d channel_complete=%u connected=%u defined=%u active=%u uncertain=%u aif_restored=%u amp_restored=%u amp_locked=%u amp_mute_retained=%u amp_output_stage_test_policy=disabled dsp_samples_submitted=0 ios_backend=discarded capture=synthetic last_native_clock={%s}",
++  ri_codec_path.complete?"muted_codec_route_complete":"muted_codec_route_stopped",error,
++  ri_codec_path.attempted,ri_codec_path.complete,ri_codec_path.seen,ri_codec_path.touched,
++  ri_codec_path.restored,ri_codec_path.bad_reg,ri_codec_path.port_map,ri_codec_path.port_before,
++  ri_codec_path.port_live,ri_codec_path.rate,ri_codec_path.fll,ri_codec_path.amp_irq,
++  ri_codec_path.clock_error,ri_codec_path.channel_error,ri_channel.complete,ri_channel.connected,
++  ri_channel.defined,ri_channel.active,ri_channel.uncertain,ri_i2s_codec_restored,
++  ri_i2s_amp_restored,ri_i2s_amp_locked,ri_route.muted,ri_clock_note);
++ printf("RIVER CODEC PATH: %s\n",ri_codec_path_note);return error;
++}
++static int
++river_adsp_codec_path_sysctl SYSCTL_HANDLER_ARGS
++{
++ int value=0,error=sysctl_handle_int(oidp,&value,0,req);
++ if(error || !req->newptr)return error;
++ if(value!=1)return EINVAL;
++ lck_mtx_lock(&ri_adsp_lock);error=ri_codec_path_run();lck_mtx_unlock(&ri_adsp_lock);return error;
++}
++static int
++river_adsp_codec_path_status_sysctl SYSCTL_HANDLER_ARGS
++{
++ lck_mtx_lock(&ri_adsp_lock);int error=sysctl_handle_string(oidp,ri_codec_path_note,sizeof(ri_codec_path_note),req);
++ lck_mtx_unlock(&ri_adsp_lock);return error;
++}
++SYSCTL_PROC(_debug,OID_AUTO,river_adsp_codec_path,CTLTYPE_INT|CTLFLAG_RW|CTLFLAG_LOCKED,
++ NULL,0,river_adsp_codec_path_sysctl,"I","Explicit muted codec SLIMRX to AIF1 route test");
++SYSCTL_PROC(_debug,OID_AUTO,river_adsp_codec_path_status,CTLTYPE_STRING|CTLFLAG_RD|CTLFLAG_LOCKED,
++ NULL,0,river_adsp_codec_path_status_sysctl,"A","Last muted codec route/restoration result");
+diff --git a/bsd/dev/river_adsp_probe.h b/bsd/dev/river_adsp_probe.h
+--- a/bsd/dev/river_adsp_probe.h
++++ b/bsd/dev/river_adsp_probe.h
+@@ -111,6 +111,7 @@
+ #include "river_adsp_slim.h"
+ #include "river_adsp_ngd.h"
+ #include "river_adsp_channel.h"
++#include "river_adsp_codec_route.h"
+ 
+ static int
+ river_adsp_probe_sysctl SYSCTL_HANDLER_ARGS

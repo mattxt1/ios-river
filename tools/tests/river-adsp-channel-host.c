@@ -120,6 +120,8 @@ static void channel_reset(unsigned index,unsigned kind)
  hardware_connected=hardware_defined=hardware_active=remove_pending=false;
  channel_mode=true;channel_sends=0;fail_index=index;fail_kind=kind;
 }
+static unsigned callback_count;static int callback_error;
+static int active_callback(void) {assert(ri_channel.connected && ri_channel.defined && ri_channel.active);callback_count++;return callback_error;}
 int main(void)
 {
  ngd_baseline_main();
@@ -143,6 +145,9 @@ int main(void)
  channel_reset(0,0);raw(0x14,0x40000000);assert(ri_channel_test()==EBUSY && !ri_channel.attempted && !channel_sends);
  channel_reset(0,0);raw(0x10,1);assert(ri_channel_test()==EBUSY && !channel_sends);
  channel_reset(0,0);mode=12;assert(ri_channel_test()==ENOMEM && !ri_channel.attempted);
+ channel_reset(0,0);callback_count=0;callback_error=0;ri_channel_active_test=active_callback;assert(!ri_channel_test() && callback_count==1 && ri_channel.complete);
+ channel_reset(0,0);callback_count=0;callback_error=EIO;ri_channel_active_test=active_callback;assert(ri_channel_test()==EIO && callback_count==1 && !ri_channel.connected && !ri_channel.defined && !ri_channel.active && !ri_channel.cleanup_error);
+ ri_channel_active_test=NULL;
  puts("actual-code codec sink/connect activate/reconfigure/remove/disconnect and ACK ownership/failure tests passed");
  return 0;
 }
