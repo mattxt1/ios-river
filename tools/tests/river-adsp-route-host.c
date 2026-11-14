@@ -32,12 +32,20 @@ static int ri_pcm_transaction(struct ri_apr_request *r,struct ri_apr_reply *p)
   assert(!memcmp(r->payload,expected,sizeof(expected)));break;
  }
  case 0x100f0:
-  assert(r->words==6 && r->payload[0]==((36u<<16)|0x4000) && r->response==0x10106);
+  assert(r->words==6 && r->payload[0]==((24u<<16)|0x4000) && r->response==0x10106);
   p->data[0]=2;p->words=1;
-  if(mode==2 || mode==3) {
+  if(mode==2 || mode==3 || mode>=6) {
    uint32_t data[]={0,0x1020c,0x10212,24,1,16u<<16,1u<<16,144,0,48000};
    memcpy(p->data,data,sizeof(data));p->words=10;
    if(mode==3)p->data[9]++;
+   if(mode==6) {p->words=13;p->data[10]=0xabcdef01;p->data[11]=0x12345678;}
+   if(mode==7)p->data[3]=36;
+   if(mode==8)p->data[3]|=1u<<16;
+   if(mode==9)p->words=9;
+   if(mode==10)p->data[1]++;
+   if(mode==11)p->data[2]++;
+   if(mode==12)p->data[4]++;
+
   }
   break;
  case 0x100e5:case 0x100e6:
@@ -87,6 +95,8 @@ int main(void)
  assert(!ri_route.afe_started && !ri_route.asm_open && !ri_route.adm_open);
  assert(ri_route_test(true)==EALREADY && ri_route_test(false)==EALREADY);
  reset(2);assert(ri_route_config()==0 && ri_route.config_readback);
+ reset(6);assert(ri_route_config()==0 && ri_route.config_readback && ri_route.get_words==13 && ri_route.get_bytes==24);
+ for(unsigned m=7;m<=12;m++) {reset(m);assert(ri_route_config()==EIO && !ri_route.configured);}
  reset(3);assert(ri_route_config()==EIO && !ri_route.configured);assert(ri_route_test(false)==EBUSY);
  reset(1);fail_opcode=0x100ef;assert(ri_route_config()==EREMOTE && !ri_route.configured && commands==1);
  const uint32_t failures[]={0x10db3,0x10d98,0x10326,0x10325};

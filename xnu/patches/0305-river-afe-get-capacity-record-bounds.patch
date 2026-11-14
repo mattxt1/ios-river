@@ -1,0 +1,53 @@
+diff --git a/bsd/dev/river_adsp_route.h b/bsd/dev/river_adsp_route.h
+--- a/bsd/dev/river_adsp_route.h
++++ b/bsd/dev/river_adsp_route.h
+@@ -6,6 +6,7 @@
+  bool asm_open,asm_format,adm_open,matrix,afe_started,muted;
+  unsigned session;
+  uint32_t copp,failed_opcode,failed_status,cleanup_opcode,cleanup_status,get_status;
++ uint32_t get_words,get_module,get_param,get_bytes,get_config[6];
+  int cleanup_error;
+ } ri_route;
+ static char ri_route_note[1536]="not requested; physical PCM pending";
+@@ -13,9 +14,12 @@
+ ri_route_result(const char *phase,int error)
+ {
+  snprintf(ri_route_note,sizeof(ri_route_note),
+-  "phase=%s error=%d poisoned=%u config_attempted=%u configured=%u config_readback=%u get_status=%#x cold_attempted=%u hot_attempted=%u session=%u asm_open=%u asm_format=%u adm_open=%u copp=%u matrix=%u afe_started=%u amp_mute_retained=%u failed_opcode=%#x failed_status=%#x cleanup_error=%d cleanup_opcode=%#x cleanup_status=%#x transactions=%u rx_header=%#x rx_source=%#x rx_destination=%#x rx_token=%#x rx_opcode=%#x playback=discarded capture=synthetic",
++  "phase=%s error=%d poisoned=%u config_attempted=%u configured=%u config_readback=%u get_status=%#x get_words=%u get_module=%#x get_param=%#x get_bytes=%#x get_config=%#x,%#x,%#x,%#x,%#x,%#x cold_attempted=%u hot_attempted=%u session=%u asm_open=%u asm_format=%u adm_open=%u copp=%u matrix=%u afe_started=%u amp_mute_retained=%u failed_opcode=%#x failed_status=%#x cleanup_error=%d cleanup_opcode=%#x cleanup_status=%#x transactions=%u rx_header=%#x rx_source=%#x rx_destination=%#x rx_token=%#x rx_opcode=%#x playback=discarded capture=synthetic",
+   phase,error,ri_pcm.poisoned,ri_route.config_attempted,ri_route.configured,
+-  ri_route.config_readback,ri_route.get_status,ri_route.cold_attempted,ri_route.hot_attempted,
++  ri_route.config_readback,ri_route.get_status,ri_route.get_words,ri_route.get_module,
++  ri_route.get_param,ri_route.get_bytes,ri_route.get_config[0],ri_route.get_config[1],
++  ri_route.get_config[2],ri_route.get_config[3],ri_route.get_config[4],ri_route.get_config[5],
++  ri_route.cold_attempted,ri_route.hot_attempted,
+   ri_route.session,ri_route.asm_open,ri_route.asm_format,ri_route.adm_open,
+   ri_route.copp,ri_route.matrix,ri_route.afe_started,ri_route.muted,
+   ri_route.failed_opcode,ri_route.failed_status,ri_route.cleanup_error,
+@@ -60,9 +64,16 @@
+  ri_route.configured=true;
+  /* GET of a hardware config may be unsupported even when SET succeeded.
+   * This optional diagnostic never converts a rejected SET into success. */
+- uint32_t get[]={(36u<<16)|0x4000,0,0,0,0x1020c,0x10212};
++ /* GET capacity describes parameter data, excluding its12-byte record
++  * header. Parse the self-declared record; bounded transport tail is opaque. */
++ uint32_t get[]={(24u<<16)|0x4000,0,0,0,0x1020c,0x10212};
+  struct ri_apr_request request={0x504,0x404,0,0x100f0,0x10106,get,6};
+  error=ri_pcm_transaction(&request,&reply);ri_route.get_status=reply.status;
++ ri_route.get_words=reply.words;
++ if(reply.words>=4) {
++  ri_route.get_module=reply.data[1];ri_route.get_param=reply.data[2];ri_route.get_bytes=reply.data[3];
++ }
++ if(reply.words>=10)memcpy(ri_route.get_config,reply.data+4,sizeof(ri_route.get_config));
+  if(error==EREMOTE && (reply.status==2 || reply.status==3))
+   return ri_route_result("afe_config_accepted_get_rejected",0);
+  if(error) {ri_route.configured=false;return ri_route_result("afe_config_get",error);}
+@@ -70,7 +81,7 @@
+  ri_route.get_status=reply.data[0];
+  if(reply.data[0]==2 || reply.data[0]==3)return ri_route_result("afe_config_accepted_get_rejected",0);
+  if(reply.data[0]) {ri_route.configured=false;return ri_route_result("afe_config_get_rejected",EREMOTE);}
+- if(reply.words!=10 || reply.data[1]!=0x1020c || reply.data[2]!=0x10212 ||
++ if(reply.words<10 || reply.data[1]!=0x1020c || reply.data[2]!=0x10212 ||
+     reply.data[3]!=24 || memcmp(reply.data+4,config,sizeof(config))) {
+   /* An inconsistent accepted configuration blocks dependent route tests. */
+   ri_route.configured=false;return ri_route_result("afe_config_mismatch",EIO);

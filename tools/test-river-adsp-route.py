@@ -11,7 +11,10 @@ p=patch.split('diff --git a/bsd/dev/river_adsp_route.h',1)[1].split('diff --git 
 source='\n'.join(x[1:] for x in p.splitlines() if x.startswith('+') and not x.startswith('+++'))+'\n'
 source=source.split('static int\nriver_adsp_route_sysctl',1)[0]
 with tempfile.TemporaryDirectory(prefix='river-adsp-route-') as directory:
- root=Path(directory);(root/'route-actual.h').write_text(source)
+ root=Path(directory)
+ target=root/'source/bsd/dev/river_adsp_route.h';target.parent.mkdir(parents=True);target.write_text(source)
+ subprocess.run(['patch','--batch','--silent','-p1','-d',str(root/'source')],input=(repo/'xnu/patches/0305-river-afe-get-capacity-record-bounds.patch').read_bytes(),check=True)
+ (root/'route-actual.h').write_text(target.read_text())
  binary=root/'route'
  subprocess.run([os.environ.get('CC','cc'),'-O1','-g','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-I',str(root),str(repo/'tools/tests/river-adsp-route-host.c'),'-o',str(binary)],check=True)
  subprocess.run([str(binary)],check=True)
@@ -22,6 +25,7 @@ if args.kernel_source:
   for name in ['bsd/dev/sweet_keys.c','bsd/dev/river_adsp_pcm.h','bsd/dev/river_adsp_probe.h']:
    p=root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes((args.kernel_source/name).read_bytes())
   subprocess.run(['patch','--batch','--silent','-p1','-d',str(root)],input=(repo/'xnu/patches/0304-river-afe-config-adm-matrix-routing.patch').read_bytes(),check=True)
+  subprocess.run(['patch','--batch','--silent','-p1','-d',str(root)],input=(repo/'xnu/patches/0305-river-afe-get-capacity-record-bounds.patch').read_bytes(),check=True)
   s=(root/'bsd/dev/sweet_keys.c').read_text();start=s.index('static void\nriver_speaker_set_volume_locked(');end=s.index('\nvoid\nriver_speaker_set_volume(',start)
   (root/'volume-actual.h').write_text(s[start:end])
   harness=(repo/'tools/tests/river-speaker-volume-host.c').read_text().replace('static bool ri_speaker_ok;','static bool ri_speaker_ok,ri_afe_mute_hold;')
@@ -32,4 +36,4 @@ if args.kernel_source:
  ''')
   (root/'volume-host.c').write_text(harness)
   binary=root/'volume';subprocess.run(['cc','-O1','-g','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-I',str(root),str(root/'volume-host.c'),'-o',str(binary)],check=True);subprocess.run([str(binary)],check=True)
-  print('0304 patch dry-run/application and actual speaker mute policy passed')
+  print('0304/0305 patch application and actual speaker mute policy passed')
