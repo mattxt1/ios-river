@@ -5,7 +5,27 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0314 muted codec channel lifetime image ready (2026-11-14)
+## Active handoff:0314 channel lifetime PASS, responsive (2026-11-14)
+
+User confirmed0314 home and post-test iOS STILL RESPONSIVE. Full PCM/QMI/
+NGD/address prerequisite sequence passed again. --channel-test passed six
+commands/six matching success ACKs: CONNECT_SINK0x2d, DEF_ACT_CHAN0x21,
+RECONFIG0x24, REMOVE0x23, RECONFIG0x24, DISCONNECT0x2e. Last TID0x77/ACK0x20.
+phase=channel_lifetime_complete,error0,complete1,connected0,defined0,active0,
+uncertain0,cleanup_error0. CodecLA0x8a/sink0/shared144/mono48k16-bit.
+NGD CFG1/status0x5c40e/INT_STAT0; IRQ_EN0/DMA0. Amp mute retained and baseline
+otherwise unchanged. No AFE/codec AIF route or physical sample stream in
+channel test. Current phone0314 has controller and QMI power retained,
+channel removed/disconnected, PCM resources closed/page unmapped/retained.
+Do not repeat one-shot controls. Evidence work/slim-channel/{baseline,
+metadata,stage,handshake,start,pre-query,core,map,asm,afe,post-query,
+afe-config,adm-route,pcm-silence,post-stream,slim-discover,slim-power,slim-ngd,
+ngd-enumerate,ngd-status,channel-test,channel-status,post-slim,wifi-monitor}-068df37.txt.
+Next: pinned codec SLIMRX->AIF1 routing with existing verified FLL/BCLK
+sequence, retaining hardware amp mute. Physical playback and capture pending.
+Use exact recovered local KDK outside iCloud per next build record.
+
+##0314 muted codec channel lifetime image ready (2026-11-14)
 
 0313 capability/query and all previous PCM/QMI stages passed; user confirmed
 responsive after full test. Current phone remains0313, NGD enabled/power

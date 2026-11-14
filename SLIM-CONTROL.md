@@ -92,3 +92,10 @@ presence0x83. Fresh TIDs match generic ACK success bit0x20. Unknown completion
 halts cleanup and retains ownership until reboot; known NACK permits cleanup
 of accepted resources. No AFE start, codec/AIF routing, DMA or unmute.
 Host tests/build pass; manager/codec channel behavior awaits hardware test.
+
+##0314 hardware verified
+
+Six commands/six matched ACKs, TIDs0x72–0x77, final ACK0x20. Codec0x8a/sink0/
+channel144,48k16-bit. All connected/defined/active flags0 after cleanup,
+uncertain0/cleanup_error0. NGD CFG1/status0x5c40e/INT_STAT0. User confirmed
+responsive iOS. No physical codec AIF/sample route yet.

@@ -4,6 +4,14 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+##0314 codec channel lifetime verified
+
+Sink0/channel144 connection, mono48k16-bit activation/reconfiguration,
+removal and disconnection all received matching success ACKs. All channel
+ownership flags cleared, no uncertainty; user confirmed responsive iOS.
+PCM/QMI/enumeration passed again. Codec SLIMRX-to-AIF routing and physical
+sample output remain pending, with amplifier mute retained.
+
 ##0314 codec-channel lifetime candidate ready
 
 The verified next image batches codec sink0/shared channel144 connection,
