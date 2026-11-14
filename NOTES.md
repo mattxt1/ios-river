@@ -5,7 +5,33 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0319 temporarily booted; home check pending (2026-11-14)
+## Active handoff:0319 channel reconfigure NACK; rate defect found (2026-11-14)
+
+User confirmed0319 home responsive. Standalone PCM4/4 and knownQMI/enum
+passed. AFEbeforechannel START passed. New preflight captured CFG1,
+STATUS0x1a40e,IRQ_EN0,IRQ_STAT0x01000000,IE0x10000,VE0,version0x1050000;
+known notification cleared, preflight2polls. Sink connect/define ACKed,
+RECONFIG0x24/TID0x74 NACKstatus0x0a. Cleanup6/6ACKs fully removed/disconnected,
+no uncertainty. No codec writes/PCMsubmission in active attempt. Final codec
+flags explicitly AFEstarted0,DSPcleanup_error0,live_mapped0,inflight0,mute1.
+Older nested livePCM snapshot afe_started1 is pre-cleanup. User post-test
+responsiveness asked; reply pending. Current phone0319; no active retries.
+Evidence work/codec-pcm-preflight/*-97104d3.txt.
+
+Source re-audit found implementation error, not a proven firmware fault:
+stock include/linux/slimbus/slimbus.h SLIM_CL_PER_SUPERFRAME is6144, DIV8=768.
+Earlier0314 implementation/docs incorrectly used192. NGDrootfreq24576000>>3
+=3072000; superfreq=4000. Madera base4000,rate multiplier12 =>coeff3/rootexp2,
+so DEF_ACT third payload byte must0x20, not0. Presence remains0x83, sizebyte0x24.
+Old isolated activation succeeded with an inconsistent channel rate; it did
+not prove48k sample compatibility. User informed of this mistake directly.
+0320 corrects exponent and adds exact pinned stock property functions/header
+constants to host test; wire payload must match independently derived stock
+48k values. This supersedes earlier192/exp0 assertions throughout historical
+NOTES/SLIM-CONTROL entries. Hardware verification pending. Physical playback/
+capture remain pending. Wi-Fi logger preserved; no fresh0319 join requested.
+
+##0319 temporarily booted; home check pending (2026-11-14)
 
 Source97104d33f0043925bb66a7179d52bde2f3a98732 through0319 committed before
 native build.0318 AFE-before-channel start passed but initial controller
