@@ -327,3 +327,10 @@ native snapshot. Configd rankNever, no connected/local route/NWI/resolvers.
 This localizes disappearance after acceptance; policy owner unresolved.
 Kernel log partial/SSH timeout, other four diagnostic reads complete.
 No network override applied; private work/codec-pcm-order/join-* captures.
+
+##0320 kernel address observation
+
+Combined image preserves verified publication observer and adds read-only
+getifaddrs to river-network-config-state: kernel flags/IPv4/mask for en0/ue0
+before route/SC state. Compile/sign and packed bytes verified; no configuration
+behavior change or native setter call. Device verification/fresh join pending.

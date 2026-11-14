@@ -421,3 +421,57 @@ constants to host test; wire payload must match independently derived stock
 NOTES/SLIM-CONTROL entries. Hardware verification pending. Physical playback/
 capture remain pending. Wi-Fi logger preserved; no fresh0319 join requested.
 
+
+##0320 corrected48k channel image ready (2026-11-14)
+
+User confirmed0319 post-sequence iOS responsive. Current phone0319; prior
+standalone PCM4/4/AFEstart passed; codec sink reconfiguration NACK0x0a, then
+all owned AFE/channel cleanup succeeded with explicit final flags0/errors0.
+Do not retry one-shots. Physical playback/capture still pending.
+0320 sourceb4c6d67fdc7aa089ea67d1b2b9cf583ab67ef283 committed before build.
+Corrects DEF_ACT rate-exponent payload0x00->0x20. Stock header6144 clocks,
+DIV8=768, NGDroot3072000/superfreq4000; Madera multiplier12 =>coeff3/exp2,
+HARD_ISO0, presence0x83,16-bit size/coeff0x24. Old192/exp0 derivation was an
+implementation error and all historical claims based on it are superseded.
+User informed plainly. Earlier isolated activation ACK did not prove48k
+sample compatibility. Hardware correction validation pending.
+
+Host test now includes exact pinned GPL stock slim_calc_prrate and
+slim_nextdefine_ch functions plus source header constants/enums in
+ tools/tests/river-stock-slim-properties.h (source blobs in its header).
+Actual outgoing wire must equal independent stock-derived properties;
+48k exponent2/coeff3/presence0x83 asserted. Full actual-code NGD/channel
+ACK/failure/cleanup regressions pass. Native incremental0320 exited0,
+changed sweet_keys compilation/exact header/new kernel checked. Prior kernel
+preserved work/codec-pcm-preflight/kernel-97104d3.verified. Ledger
+work/codec-pcm-rate/incremental-provenance.json; existing isolated job
+work/build/river-3fc706c1db3d-TK5NtT; exact recovered KDKROOT remains
+/private/tmp/river-kdk-22G74-qq2pjbum/expanded/KDK.pkg/Payload.
+Host file reads stalled on iCloud again (package script observed dataless).
+Hydrated targeted scripts in place; original native build completed exit0,
+no duplicate build. Do not mistake host file stalls for phone failure.
+Kernel SHA5ca2143ef2e62fc6870a39516c7232d029ccddf2f2b87bfb297bee7e1d1b8f69.
+Image outputs/river-codec-pcm-rate-b4c6d67.img:26890240bytes,577cmdline,
+SHAfc239223856132fdec69295bd73812031ad596c1e789d44d34cbf0f932674c20.
+Fastboot requested; no0320 boot yet. Temporary boot only; never flash.
+
+Wi-Fi secondary in SAME image: commitc88a84269df28d8201bc5ce8f9b7c8fd8bd0280b
+adds bounded read-only getifaddrs observations of actual kernel en0/ue0
+interface flags/IPv4/mask before existing route/SC state. No configuration
+writes, credential access or IPC mutations. Native helper compile -Werror
+and signing pass; SHA42dc1c95e39dae609c566438142c51e2dad5fce541a2b92824418e7753dfb5f4.
+Packer supports optional network-state helper and verifies all unrelated
+actual RiverFiles metadata/content, kernel segments and limits. Existing
+observer daemon SHA962ae614... preserved. No rank/route/DNS override.
+This distinguishes actual kernel-address removal from only SC disappearance
+on next spinner join. No fresh0319 join requested; last0318 evidence retained.
+
+After readiness: verify productriver/hash, USBcapture work/codec-pcm-rate/
+capture-boot.py, temporary boot, ask home responsive. Inspect passive baseline
+then run work/codec-pcm-rate/run-device.py ONCE. No earlier --channel-test or
+--codec-route (same lifetime). Capture active PCM status/final cleanup and
+post-responsive check. Verify new network-state reader hash, then fresh Wi-Fi
+join and monitor/config/scalar/DNS reads (kernel log optional bounded).
+Next after corrected active PCM PASS: bounded quiet tone, real iOS backend,
+physical microphone. Do not claim audible output from zeroPCM completions.
+
