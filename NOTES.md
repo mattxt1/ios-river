@@ -5,7 +5,22 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
-## Active handoff:0317 temporarily booted; home check pending (2026-11-14)
+## Active handoff:0317 AFE start rejected, clean teardown, responsive (2026-11-14)
+
+User confirmed home and post-sequence iOS responsive. Known standalone PCM
+session4 passed4/4 again, QMI/NGD/codecLA/channel activation and codec route
+passed. Active-route session5 mapped separate16KiB at0x20804000, reapplied
+AFE SET/GET successfully, then AFE START0x100e5 returned matched DSPstatus1
+(error71), before ASMopen/RUN/WRITE. submitted/completed0. No uncertainty:
+live mapping unmapped, codec/AIF/amp/clock/pins restored, channel6/6ACKs
+fully removed/disconnected, amp mute retained. route_seen1 FLL0x100,
+ampIRQ0x2000000a. No active-route PCM success claimed. Current phone0317;
+all active one-shots consumed, QMIpower/NGD retained. Do not retry controls.
+Private evidence work/codec-pcm/*-b9fe8ea.txt, especially codec-pcm/status.
+Next: audit/adjust AFE lifetime ordering relative to codec sink activation.
+DSPstatus1 alone does not prove the cause. Physical playback/capture pending.
+
+##0317 temporarily booted; home check pending (2026-11-14)
 
 0316 muted codec route PASSED with full restoration and user-confirmed
 post-test responsive iOS. Phone remains0316, amplifier muted, QMIpower/NGD

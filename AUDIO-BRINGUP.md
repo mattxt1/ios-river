@@ -673,3 +673,19 @@ No Wi-Fi override or code change in0317. Source audit still points toward
 native configd/IPConfiguration service lifetime after association; owner
 unresolved. Keep secondary, retain private diagnostics outside Git.
 
+
+##0317 AFE start rejected, clean teardown, responsive (2026-11-14)
+
+User confirmed home and post-sequence iOS responsive. Known standalone PCM
+session4 passed4/4 again, QMI/NGD/codecLA/channel activation and codec route
+passed. Active-route session5 mapped separate16KiB at0x20804000, reapplied
+AFE SET/GET successfully, then AFE START0x100e5 returned matched DSPstatus1
+(error71), before ASMopen/RUN/WRITE. submitted/completed0. No uncertainty:
+live mapping unmapped, codec/AIF/amp/clock/pins restored, channel6/6ACKs
+fully removed/disconnected, amp mute retained. route_seen1 FLL0x100,
+ampIRQ0x2000000a. No active-route PCM success claimed. Current phone0317;
+all active one-shots consumed, QMIpower/NGD retained. Do not retry controls.
+Private evidence work/codec-pcm/*-b9fe8ea.txt, especially codec-pcm/status.
+Next: audit/adjust AFE lifetime ordering relative to codec sink activation.
+DSPstatus1 alone does not prove the cause. Physical playback/capture pending.
+
