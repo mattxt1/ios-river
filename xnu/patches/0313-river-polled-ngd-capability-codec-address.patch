@@ -1,0 +1,181 @@
+diff --git a/bsd/dev/river_adsp_ngd.h b/bsd/dev/river_adsp_ngd.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/river_adsp_ngd.h
+@@ -0,0 +1,165 @@
++/* One source-defined polled NGD capability exchange and Madera address query.
++ * Register-message fallback, no BAM/DMA/data channels or interrupt enable.
++ * ri_adsp_lock owns this experiment; successful controller/power stay enabled. */
++static struct {
++ bool attempted,owned,enabled,master,reported,query_sent,address_valid,uncertain,disabled;
++ uint32_t cfg,status,interrupts,ie,ve,rx_first,rx_second,tx_first;
++ unsigned rx_count,tx_count,polls,codec_address,restore_error;
++} ri_ngd;
++static char ri_ngd_note[1536]="not requested; physical playback/capture pending";
++static int
++ri_ngd_result(const char *phase,int error)
++{
++ snprintf(ri_ngd_note,sizeof(ri_ngd_note),
++  "phase=%s error=%d attempted=%u owned=%u enabled_retained=%u master_capability=%u satellite_reported=%u query_sent=%u codec_address_valid=%u codec_address=%#x uncertain=%u disabled_after_error=%u restore_error=%u cfg=%#x status=%#x interrupts=%#x ie=%#x ve=%#x rx_first=%#x rx_second=%#x tx_first=%#x rx_count=%u tx_count=%u polls=%u dma=0 irq_enable=0 data_channels=0 codec_stream=0 amp_unmuted=0",
++  phase,error,ri_ngd.attempted,ri_ngd.owned,ri_ngd.enabled,ri_ngd.master,
++  ri_ngd.reported,ri_ngd.query_sent,ri_ngd.address_valid,ri_ngd.codec_address,
++  ri_ngd.uncertain,ri_ngd.disabled,ri_ngd.restore_error,ri_ngd.cfg,ri_ngd.status,
++  ri_ngd.interrupts,ri_ngd.ie,ri_ngd.ve,ri_ngd.rx_first,ri_ngd.rx_second,
++  ri_ngd.tx_first,ri_ngd.rx_count,ri_ngd.tx_count,ri_ngd.polls);
++ printf("RIVER NGD: %s\n",ri_ngd_note);return error;
++}
++static bool
++ri_ngd_live(void)
++{
++ return ri_slim.active && ri_slim.selected && ri_slim_live() && ri_stream.complete &&
++  ri_route_ready() && ri_route.muted;
++}
++static int
++ri_ngd_decode(const uint32_t *words,unsigned bytes)
++{
++ const uint8_t *buf=(const uint8_t *)words;
++ if(bytes<3 || bytes>31 || (buf[0]&31)!=bytes)return EIO;
++ ri_ngd.rx_first=words[0];ri_ngd.rx_second=bytes>4?words[1]:0;
++ unsigned type=(buf[0]>>5)&7,code=buf[1];
++ if(type!=6)return ENOTSUP;
++ if(code==0) {ri_ngd.master=true;return 0;}
++ if(code==0xe) {
++  const uint8_t ea[]={0,0,0x60,0x63,0xfa,1};
++  if(!ri_ngd.query_sent || bytes!=11 || buf[3]!=0x71)return EIO;
++  const uint8_t empty[6]={0};
++  if(!memcmp(buf+4,empty,6))return ENXIO;
++  if(memcmp(buf+4,ea,6) || buf[10]==0xff)return EIO;
++  ri_ngd.codec_address=buf[10];ri_ngd.address_valid=true;return 0;
++ }
++ if(code==0x25) {
++  if(!ri_ngd.query_sent || bytes!=5 || buf[3]!=0x71)return EIO;
++  return buf[4]&0x20?0:EREMOTE;
++ }
++ return ENOTSUP;
++}
++static void
++ri_ngd_barrier(void)
++{ __asm__ volatile("dmb sy" ::: "memory"); }
++static int
++ri_ngd_poll(vm_offset_t base,bool *sent)
++{
++ if(!ri_ngd_live() || ri_rd(base,0)!=1 || ri_rd(base,0x10)!=0)return EBUSY;
++ uint32_t stat=ri_rd(base,0x14);ri_ngd.interrupts=stat;
++ ri_ngd.status=ri_rd(base,4);ri_ngd.ie=ri_rd(base,0xf0);ri_ngd.ve=ri_rd(base,0x100);
++ ri_ngd.polls++;
++ /* Same fatal status bits as stock ngd_slim_interrupt; retain on error. */
++ if(stat&0x2e000000)return EIO;
++ if(stat&0x80000000) {
++  ri_wr(base,0x18,0x80000000);ri_ngd_barrier();*sent=true;
++ }
++ if(stat&0x40000000) {
++  uint32_t words[8]={0};words[0]=ri_rd(base,0x70);unsigned bytes=words[0]&31;
++  if(bytes<3 || bytes>31)return EIO;
++  for(unsigned i=1;i<(bytes+3)/4;i++)words[i]=ri_rd(base,0x70+4*i);
++  int error=ri_ngd_decode(words,bytes);
++  /* Valid addressed-negative responses are consumed, malformed ones remain. */
++  if(error && error!=ENXIO && error!=EREMOTE)return error;
++  ri_wr(base,0x18,0x40000000);ri_ngd_barrier();ri_ngd.rx_count++;
++  if(error)return error;
++ }
++ if(stat&0x11000000) {ri_wr(base,0x18,stat&0x11000000);ri_ngd_barrier();}
++ return 0;
++}
++static int
++ri_ngd_send(vm_offset_t base,const uint32_t *words,unsigned bytes)
++{
++ if(bytes<3 || bytes>31 || (words[0]&31)!=bytes)return EINVAL;
++ if(!ri_ngd_live() || ri_rd(base,0)!=1 || ri_rd(base,0x10)!=0 ||
++    (ri_rd(base,4)&1) || (ri_rd(base,0x14)&0xae000000))return EBUSY;
++ ri_ngd.tx_first=words[0];ri_ngd.tx_count++;
++ for(unsigned i=0;i<(bytes+3)/4;i++)ri_wr(base,0x30+4*i,words[i]);
++ ri_ngd_barrier();bool sent=false;
++ for(unsigned i=0;i<200;i++) {
++  int error=ri_ngd_poll(base,&sent);if(error)return error;
++  if(sent)return 0;
++  ri_wait(5);
++ }
++ return ETIMEDOUT;
++}
++static int
++ri_ngd_enumerate(void)
++{
++ if(ri_ngd.attempted)return EALREADY;
++ if(!ri_ngd_live() || !ri_slim.ngd_read || ri_slim.hw_version!=0x01050000 ||
++    ri_slim.ngd_offset!=0x1000 || ri_slim.ngd_cfg || ri_slim.ngd_int_en || ri_slim.ngd_int_stat)
++  return ri_ngd_result("prerequisite",EBUSY);
++ vm_offset_t mmio=ml_io_map_unmappable(0x0c140000,0x4000,VM_WIMG_IO);
++ if(!mmio)return ri_ngd_result("map",ENOMEM);
++ vm_offset_t base=mmio+0x1000;
++ if(!ri_ngd_live() || ri_rd(mmio,0)!=0x01050000 || ri_rd(base,0) ||
++    ri_rd(base,0x10) || ri_rd(base,0x14) || (ri_rd(base,4)&3)) {
++  ml_io_unmap(mmio,0x4000);return ri_ngd_result("ownership",EBUSY);
++ }
++ ri_ngd.attempted=ri_ngd.owned=true;
++ ri_wr(base,0,1);ri_ngd_barrier();ri_ngd.enabled=ri_rd(base,0)==1;
++ int error=0;const char *phase="enable";
++ if(!ri_ngd.enabled) {error=EIO;goto done;}
++ phase="master_capability";
++ for(unsigned i=0;i<500;i++) {
++  bool sent=false;error=ri_ngd_poll(base,&sent);if(error)goto done;
++  if(ri_ngd.master && (ri_ngd.status&2))break;
++  if(i==499) {error=ETIMEDOUT;goto done;}ri_wait(5);
++ }
++ /* Stock REPORT_SATELLITE: len7, SRC_REFERRED_USER6, manager0xff,
++  * magic d9/c5, protocol version1, supported satellite protocol1. */
++ uint32_t report[]={0xd9ff01c7,0x000101c5};phase="report_satellite";
++ error=ri_ngd_send(base,report,7);if(error)goto done;
++ ri_ngd.reported=true;
++ /* Stock ADDR_QUERY: len10, DEST_REFERRED_USER2, manager0xff, TID0x71,
++  * exact board Madera elemental address00:00:60:63:fa:01. */
++ uint32_t query[]={0x71ff0d4a,0x63600000,0x000001fa};phase="codec_address";
++ ri_ngd.query_sent=true;error=ri_ngd_send(base,query,10);if(error)goto done;
++ for(unsigned i=0;i<200 && !ri_ngd.address_valid;i++) {
++  bool sent=false;error=ri_ngd_poll(base,&sent);if(error)goto done;
++  if(!ri_ngd.address_valid)ri_wait(5);
++ }
++ if(!ri_ngd.address_valid) {error=ETIMEDOUT;goto done;}
++ phase="codec_address_verified";
++done:
++ ri_ngd.cfg=ri_rd(base,0);ri_ngd.status=ri_rd(base,4);
++ ri_ngd.interrupts=ri_rd(base,0x14);ri_ngd.ie=ri_rd(base,0xf0);ri_ngd.ve=ri_rd(base,0x100);
++ if(error) {
++  ri_ngd.uncertain=error!=ENXIO && error!=EREMOTE;
++  /* Only our own config0->1 transition may be disabled. IRQ mask remains0
++   * and no DMA mapping ever exists. Do not clear a malformed RX frame. */
++  if(ri_rd(base,0)==1 && !ri_rd(base,0x10)) {
++   ri_wr(base,0,0);ri_ngd_barrier();ri_ngd.disabled=ri_rd(base,0)==0;
++  }
++  ri_ngd.enabled=!ri_ngd.disabled;ri_ngd.restore_error=ri_ngd.disabled?0:EIO;
++ }
++ ml_io_unmap(mmio,0x4000);return ri_ngd_result(phase,error);
++}
++static int
++river_adsp_ngd_sysctl SYSCTL_HANDLER_ARGS
++{
++ int value=0,error=sysctl_handle_int(oidp,&value,0,req);
++ if(error || !req->newptr)return error;
++ if(value!=1)return EINVAL;
++ lck_mtx_lock(&ri_adsp_lock);error=ri_ngd_enumerate();lck_mtx_unlock(&ri_adsp_lock);return error;
++}
++static int
++river_adsp_ngd_status_sysctl SYSCTL_HANDLER_ARGS
++{
++ lck_mtx_lock(&ri_adsp_lock);int error=sysctl_handle_string(oidp,ri_ngd_note,sizeof(ri_ngd_note),req);
++ lck_mtx_unlock(&ri_adsp_lock);return error;
++}
++SYSCTL_PROC(_debug,OID_AUTO,river_adsp_ngd,CTLTYPE_INT|CTLFLAG_RW|CTLFLAG_LOCKED,
++ NULL,0,river_adsp_ngd_sysctl,"I","Explicit polled NGD capability/codec address test");
++SYSCTL_PROC(_debug,OID_AUTO,river_adsp_ngd_status,CTLTYPE_STRING|CTLFLAG_RD|CTLFLAG_LOCKED,
++ NULL,0,river_adsp_ngd_status_sysctl,"A","Last polled NGD capability/address result");
+diff --git a/bsd/dev/river_adsp_probe.h b/bsd/dev/river_adsp_probe.h
+--- a/bsd/dev/river_adsp_probe.h
++++ b/bsd/dev/river_adsp_probe.h
+@@ -109,6 +109,7 @@
+ #include "river_adsp_route.h"
+ #include "river_adsp_stream.h"
+ #include "river_adsp_slim.h"
++#include "river_adsp_ngd.h"
+ 
+ static int
+ river_adsp_probe_sysctl SYSCTL_HANDLER_ARGS

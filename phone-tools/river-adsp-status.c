@@ -82,7 +82,10 @@ static int stage_image(const char *path) {
 int main(int argc,char **argv) {
  int rc=0,request=1;
  const char *status="debug.river_adsp_status";
- if(argc==2 && (!strcmp(argv[1],"--slim-discover") || !strcmp(argv[1],"--slim-power") || !strcmp(argv[1],"--slim-ngd") || !strcmp(argv[1],"--slim-status"))) {
+ if(argc==2 && (!strcmp(argv[1],"--ngd-enumerate") || !strcmp(argv[1],"--ngd-status"))) {
+  status="debug.river_adsp_ngd_status";
+  if(!strcmp(argv[1],"--ngd-enumerate") && sysctlbyname("debug.river_adsp_ngd",NULL,NULL,&request,sizeof(request))) {perror("NGD capability/address test");rc=1;}
+ } else if(argc==2 && (!strcmp(argv[1],"--slim-discover") || !strcmp(argv[1],"--slim-power") || !strcmp(argv[1],"--slim-ngd") || !strcmp(argv[1],"--slim-status"))) {
   status="debug.river_adsp_slim_status";
   if(strcmp(argv[1],"--slim-status")) {
    request=!strcmp(argv[1],"--slim-discover")?1:!strcmp(argv[1],"--slim-power")?2:3;
@@ -132,7 +135,7 @@ int main(int argc,char **argv) {
  } else if(argc==3&&!strcmp(argv[1],"--metadata")) rc=metadata_test(argv[2]);
  else if(argc==3&&!strcmp(argv[1],"--stage-image")) rc=stage_image(argv[2]);
  else if(argc!=1) {
-  fprintf(stderr,"Usage: %s [--probe|--handshake-init|--metadata PATH|--stage-image PATH|--start|--start-status|--apr|--apr-status|--pcm-map|--asm-test|--afe-probe|--pcm-status|--afe-config|--adm-route|--afe-route|--route-status|--pcm-silence|--stream-status|--slim-discover|--slim-power|--slim-ngd|--slim-status]\n",argv[0]);return 2;
+  fprintf(stderr,"Usage: %s [--probe|--handshake-init|--metadata PATH|--stage-image PATH|--start|--start-status|--apr|--apr-status|--pcm-map|--asm-test|--afe-probe|--pcm-status|--afe-config|--adm-route|--afe-route|--route-status|--pcm-silence|--stream-status|--slim-discover|--slim-power|--slim-ngd|--slim-status|--ngd-enumerate|--ngd-status]\n",argv[0]);return 2;
  }
  char note[8192]={0};size_t n=sizeof(note)-1;
  if(sysctlbyname(status,note,&n,NULL,0)) {perror("ADSP status");return 1;}
