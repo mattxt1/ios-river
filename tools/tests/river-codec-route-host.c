@@ -165,7 +165,19 @@ static void lck_mtx_lock(int *p) {if(p==&ri_codec_lock){assert(!codec_held && !s
 static void lck_mtx_unlock(int *p) {if(p==&ri_speaker_lock){assert(speaker_held);speaker_held=0;}else {assert(p==&ri_codec_lock && codec_held && !speaker_held);codec_held=0;}}
 static bool ri_afe_mute_hold;
 static struct {bool complete;} ri_stream;
-static struct {bool muted;} ri_route;
+static struct {bool muted,asm_open,adm_open,afe_started;int cleanup_error;} ri_route;
+static struct {bool poisoned;} ri_pcm;
+static struct ri_stream_state {bool complete,mapped,in_flight;unsigned submitted;char note[1536];} ri_live_stream;
+static unsigned live_calls;
+static int ri_stream_execute(struct ri_stream_state *state,unsigned session) {
+ assert(state==&ri_live_stream && session==5 && codec_held && !speaker_held);
+ assert((regs[0x700]&0x80ff)==0x8038 && (regs[0x708]&0x80ff)==0x8038 && regs[0x519]==3 && (regs[0x5f5]&1));
+ assert(amp_quiet() && amp[0x4800]==0x10000);live_calls++;
+ state->submitted=4;state->complete=mode!=53 && mode!=54;
+ if(mode==53){state->mapped=state->in_flight=ri_pcm.poisoned=ri_route.afe_started=true;return ETIMEDOUT;}
+ if(mode==54)return EREMOTE;
+ return 0;
+}
 static struct {bool address_valid,enabled,uncertain;} ri_ngd;
 static struct {bool attempted,complete,connected,defined,active,uncertain;} ri_channel;
 static int (*ri_channel_active_test)(void);
@@ -174,7 +186,7 @@ static int ri_channel_test(void) {
  if(ri_channel.attempted)return EALREADY;ri_channel.attempted=true;
  ri_channel.connected=ri_channel.defined=ri_channel.active=true;
  int error=ri_channel_active_test?ri_channel_active_test():0;
- ri_channel.connected=ri_channel.defined=ri_channel.active=false;
+ if(!ri_channel.uncertain)ri_channel.connected=ri_channel.defined=ri_channel.active=false;
  ri_channel.complete=!error;return error;
 }
 static int quiet_printf(const char *format,...) {(void)format;return 0;}
@@ -301,7 +313,7 @@ int clock_baseline_main(void) {
 
 static void path_reset(unsigned scenario)
 {
- reset(scenario);memset(&ri_codec_path,0,sizeof(ri_codec_path));memset(&ri_channel,0,sizeof(ri_channel));
+ reset(scenario);live_calls=0;memset(&ri_live_stream,0,sizeof(ri_live_stream));memset(&ri_pcm,0,sizeof(ri_pcm));memset(&ri_route,0,sizeof(ri_route));memset(&ri_codec_path,0,sizeof(ri_codec_path));memset(&ri_channel,0,sizeof(ri_channel));
  ri_clock_data_test=NULL;ri_channel_active_test=NULL;ri_clock_data_restored=true;
  codec_held=speaker_held=0;ri_afe_mute_hold=ri_route.muted=ri_stream.complete=ri_ngd.address_valid=ri_ngd.enabled=true;ri_ngd.uncertain=false;
  amp[0x2024]|=0x10;memcpy(amp_initial,amp,sizeof(amp));
@@ -331,6 +343,9 @@ int main(void)
  path_reset(51);assert(ri_codec_path_run()==EIO && !ri_codec_path.restored && !ri_i2s_amp_restored && !ri_i2s_codec_restored);
  assert(amp_quiet() && !amp[0x4800] && !(regs[0x101]&0x40) && !regs[0x519] && (regs[0x102]&31)==3);
  check_pins();assert(!codec_held && !speaker_held);
+ path_reset(0);assert(!ri_codec_path_run_mode(true) && live_calls==1 && ri_codec_path.complete && ri_live_stream.complete);check_restore();assert(!speaker_held && !codec_held);
+ path_reset(53);assert(ri_codec_path_run_mode(true)==ETIMEDOUT && live_calls==1 && ri_channel.uncertain && ri_channel.active && ri_live_stream.mapped && ri_codec_path.restored);check_restore();assert((amp[0x2024]&0x10) && !speaker_held && !codec_held);
+ path_reset(54);assert(ri_codec_path_run_mode(true)==EREMOTE && live_calls==1 && !ri_channel.uncertain && !ri_channel.active && ri_codec_path.restored);check_restore();
  assert(!ri_clock_write_allowed(0x5f7) && ri_clock_read_allowed(0x5f7) && !ri_clock_write_allowed(0x5d2));
  assert(!ri_clock_write_allowed(0x400) && !ri_clock_write_allowed(0x5f6));
  puts("actual-code muted SLIMRX/AIF route, FLL/AMP clock locks, GPIO SPI framing and rollback tests passed");

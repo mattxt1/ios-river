@@ -26,15 +26,16 @@ typedef uint64_t addr64_t;
 #define VM_KERN_MEMORY_IOKIT 1
 #define KERN_SUCCESS 0
 static int kernel_map,kernel_pmap;
-static unsigned write_count,cleaned,barriers;
-static unsigned char stream_page[PAGE_SIZE] __attribute__((aligned(PAGE_SIZE)));
+static unsigned write_count,cleaned,barriers,allocations;
+static uint32_t expected_pa,expected_stream=0x04010000;
+static unsigned char stream_page[PAGE_SIZE*2] __attribute__((aligned(PAGE_SIZE)));
 static int kmem_alloc_contig(int map,vm_offset_t *out,unsigned size,unsigned mask,unsigned low,unsigned high,unsigned flags,unsigned tag)
-{assert(!map && size==PAGE_SIZE && mask==PAGE_MASK && !low && !high && flags==7 && tag==1);if(mode==41)return ENOMEM;*out=(uintptr_t)stream_page;memset(stream_page,0xa5,PAGE_SIZE);return 0;}
+{assert(!map && size==PAGE_SIZE && mask==PAGE_MASK && !low && !high && flags==7 && tag==1);if(mode==41)return ENOMEM;assert(allocations<2);*out=(uintptr_t)stream_page+allocations++*PAGE_SIZE;memset((void*)*out,0xa5,PAGE_SIZE);expected_pa=0x60000000+(allocations-1)*PAGE_SIZE;return 0;}
 static ppnum_t pmap_find_phys(int map,addr64_t address)
-{assert(!map && address>=(uintptr_t)stream_page && address<(uintptr_t)stream_page+PAGE_SIZE);return mode==42?0:0x60000000/PAGE_SIZE;}
+{assert(!map && address>=(uintptr_t)stream_page && address<(uintptr_t)stream_page+2*PAGE_SIZE);return mode==42?0:0x60000000/PAGE_SIZE+(address-(uintptr_t)stream_page)/PAGE_SIZE;}
 #define ptoa_64(n) ((n)*PAGE_SIZE)
 static void sweet_dcache_clean(vm_offset_t address,unsigned size)
-{assert(address==(uintptr_t)stream_page && size==PAGE_SIZE);for(unsigned i=0;i<size;i++)assert(!stream_page[i]);cleaned++;}
+{assert(address>=(uintptr_t)stream_page && address<(uintptr_t)stream_page+2*PAGE_SIZE && size==PAGE_SIZE);for(unsigned i=0;i<size;i++)assert(!((unsigned char*)address)[i]);cleaned++;}
 static void host_barrier(void){barriers++;}
 static int ri_pcm_transaction(struct ri_apr_request *r,struct ri_apr_reply *p)
 {
@@ -49,17 +50,17 @@ static int ri_pcm_transaction(struct ri_apr_request *r,struct ri_apr_reply *p)
  switch(r->opcode) {
  case 0x10d92:
   assert(r->source==0x507 && r->destination==0x407 && r->response==0x10d93 && r->words==5);
-  assert(r->payload[0]==0x10003 && !r->payload[1] && r->payload[2]==0x60000000 && !r->payload[3] && r->payload[4]==PAGE_SIZE);
-  assert(cleaned==1 && barriers);p->words=1;p->data[0]=mode==44?0:0xaabbccdd;break;
+  assert(r->payload[0]==0x10003 && !r->payload[1] && r->payload[2]==expected_pa && !r->payload[3] && r->payload[4]==PAGE_SIZE);
+  assert(cleaned>=1 && barriers);p->words=1;p->data[0]=mode==44?0:0xaabbccdd;break;
  case 0x10d94:
   assert(r->source==0x507 && r->destination==0x407 && r->words==1 && r->payload[0]==0xaabbccdd);break;
  case 0x10daa:
-  assert(r->source==0x04010507 && r->destination==0x04010407 && r->words==3);
+  assert(r->source==(expected_stream|0x507) && r->destination==(expected_stream|0x407) && r->words==3);
   assert(!r->payload[0] && !r->payload[1] && !r->payload[2]);break;
  case 0x10bd3:assert(!r->words);break;
  case 0x10dab: {
-  assert(r->source==0x04010507 && r->destination==0x04010407 && r->response==0x10d99 && r->words==8);
-  assert(write_count<4 && r->payload[0]==0x60000000+write_count*4096 && !r->payload[1]);
+  assert(r->source==(expected_stream|0x507) && r->destination==(expected_stream|0x407) && r->response==0x10d99 && r->words==8);
+  assert(write_count<4 && r->payload[0]==expected_pa+write_count*4096 && !r->payload[1]);
   assert(r->payload[2]==0xaabbccdd && r->payload[3]==4096 && r->payload[4]==write_count && !r->payload[5] && !r->payload[6] && !r->payload[7]);
   write_count++;p->words=4;p->data[0]=r->payload[0];p->data[1]=0;p->data[2]=r->payload[2];p->data[3]=0;
   if(mode==30)p->data[0]^=32;
@@ -98,7 +99,7 @@ static int ri_pcm_transaction(struct ri_apr_request *r,struct ri_apr_reply *p)
   break;
  case 0x10db3: {
   uint32_t session=(r->source>>24)&0xff;
-  assert(session==2 || session==3 || session==4);assert(r->source==(((session<<8)|1)<<16|0x507));
+  assert(session==2 || session==3 || session==4 || session==5);assert(r->source==(((session<<8)|1)<<16|0x507));
   assert(r->destination==(((session<<8)|1)<<16|0x407));
   uint32_t data[]={0,16u<<16,0x10c68,0x10da5};assert(r->words==4 && !memcmp(r->payload,data,sizeof(data)));break;
  }
@@ -114,7 +115,7 @@ static int ri_pcm_transaction(struct ri_apr_request *r,struct ri_apr_reply *p)
  }
  case 0x10325:
   assert(r->source==0x508 && r->destination==0x408 && r->words==4);
-  assert(r->payload[0]==0 && r->payload[1]==1 && (r->payload[2]==((1u<<16)|2) || r->payload[2]==((1u<<16)|3) || r->payload[2]==((1u<<16)|4)) && r->payload[3]==0);break;
+  assert(r->payload[0]==0 && r->payload[1]==1 && (r->payload[2]==((1u<<16)|2) || r->payload[2]==((1u<<16)|3) || r->payload[2]==((1u<<16)|4) || r->payload[2]==((1u<<16)|5)) && r->payload[3]==0);break;
  case 0x10327:assert(r->source==0x40000508 && r->destination==0x408 && !r->words);break;
  default:assert(0);
  }
@@ -174,7 +175,7 @@ int route_baseline_main(void)
 
 static void stream_reset(unsigned scenario)
 {
- reset(scenario);memset(&ri_stream,0,sizeof(ri_stream));
+ reset(scenario);allocations=0;expected_stream=0x04010000;memset(&ri_live_stream,0,sizeof(ri_live_stream));memset(&ri_stream,0,sizeof(ri_stream));
  ri_pcm.physical=0x50000000;write_count=cleaned=barriers=0;
  assert(ri_route_config()==0 && ri_route.config_readback);
  assert(ri_route_test(false)==0);
@@ -217,6 +218,17 @@ int main(void)
  }
  stream_reset(2);ri_route.failed_opcode=0x100e5;assert(ri_stream_test()==EBUSY && !ri_stream.attempted);
  stream_reset(2);ri_route.config_readback=false;assert(ri_stream_test()==EBUSY && !ri_stream.attempted);
+ /* Fresh session5 owns separate permanent memory and preserves prior evidence. */
+ stream_reset(2);assert(!ri_stream_test());struct ri_stream_state prior=ri_stream;
+ commands=write_count=0;expected_stream=0x05010000;
+ assert(!ri_stream_execute(&ri_live_stream,5));assert(ri_live_stream.complete && ri_live_stream.session==5 && ri_live_stream.completed==4);
+ assert(ri_live_stream.physical!=ri_stream.physical && !memcmp(&prior,&ri_stream,sizeof(prior)));
+ assert(!ri_live_stream.mapped && !ri_route.afe_started && !ri_route.asm_open && !ri_route.adm_open);
+ assert(ri_stream_execute(&ri_live_stream,5)==EALREADY);
+ stream_reset(2);assert(!ri_stream_test());prior=ri_stream;commands=write_count=0;expected_stream=0x05010000;
+ fail_opcode=0x10dab;timeout_failure=true;
+ assert(ri_stream_execute(&ri_live_stream,5)==ETIMEDOUT && ri_live_stream.mapped && ri_live_stream.in_flight && ri_pcm.poisoned);
+ assert(!memcmp(&prior,&ri_stream,sizeof(prior)));
  puts("actual-code zero-PCM map/RUN/WRITE ownership, completion and failure teardown tests passed");
  return 0;
 }

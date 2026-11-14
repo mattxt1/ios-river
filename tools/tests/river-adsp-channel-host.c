@@ -7,7 +7,7 @@
 typedef uintptr_t vm_offset_t;
 static struct {bool active,selected,ngd_read;uint32_t hw_version,ngd_offset,ngd_cfg,ngd_int_en,ngd_int_stat;} ri_slim;
 static struct {bool complete;} ri_stream;
-static struct {bool muted;} ri_route;
+static struct {bool muted,afe_started;} ri_route;
 static unsigned mode,maps,unmaps,writes,sends,waits;
 static bool live,ready,channel_mode,hardware_connected,hardware_defined,hardware_active,remove_pending;
 static unsigned channel_sends,fail_index,fail_kind;
@@ -122,6 +122,7 @@ static void channel_reset(unsigned index,unsigned kind)
 }
 static unsigned callback_count;static int callback_error;
 static int active_callback(void) {assert(ri_channel.connected && ri_channel.defined && ri_channel.active);callback_count++;return callback_error;}
+static int uncertain_callback(void){ri_channel.uncertain=true;return ETIMEDOUT;}
 int main(void)
 {
  ngd_baseline_main();
@@ -147,6 +148,7 @@ int main(void)
  channel_reset(0,0);mode=12;assert(ri_channel_test()==ENOMEM && !ri_channel.attempted);
  channel_reset(0,0);callback_count=0;callback_error=0;ri_channel_active_test=active_callback;assert(!ri_channel_test() && callback_count==1 && ri_channel.complete);
  channel_reset(0,0);callback_count=0;callback_error=EIO;ri_channel_active_test=active_callback;assert(ri_channel_test()==EIO && callback_count==1 && !ri_channel.connected && !ri_channel.defined && !ri_channel.active && !ri_channel.cleanup_error);
+ channel_reset(0,0);ri_channel_active_test=uncertain_callback;assert(ri_channel_test()==ETIMEDOUT && ri_channel.uncertain && ri_channel.active && ri_channel.connected && channel_sends==3);
  ri_channel_active_test=NULL;
  puts("actual-code codec sink/connect activate/reconfigure/remove/disconnect and ACK ownership/failure tests passed");
  return 0;
