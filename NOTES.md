@@ -5,6 +5,35 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0326 boot/passive verified; native playback gate pending (2026-11-14)
+
+User confirmed fastboot readiness. Exact0326 image2db35128... and productriver
+verified; temporary fastboot boot accepted0.849s, no flash. Current phone0326.
+All installed helper bytes match the verified inputs, including updated ADSP
+helper98bf337d... . All passive audio states are not requested. Native stage:
+armed0/started0/ready0/claimed0/frames0/observed0. No active controls this boot.
+First USB read-only readiness loop timed out during startup; independent
+passive reads then succeeded and retry helper verification passed. This is
+not evidence of a phone hang. Evidence work/native-pcm/fastboot-boot-5594c21.txt,
+installed-helper-verification.json and baseline-*-5594c21.txt. USBloggeractive.
+
+Fresh responsive-home AND ready-to-listen question pending; MUST wait for reply.
+Then run work/native-pcm/prepare-device.py ONCE (mute hold/DSP prerequisites,
+exits before codec route), then run-native-stage.py (install/byte-verify app
+helper/WAV, explicit staging arm, AVAudioPlayer playback while muted, require
+ready1/claimed0/frames4096/peak>8/rejected0). If staging fails, inspect and do
+not request native playback. When staged, say listenNOW, run-native-play.py
+ONCE (--codec-native-pcm, never synthetic --codec-tone first). Collect source
+metadata, EOS, mute timing and cleanup; ask audible/result/responsiveness.
+No one-shots have been consumed on0326 yet. Capture Wi-Fi on this boot too.
+CurrentWiFi association not yet queried; prior0322–0324 manualjoins/native
+DHCP/defaultDNS and browser/reconnect results passed.
+
+Physical speaker output was confirmed on0324; normal continuous playback and
+microphone capture remain pending.0326 is explicitly bounded native PCM
+snapshot replay plus immediate EOS mute; avoid describing it as a live app
+backend before implementation. All active paths canonical Developer/Codex.
+
 ## Active handoff: audible0324 confirmed; combined0326 image verified (2026-11-14)
 
 User HEARD0324 chirp and confirmed responsive iOS. First physical speaker
