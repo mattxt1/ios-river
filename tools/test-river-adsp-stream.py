@@ -28,6 +28,9 @@ with tempfile.TemporaryDirectory(prefix='river-adsp-route-') as directory:
  text=''.join(x for x in sections if x.splitlines()[0].split()[2]=='a/bsd/dev/river_adsp_stream.h')
  subprocess.run(['patch','--batch','--silent','--fuzz=0','-p1','-d',str(root/'source')],input=text.encode(),check=True)
  subprocess.run(['patch','--batch','--silent','--fuzz=0','-p1','-d',str(root/'source')],input=(repo/'xnu/patches/0323-river-fit-quiet-tone-within-mute-deadline.patch').read_bytes(),check=True)
+ sections=['diff --git '+x for x in (repo/'xnu/patches/0325-river-mute-immediately-after-rendered-eos.patch').read_text().split('diff --git ')[1:]]
+ text=''.join(x for x in sections if x.splitlines()[0].split()[2]=='a/bsd/dev/river_adsp_stream.h')
+ subprocess.run(['patch','--batch','--silent','--fuzz=0','-p1','-d',str(root/'source')],input=text.encode(),check=True)
  (root/'route-actual.h').write_text(target.read_text())
  (root/'stream-actual.h').write_text(stream_target.read_text().split('static int\nriver_adsp_stream_sysctl',1)[0].replace('__asm__ volatile("dmb sy" ::: "memory");','host_barrier();'))
  binary=root/'route'

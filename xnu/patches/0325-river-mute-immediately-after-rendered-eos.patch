@@ -1,0 +1,97 @@
+diff --git a/bsd/dev/river_adsp_stream.h b/bsd/dev/river_adsp_stream.h
+--- a/bsd/dev/river_adsp_stream.h
++++ b/bsd/dev/river_adsp_stream.h
+@@ -211,7 +211,9 @@
+   error=ri_stream_command(state,stream|0x507,stream|0x407,0x10bdb,0x10c1c,NULL,0,&reply);
+   if(error)goto done;
+   if(reply.words) {ri_pcm.poisoned=true;error=EIO;goto done;}
+-  state->eos_rendered=true;error=ri_stream_output_check();if(error)goto done;
++  /* Playback has drained. Mute immediately below instead of spending the
++   * remaining watchdog budget on a redundant post-EOS register survey. */
++  state->eos_rendered=true;
+  }
+  phase=state->tone?"quiet_tone_complete":"zero_pcm_complete";
+ done:
+diff --git a/bsd/dev/river_adsp_tone.h b/bsd/dev/river_adsp_tone.h
+--- a/bsd/dev/river_adsp_tone.h
++++ b/bsd/dev/river_adsp_tone.h
+@@ -4,14 +4,22 @@
+ static struct {
+  bool attempted,active,enabled,stopped,cutoff;
+  uint32_t power,mute,volume,want_volume,irq1,irq3;
++ uint64_t armed_at,unmuted_at,muted_at,max_check_ns;
+  int error;
+ } ri_tone;
+ static thread_call_t ri_tone_timer;
++static uint64_t
++ri_tone_now_ns(void)
++{
++ uint64_t absolute,ns;clock_get_uptime(&absolute);
++ absolutetime_to_nanoseconds(absolute,&ns);return ns;
++}
+ static bool
+ ri_tone_mute_locked(void)
+ {
+  ri_tone.active=false;
+  bool ok=ri_i2s_amp_write(0x2024,ri_tone.mute|0x10);
++ if(ok && !ri_tone.muted_at)ri_tone.muted_at=ri_tone_now_ns();
+  if(!ri_i2s_amp_write(0x2018,ri_tone.power&~1u))ok=false;
+  if(!ri_i2s_amp_write(0x6000,ri_tone.volume))ok=false;
+  ri_tone.stopped=ok;return ok;
+@@ -53,7 +61,7 @@
+  /* Fixed -24dB digital attenuation, signed11-bit eighth-dB PCM_VOL.
+   * Samples are additionally bounded to +/-2048 with5ms end ramps. */
+  ri_tone.want_volume=(ri_tone.volume&~0x3ff8u)|(((0u-192u)&0x7ffu)<<3);
+- ri_tone.active=true;uint64_t deadline;
++ ri_tone.armed_at=ri_tone_now_ns();ri_tone.active=true;uint64_t deadline;
+  clock_interval_to_deadline(750,NSEC_PER_MSEC,&deadline);
+  thread_call_enter_delayed(ri_tone_timer,deadline);
+  if(!ri_i2s_amp_write(0x6000,ri_tone.want_volume) ||
+@@ -64,19 +72,22 @@
+  if(!ri_tone_locked_clocks() || !ri_i2s_amp_write(0x2024,ri_tone.mute&~0x10u)) {
+   error=EIO;(void)ri_tone_mute_locked();goto done;
+  }
+- ri_tone.enabled=true;error=0;
++ ri_tone.unmuted_at=ri_tone_now_ns();ri_tone.enabled=true;error=0;
+ done:
+  ri_tone.error=error;lck_mtx_unlock(&ri_speaker_lock);return error;
+ }
+ static int
+ ri_tone_check(void)
+ {
++ uint64_t begin=ri_tone_now_ns();
+  int error=0;uint32_t power=0,mute=0,volume=0;lck_mtx_lock(&ri_speaker_lock);
+  if(!ri_tone.active || ri_tone.cutoff)error=ETIMEDOUT;
+  else if(!ri_tone_locked_clocks() || !ri_cs35l41_rd(0x2018,&power) || !(power&1) ||
+    !ri_cs35l41_rd(0x2024,&mute) || (mute&0x10) ||
+    !ri_cs35l41_rd(0x6000,&volume) || volume!=ri_tone.want_volume)error=EIO;
+  if(error)ri_tone.error=error;
++ uint64_t elapsed=ri_tone_now_ns()-begin;
++ if(elapsed>ri_tone.max_check_ns)ri_tone.max_check_ns=elapsed;
+  lck_mtx_unlock(&ri_speaker_lock);return error;
+ }
+ static void
+diff --git a/bsd/dev/river_adsp_codec_route.h b/bsd/dev/river_adsp_codec_route.h
+--- a/bsd/dev/river_adsp_codec_route.h
++++ b/bsd/dev/river_adsp_codec_route.h
+@@ -188,7 +188,7 @@
+   ri_channel.complete && ri_i2s_codec_restored && ri_i2s_amp_restored;
+  if(!error && !ri_codec_path.complete)error=EIO;
+  snprintf(ri_codec_path_note,sizeof(ri_codec_path_note),
+-  "phase=%s error=%d attempted=%u complete=%u route_seen=%u touched=%u route_restored=%u bad_reg=%#x port_map=%#x port_before=%#x port_live=%#x rate=%#x fll=%#x amp_irq=%#x clock_error=%d channel_error=%d channel_complete=%u connected=%u defined=%u active=%u uncertain=%u aif_restored=%u amp_restored=%u amp_locked=%u amp_mute_retained=%u afe_started=%u dsp_cleanup_error=%d live_mapped=%u live_in_flight=%u amp_output_stage_test_policy=%s quiet_tone=%u output_enabled=%u output_stopped=%u output_cutoff=%u active_route_pcm=%u dsp_samples_submitted=%u ios_backend=discarded capture=synthetic live_pcm={%s} last_native_clock={%s}",
++  "phase=%s error=%d attempted=%u complete=%u route_seen=%u touched=%u route_restored=%u bad_reg=%#x port_map=%#x port_before=%#x port_live=%#x rate=%#x fll=%#x amp_irq=%#x clock_error=%d channel_error=%d channel_complete=%u connected=%u defined=%u active=%u uncertain=%u aif_restored=%u amp_restored=%u amp_locked=%u amp_mute_retained=%u afe_started=%u dsp_cleanup_error=%d live_mapped=%u live_in_flight=%u amp_output_stage_test_policy=%s quiet_tone=%u output_enabled=%u output_stopped=%u output_cutoff=%u mute_verified_us=%llu output_window_us=%llu max_output_check_us=%llu active_route_pcm=%u dsp_samples_submitted=%u ios_backend=discarded capture=synthetic live_pcm={%s} last_native_clock={%s}",
+   ri_codec_path.complete?(tone?"quiet_codec_tone_complete":with_pcm?"muted_codec_pcm_complete":"muted_codec_route_complete"):"muted_codec_route_stopped",error,
+   ri_codec_path.attempted,ri_codec_path.complete,ri_codec_path.seen,ri_codec_path.touched,
+   ri_codec_path.restored,ri_codec_path.bad_reg,ri_codec_path.port_map,ri_codec_path.port_before,
+@@ -196,7 +196,10 @@
+   ri_codec_path.clock_error,ri_codec_path.channel_error,ri_channel.complete,ri_channel.connected,
+   ri_channel.defined,ri_channel.active,ri_channel.uncertain,ri_i2s_codec_restored,
+   ri_i2s_amp_restored,ri_i2s_amp_locked,ri_route.muted,ri_route.afe_started,
+-  ri_route.cleanup_error,ri_live_stream.mapped,ri_live_stream.in_flight,tone?"bounded_quiet_tone":"disabled",tone,ri_tone.enabled,ri_tone.stopped,ri_tone.cutoff,with_pcm,
++  ri_route.cleanup_error,ri_live_stream.mapped,ri_live_stream.in_flight,tone?"bounded_quiet_tone":"disabled",tone,ri_tone.enabled,ri_tone.stopped,ri_tone.cutoff,
++  (unsigned long long)(ri_tone.muted_at>ri_tone.armed_at?(ri_tone.muted_at-ri_tone.armed_at)/1000:0),
++  (unsigned long long)(ri_tone.unmuted_at && ri_tone.muted_at>ri_tone.unmuted_at?(ri_tone.muted_at-ri_tone.unmuted_at)/1000:0),
++  (unsigned long long)(ri_tone.max_check_ns/1000),with_pcm,
+   ri_live_stream.submitted,ri_live_stream.note,ri_clock_note);
+  printf("RIVER CODEC PATH: %s\n",ri_codec_path_note);return error;
+ }

@@ -27,7 +27,7 @@ typedef uint64_t addr64_t;
 #define KERN_SUCCESS 0
 static int kernel_map,kernel_pmap;
 static unsigned write_count,cleaned,barriers,allocations,output_starts,output_stops;
-static bool output_live,expected_tone;
+static bool output_live,expected_tone,eos_seen;
 static uint32_t expected_pa,expected_stream=0x04010000;
 static unsigned char stream_page[PAGE_SIZE*2] __attribute__((aligned(PAGE_SIZE)));
 static int kmem_alloc_contig(int map,vm_offset_t *out,unsigned size,unsigned mask,unsigned low,unsigned high,unsigned flags,unsigned tag)
@@ -60,7 +60,7 @@ static int ri_pcm_transaction(struct ri_apr_request *r,struct ri_apr_reply *p)
  case 0x10daa:
   assert(r->source==(expected_stream|0x507) && r->destination==(expected_stream|0x407) && r->words==3);
   assert(!r->payload[0] && !r->payload[1] && !r->payload[2]);break;
- case 0x10bdb:assert(expected_tone && output_live && write_count==8 && r->response==0x10c1c && !r->words);p->words=mode==57?1:0;break;
+ case 0x10bdb:assert(expected_tone && output_live && write_count==8 && r->response==0x10c1c && !r->words);p->words=mode==57?1:0;eos_seen=true;break;
  case 0x10bd3:assert(!r->words);break;
  case 0x10dab: {
   assert(r->source==(expected_stream|0x507) && r->destination==(expected_stream|0x407) && r->response==0x10d99 && r->words==8);
@@ -178,11 +178,11 @@ int route_baseline_main(void)
 }
 
 static int host_output_start(void){assert(!lock_depth && write_count==4);output_starts++;if(mode==56)return EIO;output_live=true;return 0;}
-static int host_output_check(void){assert(!lock_depth && output_live);return ((mode==58 && write_count>=8) || (mode==59 && write_count>=6))?ETIMEDOUT:0;}
+static int host_output_check(void){assert(!lock_depth && output_live && !eos_seen);return ((mode==58 && write_count>=7) || (mode==59 && write_count>=6))?ETIMEDOUT:0;}
 static void host_output_stop(void){assert(!lock_depth);output_stops++;output_live=false;}
 static void stream_reset(unsigned scenario)
 {
- reset(scenario);output_starts=output_stops=0;output_live=expected_tone=false;ri_stream_output_start=NULL;ri_stream_output_check=NULL;ri_stream_output_stop=NULL;allocations=0;expected_stream=0x04010000;memset(&ri_live_stream,0,sizeof(ri_live_stream));memset(&ri_stream,0,sizeof(ri_stream));
+ reset(scenario);output_starts=output_stops=0;output_live=expected_tone=eos_seen=false;ri_stream_output_start=NULL;ri_stream_output_check=NULL;ri_stream_output_stop=NULL;allocations=0;expected_stream=0x04010000;memset(&ri_live_stream,0,sizeof(ri_live_stream));memset(&ri_stream,0,sizeof(ri_stream));
  ri_pcm.physical=0x50000000;write_count=cleaned=barriers=0;
  assert(ri_route_config()==0 && ri_route.config_readback);
  assert(ri_route_test(false)==0);

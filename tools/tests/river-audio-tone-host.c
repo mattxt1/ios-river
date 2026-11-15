@@ -23,11 +23,14 @@ static void clock_interval_to_deadline(unsigned ms,unsigned scale,uint64_t *dead
 static bool thread_call_enter_delayed(thread_call_t call,uint64_t deadline){assert(held && call==&timer && deadline==750000000 && !queued);queued=true;return false;}
 static bool thread_call_cancel_wait(thread_call_t call){assert(!held && call==&timer);queued=false;return true;}
 static void delay(unsigned us){assert(held && us==1000);}
+static uint64_t host_now;
+static void clock_get_uptime(uint64_t *out){*out=(host_now+=1000);}
+static void absolutetime_to_nanoseconds(uint64_t absolute,uint64_t *ns){*ns=absolute;}
 #include "tone-actual.h"
 static void reset(void){memset(amp,0,sizeof(amp));memset(&ri_tone,0,sizeof(ri_tone));ri_tone_timer=NULL;held=writes=fail_write=0;alloc_fail=queued=false;ri_afe_mute_hold=true;clock_fll=0x100;amp[0x2018]=0x20;amp[0x2024]=0x10;amp[0x6000]=0x80002678;amp[0x4808]=0x20200200;amp[0x4800]=0x10000;amp[0x4c00]=8;amp[0x2014]=1;amp[0x6c04]=0x220;amp[0x10090]=0x40406000;amp[0x10098]=0x2000000a;}
 static void stopped(void){assert(!held && !(amp[0x2018]&1) && (amp[0x2024]&0x10) && amp[0x6000]==0x80002678 && !queued);}
 int main(void){
- reset();assert(!ri_tone_start() && ri_tone.active && ri_tone.enabled && queued);assert((amp[0x6000]&0x3ff8)==0x3a00 && (amp[0x2018]&1) && !(amp[0x2024]&0x10));assert(!ri_tone_check());ri_tone_stop();assert(ri_tone.stopped && !ri_tone.cutoff);stopped();assert(ri_tone_start()==EBUSY);timer(NULL,NULL);stopped();
+ reset();assert(!ri_tone_start() && ri_tone.active && ri_tone.enabled && queued);assert((amp[0x6000]&0x3ff8)==0x3a00 && (amp[0x2018]&1) && !(amp[0x2024]&0x10));assert(!ri_tone_check());ri_tone_stop();assert(ri_tone.stopped && !ri_tone.cutoff && ri_tone.armed_at && ri_tone.unmuted_at>=ri_tone.armed_at && ri_tone.muted_at>=ri_tone.unmuted_at && ri_tone.max_check_ns);stopped();assert(ri_tone_start()==EBUSY);timer(NULL,NULL);stopped();
  reset();assert(!ri_tone_start());timer(NULL,NULL);assert(ri_tone.cutoff && ri_tone_check()==ETIMEDOUT && !ri_tone.active);ri_tone_stop();stopped();
  for(unsigned i=1;i<=3;i++){reset();fail_write=i;assert(ri_tone_start()==EIO);ri_tone_stop();stopped();}
  reset();alloc_fail=true;assert(ri_tone_start()==ENOMEM && !writes);ri_tone_stop();stopped();

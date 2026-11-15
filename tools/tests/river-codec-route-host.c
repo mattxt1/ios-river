@@ -168,7 +168,7 @@ static struct {bool complete;} ri_stream;
 static struct {bool muted,asm_open,adm_open,afe_started;int cleanup_error;} ri_route;
 static struct {bool poisoned;} ri_pcm;
 static struct ri_stream_state {bool complete,mapped,in_flight,afe_prepared,tone;unsigned submitted;char note[1536];} ri_live_stream;
-static struct {bool enabled,stopped,cutoff;int error;} ri_tone;
+static struct {bool enabled,stopped,cutoff;int error;uint64_t armed_at,unmuted_at,muted_at,max_check_ns;} ri_tone;
 static int (*ri_stream_output_start)(void),(*ri_stream_output_check)(void);
 static void (*ri_stream_output_stop)(void);
 static int ri_tone_start(void){ri_tone.enabled=true;return 0;}
