@@ -1,5 +1,14 @@
 # River Wi-Fi implementation audit and handoff
 
+##0323 post-reboot manual join and Google verified (2026-11-14)
+
+Afteranother temporaryboot, user confirmedbluecheckmark andGoogleloads
+normally. Captures again show nativeDHCP BOUND/published/routerverified,
+generalNWI primaryen0/defaultDNS, and unboundDNS+HTTP200 success viaWiFi.
+One initialjoin, one off/onreconnect, and one subsequentbootmanualjoin pass.
+Automaticassociation and lease-renew/endurance reliability remainpending.
+0324 retains thissameWiFifix; bootaccepted, currentjoin notyettested.
+
 ##0322 Safari and off/on reconnect verified (2026-11-14)
 
 User confirms Safari https://example.com loads normally and the bluecheckmark

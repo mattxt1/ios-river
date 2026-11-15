@@ -5,6 +5,31 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0324 boot/passive verified;0323 no-chirp/Wi-Fi reboot PASS (2026-11-14)
+
+User0323: NO CHIRP HEARD, iOSresponsive. DSP/EOS4zero+4tone andfullcleanup
+passed; physicalaudibility didnot.0324 corrects foundamp RXslot3->0, notyet
+audiotested. No more0323 controls. User0323freshjoin BLUECHECKMARK, Google
+loadsnormally. SavednativeDHCP BOUND/published/routerARPverified, generalNWI
+rank0en0/defaultDNS2nameservers, unboundordinaryDNS+HTTP200/AppleSuccess.
+Evidence work/short-tone/checkmark-wifi-*-1482f80.txt andmanifest. Thus0322
+initial/off-onreconnect and0323post-rebootmanualjoin allpass. Notautomaticjoin
+orlease-renew/enduranceproof. Do not claimall WiFireliability solved.
+
+AFTERlogs saved,userfastbootready; exact0324image SHA5941317f.../productriver
+verifiedagain. Temporaryfastbootboot accepted0.837s,no flash. Currentphone0324.
+InstalledADSP/net/nativeDHCP/defaultprobe bytes matchexactlocal verifiedfiles;
+allpassiveaudio statuses notrequested, noactivecontrols thisboot. Baseline
+amp/codec/ADSP surveys saved work/amp-slot/baseline-*-4e298f3.txt. Nativeimage
+kernel65cba559.../source4e298f3, helperbundle unchanged. USBloggeractive.
+Freshhome-responsive AND ready-listening request pending. MUSTwaitforreply.
+Then work/amp-slot/prepare-device.py once (nowintentional readyexit0), cue
+listenNOW, work/amp-slot/run-tone.py once. Neverrunfullrunnerafterprepare.
+Newcapture helper work/amp-slot/capture-wifi.py LABEL (O_EXCL/privatecaptures)
+forfreshjoin afteraudio; currentWiFistate notyetqueriedon0324. Askheard and
+stillresponsive aftertone. Physicalmicrophone/continuousiOSbackend pending.
+AllworkcanonicalDeveloperlocal. PreferlatestNOTESoverhistoricalentries.
+
 ## Active handoff:0323 DSP/EOS PASS,0324 slot image ready; userresults pending (2026-11-14)
 
 Currentphone0323, all audioone-shotsconsumed; quiet4zero+4tone/EOS PASS and

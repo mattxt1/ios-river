@@ -9,12 +9,12 @@ successful iOS API calls nor increasing frame counters prove physical audio.
 After explicit listening readiness/cue,0323 completed4silent+4tone buffers,
 renderedEOS and full teardown with no watchdog cutoff. Amplifieroutputenabled
 thenmuted; clocks/codec/AIF/channel restored, no unresolvedDSPownership.
-Useraudible/postresponsivefeedbackpending; do notclaimphysicalsound yet.
+User reports NO CHIRP HEARD and iOS responsive; physical sound remains pending.
 Finalpathaudit found legacyamp4820=3 selectsRX1slot3 whilecodecTXuses0/1.
 0324selectsslot0withreadback/snapshot/fullrestore and rejects wrongslot or
 missingRX1enablebeforeunmute. PrimaryLinux/Cirrus CS35L41 header and
 cs35l41_set_channels confirm slotfield bits5:0. Actualcode sanitizer tests and
-nativebuild pass; image4e298f3 verified, notyetbooted. Same85ms/-24dB/750ms
+nativebuild pass; image4e298f3 temporarily booted, passive baseline verified; fresh home/listening confirmation pending. Same85ms/-24dB/750ms
 mute policy and Wi-Fi fix; no boost/gainincrease. ContinuousiOSbackend and
 physicalmicrophone capture stillpending.
 

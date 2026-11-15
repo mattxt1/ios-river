@@ -18,8 +18,8 @@ muted PCM completion are verified. The first quiet-output attempt completed
 four silent plus eight tone buffers before its independent mute cutoff;
 cleanup passed. Audible result is unknown because the user wasn't listening.
 0323 subsequently passed the shorter DSP/EOS sequence with full cleanup;
-audible feedback is pending.0324 corrects amplifier receive-slot selection
-and is built for the next temporary boot.
+the user heard no chirp and iOS remained responsive.0324 corrects amplifier
+receive-slot selection and has temporarily booted for the next test.
 Continuous iOS playback still discards samples; microphone input is synthetic.
 See [AUDIO-BRINGUP.md](AUDIO-BRINGUP.md).
 
@@ -27,7 +27,8 @@ On0322, a confirmed blue Wi-Fi checkmark now agrees with native DHCP BOUND,
 primary en0 routing, a usable default resolver, ordinary DNS lookup, and an
 unbound HTTP connectivity check through Wi-Fi. The media ioctl previously
 returned zero entries, which made Apple treat the link as invalid. Safari and one off/on reconnect also pass.
-Fresh-boot and lease-renew reliability are still pending. See [WIFI-STATUS.md](WIFI-STATUS.md)
+A further boot/manual join also passed with Google loading normally.
+Automatic association and lease-renew/endurance reliability remain pending. See [WIFI-STATUS.md](WIFI-STATUS.md)
 and the latest active [NOTES.md](NOTES.md) for evidence and current ownership.
 All active work uses canonical `/Users/matttyson/Developer/Codex` local storage.
 
@@ -44,7 +45,7 @@ All active work uses canonical `/Users/matttyson/Developer/Codex` local storage.
 | Battery & Power | Hardware battery monitoring via Qualcomm PM8953 FG/QG and JG30 battery curve (`0267-river-battery-jg30-power-source.patch`). Publishes observed voltage/current/status and estimated capacity to IOKit `IOPMPowerSource`. | Integrated0290/0291 preserve last-valid samples, reject invalid current and remove charger-enable writes from sampling/diagnostics. Host checks and full build pass; live SweetBattery/IOPMPowerSource/IOPS publication agrees at85%,4194–4195mV, external/notcharging/notfull with valid/nonfallback flags. Failure recovery, load/cable/charging validation remains pending; percentage is a load-sensitive estimate. See [BATTERY-STATUS.md](BATTERY-STATUS.md). |
 | Wi-Fi & Networking | 0322 media ioctl correction enables a valid active link; native DHCP BOUND, primary en0/default DNS, ordinary lookup and unbound HTTP200/AppleSuccess verified with a user-confirmed blue checkmark. | Safari and one off/on reconnect pass; fresh-boot/renewal reliability pending. IPv6 Internet not established. See [WIFI-STATUS.md](WIFI-STATUS.md). |
 | USB & Connectivity | USB CDC-ECM Ethernet and Dropbear root SSH (`192.168.7.2`). Driver implements bus disconnect/reconnect auto-recovery (`0244-river-usb-reconnect.patch`). | SSH and diagnostic transfer work, with intermittent USB connection/handshake timeouts observed during audio bring-up; a fresh temporary boot sometimes restored access. |
-| Audio Subsystem | Active muted PCM4/4, ASM/AFE/ADM, codec/SLIMbus route, clock locks and teardown verified. Quiet output enabled and 8tone buffers completed before independent mute cutoff; full cleanup passed. | Audible result unknown; shorter0323 test pending. Continuous iOS playback still discarded, capture synthetic. See [AUDIO-BRINGUP.md](AUDIO-BRINGUP.md). |
+| Audio Subsystem | Active muted PCM4/4, ASM/AFE/ADM, codec/SLIMbus route, clock locks and teardown verified. Quiet output enabled and 8tone buffers completed before independent mute cutoff; full cleanup passed. | 0323 DSP/EOS passed; user heard no chirp.0324 receive-slot test pending. Continuous iOS playback still discarded, capture synthetic. See [AUDIO-BRINGUP.md](AUDIO-BRINGUP.md). |
 | Speaker Amplifier HW | Cirrus CS35L41 smart amplifier probed at I2C `0x40` on QUP2 (`0271-river-cs35l41-speaker-amp.patch`). Driver configures the boost converter for 8.5V (`0x00002018 = 0x21`), 4500 mA peak, +17 dB analog power gain (`0x00006c04 = 0x220`). Reset lines released for CS35L41 (GPIO 94) and CS47L35 audio hub (GPIO 68). Tone test sysctl `debug.river_speaker_test` implemented. | Muted clock-only test verified codec FLL and amplifier PLL lock on source `fa7283f`, with complete state restoration. Physical PCM transport remains unimplemented. **Hardware Safety Interlock:** Idle raw status register `0x00010098` readback shows `irq3 = 0x20000010` (`CS35L41_PLL_UNLOCK = 0x10`). The CS35L41 Class-D output stage is held in protective shutdown by silicon logic until an external locked clock is supplied to ASP from CS47L35 AIF1 or LPASS. Concurrent QUP2 access requires serialization. |
 | Haptics & Buttons | Awinic AW8697 haptic driver on QUP2 (`0x5a`). Verified on-device vibration pulses (`/usr/local/bin/vibrate 50`). Physical volume and power keys mapped via SPMI / TLMM. | Touch feedback and sysctl vibration work. Core Haptics subsystem reports synthetic profile. |
 | Camera & Torch | Hardware mapping established from device tree (PMI632 flash/torch, OV12A10 rear, S5K4H7 front). Experimental torch pulse interlocked for safety. | Camera pipeline (CCI, VFE, CSI-PHY) not yet brought up in XNU. |
