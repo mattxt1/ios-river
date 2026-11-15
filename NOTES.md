@@ -5,6 +5,35 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0322 Safari/reconnect PASS;0323+defaultprobe ready (2026-11-14)
+
+User says Safarihttps://example.com loads normally and bluecheckmark returns
+after Wi-Fi off/on/rejoin. Post-reconnectcapture allpass:state4/result1,
+media1/status3 validactive,nativeDHCP BOUND/published/routerARPverified,
+generalNWI primaryen0/defaultDNS2nameservers, ordinaryunboundDNS+HTTP200/
+AppleSuccess with sourceen0. No forcedinterfacebind (boundindex0). Evidence
+work/wifi-default/reconnect-*-c983486.txt plusreconnect-manifest.json.
+UI usability afteraudiotest demonstrated by Safari/Settings operations.
+Audibleaudio UNKNOWN userwasn'tlistening; don'tinfernooutput. All one-shots
+consumed0322, QMIpower/NGDretained, PCM/AFE/ASM/ADM/channelcleaned/ampmuted.
+Reboot reliability and lease-renew endurance stillpending, IPv6Internetunproven.
+
+PreferredNEXT image includes shorter4tonebuffers85ms + unchanged750ms mute
+and exact0322 Wi-Fi fix, plus --defaultprobe72f2080; noextrakernelbuildneeded.
+outputs/river-short-tone-wifi-1482f80-default.img SHA
+0775ba2bab0c76f620e94d5e058aded3cfebb2b6365f48775b68252cc500c487,
+26994688B/cmdline577, kernel98b49edc.../source1482f80, nativeexit0.
+Manifest short-tone-wifi-default-build-manifest.json; allunrelatedfiledata/
+metadata andkernelpayloadverified, helpersourcesrecorded. Prefer this over
+older1482f80 image lacking --default probe. Sourcebundle same-default stem.
+Fresh runners/capture/passivebaseline work/short-tone; noexistingactiveevidence.
+Fastbootreadiness nowrequested AFTERreconnectlogssaved; replypending.
+Next verifyimagehash/productriver, startfreshdevice-filteredlogger, temporary
+fastbootbootONLY. Ask freshhomeresponsive AND ready/listening before starting
+tone so userdoesn'tmissthebriefsound. Verifyhelperbytes/passivebaselinefirst.
+BatchWiFi freshbootjoin/defaultDNS verification withaudio; physicalmic and
+continuousrealPCMbackend stillpending. AllworkcanonicalDeveloperlocalstorage.
+
 ## Active handoff:0322 native DHCP/default DNS and ordinary route PASS (2026-11-14)
 
 User corrected earlier Spinner reply: misclick, actually BLUE CHECKMARK.

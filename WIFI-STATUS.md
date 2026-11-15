@@ -1,5 +1,15 @@
 # River Wi-Fi implementation audit and handoff
 
+##0322 Safari and off/on reconnect verified (2026-11-14)
+
+User confirms Safari https://example.com loads normally and the bluecheckmark
+returns after Wi-Fi off/on and reconnect. Post-reconnect nativeDHCP remains
+BOUND/published, generalNWI primaryen0 and usabledefaultDNS persist; unbound
+normalDNS+HTTP200/AppleSuccess pass with verifieden0 source. Captures saved
+before requesting another reboot. This confirms one initialjoin and one
+controlled reconnect; coldboot/renew/endurance reliability stillpending.
+Next0323 audio image retains the same media fix and adds ordinaryrouteprobe.
+
 ##0322 native DHCP, ordinary DNS and default routing verified (2026-11-14)
 
 User confirmed BLUE CHECKMARK (initial Spinner answer explicitly corrected as
