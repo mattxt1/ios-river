@@ -5,6 +5,39 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0321 quiet tone built;0322 native Wi-Fi media fix prepared (2026-11-14)
+
+Canonical Developer/Codex storage remains mandatory. Device still0320 with
+clean active muted PCM4/4 teardown; do not retry consumed one-shots. Scoped
+Internet works with delayed blue checkmark, normal DNS remains broken.
+Audio source da1a1b9492707ff02773b0d089b8097da2c7ad47 native0321 build exit0;
+kernel SHA0020827aa021ca3a4ee5d3fa9607183859ed2ea28680bf0399738440149e82d6.
+Quiet600Hz bounded341ms test:4zero completions then16tone buffers, -24dB,
+5ms ramps,750ms independent mute deadline, renderedEOS and full cleanup.
+Host actual-code tone/stream/codec/APR tests pass; no audible hardware test yet.
+Wi-Fi settle source8bd81e0d47b6a74db523691522d7f9f44e5083fb: bounded16sec
+post-DHCP observation with atmost3 repairs of genuinely missing service state,
+not a claim native/default DNS is fixed. Signed helper prepared, not yet live.
+
+New read-only native IPConfiguration/media reader installed on0320. Live:
+SIOCGIFMEDIA success,count0,current0x80,status3 => valid0,active1.
+Native DHCP State INACTIVE, IsPublished false, LastFailureStatus network changed.
+Apple bootp interfaces.c requires ifm_count>0 AND IFM_AVALID for valid link;
+wireless DHCP requires valid AND active. Custom driver returnedcount0 always.
+0322 fixes media count1 and bounded user-list copyout for32/packed64/kernel64
+ABIs, retaining existing authenticated-generation/live gating for ACTIVE.
+Actual-code ASan/UBSan tests pass count queries, up/down, ABI lists and errors.
+This is a proven malformed media report; whether it fully fixes checkmark,
+rankNever and normal DNS requires fresh-boot/join verification. No forced rank.
+Evidence private work/wifi-media/before-native-dhcp-media.txt; no raw network
+captures or private binaries in Git. Native read-only helper compiled/signed,
+phone response verified; packaging support added to include it nextboot.
+Next commit0322 before native incrementalbuild, package combined quiet-tone /
+media-fix / settle / DHCP-reader image, verify preservation/hash/size/cmdline,
+then request fastboot. Listen for short quiet tone, confirm responsive iOS;
+compare nativeDHCP/media/defaultDNS before/after freshjoin. Physical microphone
+and real continuous iOS audio backend still pending. Never flash.
+
 ## Active handoff:0320 PCM PASS; delayed Wi-Fi scoped connectivity (2026-11-14)
 
 Storage migration complete; use canonical Developer/Codex paths per next entry.

@@ -1,0 +1,63 @@
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -1620,22 +1620,18 @@
+  if (!queued) ifnet_stat_increment_out(ifp,0,0,1);
+  return 0;
+ }
++#include "river_wifi_media.h"
++
+ static errno_t
+ river_net_ioctl(ifnet_t ifp, unsigned long cmd, void *data)
+ {
+  switch (cmd) {
+  case SIOCSIFADDR: case SIOCAIFADDR: ifnet_set_flags(ifp,IFF_UP,IFF_UP); return 0;
+  case SIOCSIFFLAGS: case SIOCADDMULTI: case SIOCDELMULTI: return 0;
+- case 0xc02c6938u: case 0xc0306938u: case 0xc02c6948u: case 0xc0306948u: {
+-  struct river_ifmediareq *ifmr = (struct river_ifmediareq *)data;
+-  if (ifmr) {
+-   ifmr->ifm_current = 0x80;
+-   ifmr->ifm_active = 0x80;
+-   ifmr->ifm_status = 1 | ((river_net_live && river_apple80211_data_allowed(__atomic_load_n(&river_connection_generation,__ATOMIC_ACQUIRE))) ? 2 : 0);
+-   ifmr->ifm_count = 0;
+-  }
+-  return 0;
+- }
++ case 0xc0286938u: case 0xc02c6938u: case 0xc0306938u:
++ case 0xc0286948u: case 0xc02c6948u: case 0xc0306948u:
++  return river_wifi_media_query(cmd,data,river_net_live &&
++   river_apple80211_data_allowed(__atomic_load_n(&river_connection_generation,__ATOMIC_ACQUIRE)));
+  case 0xc0206937u: case 0x80206937u: return 0;
+  case 0x802869c8u: case 0xc02869c9u: return river_apple80211_ioctl(cmd, data);
+  default: return EOPNOTSUPP;
+diff --git a/bsd/dev/river_wifi_media.h b/bsd/dev/river_wifi_media.h
+--- a/bsd/dev/river_wifi_media.h
++++ b/bsd/dev/river_wifi_media.h
+@@ -0,0 +1,27 @@
++/* A media-count query must report an entry even without a list buffer.
++ * IPConfiguration requires count>0 plus IFM_AVALID before accepting link state.
++ * The ioctl boundary has packed64 (44), kernel64 (48), and 32-bit (40) ABIs.
++ * Never dereference a userspace media-list pointer in the kernel. */
++static int
++river_wifi_media_query(unsigned long cmd,void *data,bool live)
++{
++ if(!data)return EINVAL;
++ struct river_ifmediareq *m=(struct river_ifmediareq *)data;
++ int capacity=m->ifm_count;
++ if(capacity<0)return EINVAL;
++ unsigned size=(unsigned)((cmd>>16)&0x1fff);
++ uint64_t address=0;
++ if(size==40) {uint32_t p=0;memcpy(&p,(uint8_t *)data+36,4);address=p;}
++ else if(size==44)memcpy(&address,(uint8_t *)data+36,8);
++ else if(size==48)memcpy(&address,(uint8_t *)data+40,8);
++ else return EINVAL;
++ m->ifm_current=0x80; /* IFM_IEEE80211 | IFM_AUTO */
++ m->ifm_mask=0;m->ifm_active=0x80;
++ m->ifm_status=1|(live?2:0); /* IFM_AVALID | IFM_ACTIVE */
++ m->ifm_count=1;
++ if(capacity && address) {
++  const int media=0x80;
++  return copyout(&media,(user_addr_t)address,sizeof(media));
++ }
++ return 0;
++}

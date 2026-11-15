@@ -49,3 +49,8 @@ for m in river-play-sound river-record-sound; do
  sign "$m"
 done
 ls -l "$out"
+
+# Read-only native DHCP summary and media link state.
+cc -idirafter "$(xcrun --sdk macosx --show-sdk-path)/usr/include" \
+ -framework CoreFoundation -o "$out/river-ipconfig-state" river-ipconfig-state.c
+sign river-ipconfig-state
