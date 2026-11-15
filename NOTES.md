@@ -5,6 +5,57 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff: first audible speaker output; native PCM candidate prepared (2026-11-14)
+
+The user HEARD the0324 chirp and confirmed iOS remained responsive. This is
+first confirmed physical speaker playback through the ADSP/AFE/ADM/SLIMbus/
+CS47L35/CS35L41 route. The receive-slot correction worked on device.
+The DSP completed4silent+4tone buffers and renderedEOS. Overall route result
+is EIO because the750ms mute watchdog also fired near final handling;
+output_stopped1, all DSP/codec/amp/channel cleanup passed, no ownership
+uncertainty. Do not call this a full timing-policy pass. Evidence:
+work/amp-slot/codec-tone-4e298f3.txt and post-tone/channel statuses.
+Current phone0324; all one-shots consumed. QMI power/NGD retained, amplifier
+muted, PCM map/ASM/ADM/AFE/channel closed. No active retries this boot.
+
+Wi-Fi0324: user blue checkmark; captured nativeDHCP BOUND/published,
+primary en0/generalNWI/defaultDNS, ordinary unbound DNS+HTTP200/AppleSuccess.
+Evidence work/amp-slot/checkmark-wifi-*. Thus manual joins work on0322,
+0323 and0324, off/on reconnect and Safari/Google previously confirmed.
+Automatic association, lease renewal and endurance remain pending.
+All current Wi-Fi logs saved before any next fastboot request.
+
+Source25cbca5 commits0325: mute immediately once renderedEOS arrives rather
+than perform another full hardware survey; monotonic mute/output/check
+latencies added. All per-buffer guards and750ms watchdog unchanged. Actual
+stream, tone and route sanitizer tests pass, including no register-check
+callback after EOS and cleanup failure paths. Native build not yet invoked.
+
+0326 batches opt-in native iOS PCM staging/replay into the SAME next build.
+A separate mutex protects a16KiB/4096-frame stereoS16 snapshot from the actual
+river_audio_hw_write callback. Explicit arm only, skip initial silence,
+freeze when full, claim once, no hardware I/O on app writer threads, no sample
+contents exposed by sysctl. Explicit --codec-native-pcm replays four blocks
+through the verified route after four zero completions, clamped+5ms ramped
+with the same quiet level/watchdog. --native-stage-arm/status controls added.
+Normal iOS driver status still honestly advertises discarded playback and
+synthetic input: this is bounded staged replay, NOT a continuous backend.
+Actual-code sanitizer tests pass input/frame bounds, immutable claim,
+concurrent writers, clamping/ramps, native stream EOS and failure cleanup.
+Signed updated ADSP helper and AVAudioPlayer helper are compiled in
+work/native-pcm. Controlled48k stereoS16 two-note WAV and provenance there.
+
+Next: commit0326 before native build, apply exact patch, build once through
+0326 using the same local KDK. Package from verified0324 image, replace ADSP
+helper only; preserve Wi-Fi components. Verify image then request fastboot.
+Fresh boot: verify helpers/passive state, home/listening gate; muted prepare
+must stop before --codec-tone. Arm native staging and run AVAudioPlayer on
+controlled WAV (no physical output while mute hold is active). Require ready1,
+4096frames/peak>8 before cue and one --codec-native-pcm request. Do NOT first
+consume the route using synthetic tone. Collect native-stage/EOS/mute timing,
+cleanup, audible and responsiveness results. Physical mic and continuous
+playback implementation remain next. All active paths canonical Developer.
+
 ## Active handoff:0324 boot/passive verified;0323 no-chirp/Wi-Fi reboot PASS (2026-11-14)
 
 User0323: NO CHIRP HEARD, iOSresponsive. DSP/EOS4zero+4tone andfullcleanup

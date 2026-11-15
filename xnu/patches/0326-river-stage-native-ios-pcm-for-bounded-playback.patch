@@ -1,0 +1,209 @@
+diff --git a/bsd/dev/river_native_pcm.h b/bsd/dev/river_native_pcm.h
+--- a/bsd/dev/river_native_pcm.h
++++ b/bsd/dev/river_native_pcm.h
+@@ -0,0 +1,91 @@
++/* Opt-in one-shot native iOS PCM staging, not microphone capture or a live
++ * playback backend. The existing /dev callback supplies48k stereoS16.
++ * Freeze16KiB at first nonsilent frame. No hardware I/O on the writer thread.
++ * Only the explicit bounded codec test may claim and replay this snapshot. */
++#if defined(KERNEL)
++#include <sys/hakios.audio.h>
++_Static_assert(HAKIOS_AUDIO_RATE==48000 && HAKIOS_AUDIO_CHANNELS==2 && HAKIOS_AUDIO_FRAME==4,"Native PCM staging ABI");
++#endif
++static LCK_GRP_DECLARE(ri_native_pcm_group,"river-native-pcm");
++static LCK_MTX_DECLARE(ri_native_pcm_lock,&ri_native_pcm_group);
++static struct {
++ bool armed,started,ready,claimed;
++ unsigned frames,peak,rejected;
++ uint64_t observed_frames;
++ int16_t samples[4096*2];
++} ri_native_pcm;
++static int
++ri_native_pcm_arm(void)
++{
++ int error=0;lck_mtx_lock(&ri_native_pcm_lock);
++ if(ri_native_pcm.armed || ri_native_pcm.ready || ri_native_pcm.claimed)error=EALREADY;
++ else {memset(&ri_native_pcm,0,sizeof(ri_native_pcm));ri_native_pcm.armed=true;}
++ lck_mtx_unlock(&ri_native_pcm_lock);return error;
++}
++static void
++ri_native_pcm_push(const int16_t *pcm,size_t frames)
++{
++ lck_mtx_lock(&ri_native_pcm_lock);
++ if(!ri_native_pcm.armed)goto done;
++ /* river_audio_write emits atmost1024frames per callback. Reject a foreign
++  * oversized/null call before reading any source memory. */
++ if(!pcm || frames>1024) {ri_native_pcm.rejected++;goto done;}
++ ri_native_pcm.observed_frames+=frames;
++ for(unsigned i=0;i<frames && ri_native_pcm.frames<4096;i++) {
++  int32_t left=pcm[i*2],right=pcm[i*2+1];
++  unsigned a=left<0?(unsigned)-left:(unsigned)left;
++  unsigned b=right<0?(unsigned)-right:(unsigned)right;
++  if(!ri_native_pcm.started && a<=8 && b<=8)continue;
++  ri_native_pcm.started=true;unsigned n=ri_native_pcm.frames++;
++  ri_native_pcm.samples[n*2]=(int16_t)left;ri_native_pcm.samples[n*2+1]=(int16_t)right;
++  if(a>ri_native_pcm.peak)ri_native_pcm.peak=a;
++  if(b>ri_native_pcm.peak)ri_native_pcm.peak=b;
++ }
++ if(ri_native_pcm.frames==4096) {ri_native_pcm.ready=true;ri_native_pcm.armed=false;}
++ done:lck_mtx_unlock(&ri_native_pcm_lock);
++}
++static bool
++ri_native_pcm_claim(void)
++{
++ lck_mtx_lock(&ri_native_pcm_lock);
++ bool ok=ri_native_pcm.ready && !ri_native_pcm.claimed;
++ if(ok)ri_native_pcm.claimed=true;
++ lck_mtx_unlock(&ri_native_pcm_lock);return ok;
++}
++static bool
++ri_native_pcm_fill(int16_t *target,unsigned index)
++{
++ if(!target || index>=4)return false;
++ lck_mtx_lock(&ri_native_pcm_lock);
++ bool ok=ri_native_pcm.ready && ri_native_pcm.claimed && ri_native_pcm.frames==4096;
++ if(ok)for(unsigned i=0;i<1024;i++) {
++  unsigned frame=index*1024+i,remaining=4095-frame;
++  unsigned ramp=frame<240?frame:remaining<240?remaining:240;
++  for(unsigned channel=0;channel<2;channel++) {
++   int value=ri_native_pcm.samples[frame*2+channel];
++   if(value>2048)value=2048;if(value<-2048)value=-2048;
++   target[i*2+channel]=(int16_t)(value*(int)ramp/240);
++  }
++ }
++ lck_mtx_unlock(&ri_native_pcm_lock);return ok;
++}
++static int
++river_native_pcm_stage_sysctl SYSCTL_HANDLER_ARGS
++{
++ int value=0,error=sysctl_handle_int(oidp,&value,0,req);
++ if(error || !req->newptr)return error;
++ if(value!=1)return EINVAL;return ri_native_pcm_arm();
++}
++static int
++river_native_pcm_status_sysctl SYSCTL_HANDLER_ARGS
++{
++ char note[384];lck_mtx_lock(&ri_native_pcm_lock);
++ snprintf(note,sizeof(note),"armed=%u started=%u ready=%u claimed=%u frames=%u capacity_frames=4096 observed_frames=%llu peak=%u rejected=%u rate=48000 channels=2 bits=16 source=ios_device_write replay=explicit_bounded_only ios_backend=discarded capture=synthetic",
++  ri_native_pcm.armed,ri_native_pcm.started,ri_native_pcm.ready,ri_native_pcm.claimed,
++  ri_native_pcm.frames,(unsigned long long)ri_native_pcm.observed_frames,ri_native_pcm.peak,ri_native_pcm.rejected);
++ lck_mtx_unlock(&ri_native_pcm_lock);return sysctl_handle_string(oidp,note,sizeof(note),req);
++}
++SYSCTL_PROC(_debug,OID_AUTO,river_native_pcm_stage,CTLTYPE_INT|CTLFLAG_RW|CTLFLAG_LOCKED,
++ NULL,0,river_native_pcm_stage_sysctl,"I","Arm one-shot native PCM snapshot without playback");
++SYSCTL_PROC(_debug,OID_AUTO,river_native_pcm_status,CTLTYPE_STRING|CTLFLAG_RD|CTLFLAG_LOCKED,
++ NULL,0,river_native_pcm_status_sysctl,"A","Native PCM snapshot metadata; never sample contents");
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -4537,11 +4537,14 @@
+ 	       ri_cs35l41_irq3, ri_cs35l41_irq4);
+ }
+ 
++#include "river_native_pcm.h"
++
+ void
+ river_audio_hw_write(const int16_t *pcm, size_t frames)
+ {
+ 	if (!ri_speaker_ok || !pcm || frames == 0) return;
+ 	ri_audio_hw_frames += frames;
++	ri_native_pcm_push(pcm,frames);
+ 
+ 	/* PCM transport to the audio hardware is not implemented yet. */
+ }
+diff --git a/bsd/dev/river_adsp_stream.h b/bsd/dev/river_adsp_stream.h
+--- a/bsd/dev/river_adsp_stream.h
++++ b/bsd/dev/river_adsp_stream.h
+@@ -2,7 +2,7 @@
+  * No audible samples or /dev backend. Dedicated memory is permanent, and
+  * unresolved ownership is retained until reboot. ri_adsp_lock owns state. */
+ struct ri_stream_state {
+- bool attempted,mapped,running,in_flight,complete,arm_attempted,afe_prepared,tone,eos_rendered;
++ bool attempted,mapped,running,in_flight,complete,arm_attempted,afe_prepared,tone,eos_rendered,native_pcm;
+  vm_offset_t page;
+  uint64_t physical;
+  uint32_t handle,completion_status,failed_opcode,failed_status;
+@@ -32,7 +32,7 @@
+   state->unmap_error,ri_route.asm_open,ri_route.adm_open,ri_route.matrix,
+   ri_route.afe_started,ri_route.muted,ri_route.cleanup_error,ri_route.cleanup_opcode,
+   ri_route.cleanup_status,ri_pcm.rx_header,ri_pcm.rx_source,ri_pcm.rx_destination,
+-  ri_pcm.rx_token,ri_pcm.rx_opcode,state->tone?"quiet600Hz":"zero_only",state->eos_rendered);
++  ri_pcm.rx_token,ri_pcm.rx_opcode,state->native_pcm?"native_ios_snapshot":state->tone?"quiet600Hz":"zero_only",state->eos_rendered);
+  printf("RIVER STREAM: %s\n",state->note);return error;
+ }
+ static int
+@@ -94,13 +94,17 @@
+ done:
+  return ri_stream_result(&ri_live_stream,phase,error);
+ }
+-static void
++static bool
+ ri_stream_tone_buffer(struct ri_stream_state *state,unsigned index)
+ {
+  static const int16_t sine[80]={0,161,320,478,633,784,930,1070,1204,1330,1448,1557,1657,1746,1825,1892,1948,1991,2023,2042,2048,2042,2023,1991,1948,1892,1825,1746,1657,1557,1448,1330,1204,1070,930,784,633,478,320,161,0,-161,-320,-478,-633,-784,-930,-1070,-1204,-1330,-1448,-1557,-1657,-1746,-1825,-1892,-1948,-1991,-2023,-2042,-2048,-2042,-2023,-1991,-1948,-1892,-1825,-1746,-1657,-1557,-1448,-1330,-1204,-1070,-930,-784,-633,-478,-320,-161};
+  int16_t *p=(int16_t *)(state->page+(index&3)*4096);
+  /* Four tone buffers (85ms of samples) leave room for the existing
+   * polled hardware checks and EOS inside the unchanged750ms mute deadline. */
++ if(state->native_pcm) {
++  if(!ri_native_pcm_fill(p,index-4))return false;
++  sweet_dcache_clean((vm_offset_t)p,4096);__asm__ volatile("dmb sy" ::: "memory");return true;
++ }
+  unsigned start=(index-4)*1024;
+  for(unsigned i=0;i<1024;i++) {
+   unsigned frame=start+i,remaining=4095-frame;
+@@ -108,7 +112,7 @@
+   int value=(int)sine[frame%80]*(int)ramp/240;
+   p[i*2]=p[i*2+1]=(int16_t)value;
+  }
+- sweet_dcache_clean((vm_offset_t)p,4096);__asm__ volatile("dmb sy" ::: "memory");
++ sweet_dcache_clean((vm_offset_t)p,4096);__asm__ volatile("dmb sy" ::: "memory");return true;
+ }
+ static int
+ ri_stream_execute(struct ri_stream_state *state,unsigned session)
+@@ -187,7 +191,7 @@
+     phase="quiet_output_start";error=ri_stream_output_start();if(error)goto done;
+    }
+    phase="quiet_output_check";error=ri_stream_output_check();if(error)goto done;
+-   ri_stream_tone_buffer(state,i);
++   if(!ri_stream_tone_buffer(state,i)) {error=EBUSY;goto done;}
+   }
+   uint64_t address=pa+(uint64_t)(i&3)*4096;
+   uint32_t write[]={(uint32_t)address,(uint32_t)(address>>32),state->handle,4096,i,0,0,0};
+diff --git a/bsd/dev/river_adsp_codec_route.h b/bsd/dev/river_adsp_codec_route.h
+--- a/bsd/dev/river_adsp_codec_route.h
++++ b/bsd/dev/river_adsp_codec_route.h
+@@ -163,13 +163,14 @@
+ static int
+ ri_codec_path_run_mode(unsigned mode)
+ {
+- if(mode>2)return EINVAL;bool with_pcm=mode!=0,tone=mode==2;
++ if(mode>3)return EINVAL;bool with_pcm=mode!=0,tone=mode>=2,native=mode==3;
+  if(ri_codec_path.attempted)return EALREADY;
+  if(!ri_stream.complete || !ri_route_ready() || !ri_route.muted || !ri_afe_mute_hold ||
+     !ri_ngd.address_valid || !ri_ngd.enabled || ri_ngd.uncertain || ri_channel.attempted)return EBUSY;
++ if(native && !ri_native_pcm_claim())return EBUSY;
+  ri_codec_path.attempted=true;ri_codec_path.with_pcm=with_pcm;
+  if(tone) {
+-  ri_live_stream.tone=true;ri_stream_output_start=ri_tone_start;
++  ri_live_stream.native_pcm=native;ri_live_stream.tone=true;ri_stream_output_start=ri_tone_start;
+   ri_stream_output_check=ri_tone_check;ri_stream_output_stop=ri_tone_stop;
+  }
+  int error=with_pcm?ri_stream_prepare_live():0;
+@@ -189,7 +190,7 @@
+  if(!error && !ri_codec_path.complete)error=EIO;
+  snprintf(ri_codec_path_note,sizeof(ri_codec_path_note),
+   "phase=%s error=%d attempted=%u complete=%u route_seen=%u touched=%u route_restored=%u bad_reg=%#x port_map=%#x port_before=%#x port_live=%#x rate=%#x fll=%#x amp_irq=%#x clock_error=%d channel_error=%d channel_complete=%u connected=%u defined=%u active=%u uncertain=%u aif_restored=%u amp_restored=%u amp_locked=%u amp_mute_retained=%u afe_started=%u dsp_cleanup_error=%d live_mapped=%u live_in_flight=%u amp_output_stage_test_policy=%s quiet_tone=%u output_enabled=%u output_stopped=%u output_cutoff=%u mute_verified_us=%llu output_window_us=%llu max_output_check_us=%llu active_route_pcm=%u dsp_samples_submitted=%u ios_backend=discarded capture=synthetic live_pcm={%s} last_native_clock={%s}",
+-  ri_codec_path.complete?(tone?"quiet_codec_tone_complete":with_pcm?"muted_codec_pcm_complete":"muted_codec_route_complete"):"muted_codec_route_stopped",error,
++  ri_codec_path.complete?(native?"native_codec_pcm_complete":tone?"quiet_codec_tone_complete":with_pcm?"muted_codec_pcm_complete":"muted_codec_route_complete"):"muted_codec_route_stopped",error,
+   ri_codec_path.attempted,ri_codec_path.complete,ri_codec_path.seen,ri_codec_path.touched,
+   ri_codec_path.restored,ri_codec_path.bad_reg,ri_codec_path.port_map,ri_codec_path.port_before,
+   ri_codec_path.port_live,ri_codec_path.rate,ri_codec_path.fll,ri_codec_path.amp_irq,
+@@ -213,7 +214,7 @@
+ {
+  int value=0,error=sysctl_handle_int(oidp,&value,0,req);
+  if(error || !req->newptr)return error;
+- if(value<1 || value>3)return EINVAL;
++ if(value<1 || value>4)return EINVAL;
+  lck_mtx_lock(&ri_adsp_lock);error=value==1?ri_codec_path_run():ri_codec_path_run_mode(value-1);lck_mtx_unlock(&ri_adsp_lock);return error;
+ }
+ static int

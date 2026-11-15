@@ -82,11 +82,16 @@ static int stage_image(const char *path) {
 int main(int argc,char **argv) {
  int rc=0,request=1;
  const char *status="debug.river_adsp_status";
- if(argc==2 && (!strcmp(argv[1],"--codec-route") || !strcmp(argv[1],"--codec-route-status") || !strcmp(argv[1],"--codec-pcm") || !strcmp(argv[1],"--codec-tone"))) {
+ if(argc==2 && (!strcmp(argv[1],"--native-stage-arm") || !strcmp(argv[1],"--native-stage-status"))) {
+  status="debug.river_native_pcm_status";
+  if(!strcmp(argv[1],"--native-stage-arm") && sysctlbyname("debug.river_native_pcm_stage",NULL,NULL,&request,sizeof(request))) {perror("Native PCM staging");rc=1;}
+ } else
+ if(argc==2 && (!strcmp(argv[1],"--codec-route") || !strcmp(argv[1],"--codec-route-status") || !strcmp(argv[1],"--codec-pcm") || !strcmp(argv[1],"--codec-tone") || !strcmp(argv[1],"--codec-native-pcm"))) {
   status="debug.river_adsp_codec_path_status";
   if(!strcmp(argv[1],"--codec-pcm"))request=2;
   if(!strcmp(argv[1],"--codec-tone"))request=3;
-  if((!strcmp(argv[1],"--codec-route") || !strcmp(argv[1],"--codec-pcm") || !strcmp(argv[1],"--codec-tone")) && sysctlbyname("debug.river_adsp_codec_path",NULL,NULL,&request,sizeof(request))) {perror("Muted codec route test");rc=1;}
+  if(!strcmp(argv[1],"--codec-native-pcm"))request=4;
+  if((!strcmp(argv[1],"--codec-route") || !strcmp(argv[1],"--codec-pcm") || !strcmp(argv[1],"--codec-tone") || !strcmp(argv[1],"--codec-native-pcm")) && sysctlbyname("debug.river_adsp_codec_path",NULL,NULL,&request,sizeof(request))) {perror("Muted codec route test");rc=1;}
  } else if(argc==2 && (!strcmp(argv[1],"--channel-test") || !strcmp(argv[1],"--channel-status"))) {
   status="debug.river_adsp_channel_status";
   if(!strcmp(argv[1],"--channel-test") && sysctlbyname("debug.river_adsp_channel",NULL,NULL,&request,sizeof(request))) {perror("SLIMbus channel test");rc=1;}
@@ -143,7 +148,7 @@ int main(int argc,char **argv) {
  } else if(argc==3&&!strcmp(argv[1],"--metadata")) rc=metadata_test(argv[2]);
  else if(argc==3&&!strcmp(argv[1],"--stage-image")) rc=stage_image(argv[2]);
  else if(argc!=1) {
-  fprintf(stderr,"Usage: %s [--probe|--handshake-init|--metadata PATH|--stage-image PATH|--start|--start-status|--apr|--apr-status|--pcm-map|--asm-test|--afe-probe|--pcm-status|--afe-config|--adm-route|--afe-route|--route-status|--pcm-silence|--stream-status|--slim-discover|--slim-power|--slim-ngd|--slim-status|--ngd-enumerate|--ngd-status|--channel-test|--channel-status|--codec-route|--codec-route-status|--codec-pcm|--codec-tone]\n",argv[0]);return 2;
+  fprintf(stderr,"Usage: %s [--probe|--handshake-init|--metadata PATH|--stage-image PATH|--start|--start-status|--apr|--apr-status|--pcm-map|--asm-test|--afe-probe|--pcm-status|--afe-config|--adm-route|--afe-route|--route-status|--pcm-silence|--stream-status|--slim-discover|--slim-power|--slim-ngd|--slim-status|--ngd-enumerate|--ngd-status|--channel-test|--channel-status|--codec-route|--codec-route-status|--codec-pcm|--codec-tone|--codec-native-pcm|--native-stage-arm|--native-stage-status]\n",argv[0]);return 2;
  }
  char note[8192]={0};size_t n=sizeof(note)-1;
  if(sysctlbyname(status,note,&n,NULL,0)) {perror("ADSP status");return 1;}

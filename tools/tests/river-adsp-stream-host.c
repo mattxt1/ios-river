@@ -27,7 +27,7 @@ typedef uint64_t addr64_t;
 #define KERN_SUCCESS 0
 static int kernel_map,kernel_pmap;
 static unsigned write_count,cleaned,barriers,allocations,output_starts,output_stops;
-static bool output_live,expected_tone,eos_seen;
+static bool output_live,expected_tone,eos_seen,expected_native;
 static uint32_t expected_pa,expected_stream=0x04010000;
 static unsigned char stream_page[PAGE_SIZE*2] __attribute__((aligned(PAGE_SIZE)));
 static int kmem_alloc_contig(int map,vm_offset_t *out,unsigned size,unsigned mask,unsigned low,unsigned high,unsigned flags,unsigned tag)
@@ -37,7 +37,7 @@ static ppnum_t pmap_find_phys(int map,addr64_t address)
 #define ptoa_64(n) ((n)*PAGE_SIZE)
 static void sweet_dcache_clean(vm_offset_t address,unsigned size)
 {assert(address>=(uintptr_t)stream_page && address<(uintptr_t)stream_page+2*PAGE_SIZE && (size==PAGE_SIZE || size==4096));if(size==PAGE_SIZE){for(unsigned i=0;i<size;i++)assert(!((unsigned char*)address)[i]);}
- else {assert(size==4096 && output_live);int16_t *v=(int16_t*)address;unsigned nonzero=0;for(unsigned i=0;i<1024;i++){assert(v[i*2]==v[i*2+1] && v[i*2]<=2048 && v[i*2]>=-2048);nonzero+=v[i*2]!=0;}assert(nonzero);if(write_count==4)assert(v[0]==0 && v[1]==0);if(write_count==7)assert(v[2046]==0 && v[2047]==0);}
+ else {assert(size==4096 && output_live);int16_t *v=(int16_t*)address;unsigned nonzero=0;for(unsigned i=0;i<1024;i++){assert((expected_native?v[i*2]==-v[i*2+1]:v[i*2]==v[i*2+1]) && v[i*2]<=2048 && v[i*2]>=-2048);nonzero+=v[i*2]!=0;}assert(nonzero);if(write_count==4)assert(v[0]==0 && v[1]==0);if(write_count==7)assert(v[2046]==0 && v[2047]==0);}
  cleaned++;}
 static void host_barrier(void){barriers++;}
 static int ri_pcm_transaction(struct ri_apr_request *r,struct ri_apr_reply *p)
@@ -125,6 +125,10 @@ static int ri_pcm_transaction(struct ri_apr_request *r,struct ri_apr_reply *p)
  }
  return 0;
 }
+static bool ri_native_pcm_fill(int16_t *target,unsigned index){
+ assert(expected_native && index<4);if(mode==60)return false;
+ for(unsigned i=0;i<1024;i++){unsigned frame=index*1024+i,remaining=4095-frame,ramp=frame<240?frame:remaining<240?remaining:240;target[i*2]=(int16_t)(2048*(int)ramp/240);target[i*2+1]=-target[i*2];}return true;
+}
 static int quiet_printf(const char *format,...) {(void)format;return 0;}
 #define printf quiet_printf
 #include "route-actual.h"
@@ -182,7 +186,7 @@ static int host_output_check(void){assert(!lock_depth && output_live && !eos_see
 static void host_output_stop(void){assert(!lock_depth);output_stops++;output_live=false;}
 static void stream_reset(unsigned scenario)
 {
- reset(scenario);output_starts=output_stops=0;output_live=expected_tone=eos_seen=false;ri_stream_output_start=NULL;ri_stream_output_check=NULL;ri_stream_output_stop=NULL;allocations=0;expected_stream=0x04010000;memset(&ri_live_stream,0,sizeof(ri_live_stream));memset(&ri_stream,0,sizeof(ri_stream));
+ reset(scenario);output_starts=output_stops=0;output_live=expected_tone=eos_seen=expected_native=false;ri_stream_output_start=NULL;ri_stream_output_check=NULL;ri_stream_output_stop=NULL;allocations=0;expected_stream=0x04010000;memset(&ri_live_stream,0,sizeof(ri_live_stream));memset(&ri_stream,0,sizeof(ri_stream));
  ri_pcm.physical=0x50000000;write_count=cleaned=barriers=0;
  assert(ri_route_config()==0 && ri_route.config_readback);
  assert(ri_route_test(false)==0);
@@ -259,6 +263,15 @@ int main(void)
   else if(scenario==56)assert(rc==EIO && write_count==4 && !ri_live_stream.mapped);
   else if(scenario==57)assert(rc==EIO && ri_pcm.poisoned && ri_live_stream.mapped);
   else assert(rc==ETIMEDOUT && !ri_live_stream.mapped && !ri_pcm.poisoned);
+ }
+ for(unsigned scenario=2;scenario<=60;scenario+=58) {
+  stream_reset(2);assert(!ri_stream_test());commands=write_count=0;expected_stream=0x05010000;
+  assert(!ri_stream_prepare_live());ri_live_stream.tone=ri_live_stream.native_pcm=true;expected_tone=expected_native=true;mode=scenario;
+  ri_stream_output_start=host_output_start;ri_stream_output_check=host_output_check;ri_stream_output_stop=host_output_stop;
+  int rc=ri_stream_execute(&ri_live_stream,5);
+  assert(output_starts==1 && output_stops==1 && !output_live && !ri_live_stream.mapped && !ri_route.afe_started);
+  if(scenario==2)assert(!rc && ri_live_stream.completed==8 && ri_live_stream.eos_rendered && strstr(ri_live_stream.note,"native_ios_snapshot"));
+  else assert(rc==EBUSY && write_count==4 && !ri_live_stream.complete && !ri_pcm.poisoned);
  }
  puts("actual-code zero-PCM map/RUN/WRITE ownership, completion and failure teardown tests passed");
  return 0;
