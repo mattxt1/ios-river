@@ -15,8 +15,8 @@ An opt-in queue now receives actual device-write PCM while a dedicated kernel
 thread owns the DSP route. Twelve app buffers completed through four DMA slots
 with exact identity/address/handle matching. The eight-block CPU queue supplied
 12blocks with continuing writer refill; the readiness snapshot stayed unclaimed.
-This is bounded live queue playback rather than frozen snapshot replay. User
-acoustic/post-test responsiveness feedback is pending. Runtime remains limited
+This is bounded live queue playback rather than frozen snapshot replay. The user
+missed listening; audibility and post-test responsiveness are unobserved. Runtime remains limited
 to256ms PCM and the unchanged750ms mute watchdog; normal automatic playback
 and physical microphone capture remain pending.
 

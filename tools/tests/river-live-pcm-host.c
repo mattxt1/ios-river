@@ -16,6 +16,13 @@ static unsigned held;
 static void lck_mtx_lock(int *p){assert(p);assert(!pthread_mutex_lock(&mutex));held=1;}
 static void lck_mtx_unlock(int *p){assert(p && held);held=0;assert(!pthread_mutex_unlock(&mutex));}
 #include "queue-actual.h"
+static int queue_arm_short(void){
+#if RIVER_LONG_RUNTIME
+ return ri_audio_queue_arm(false);
+#else
+ return ri_audio_queue_arm();
+#endif
+}
 #define RI_APR_BAD -1
 #define RI_APR_WAIT 0
 #define RI_APR_STALE 1
@@ -89,19 +96,23 @@ static void ownership_tests(void){
  ready=false;assert(ri_pipeline_receive(&ch,slots,0xabcd,&completed)==EIO && slots[1].owned);
 }
 static unsigned refill_calls;
-static int refill_health(void){refill_calls++;fill(4);return health();}
+static int refill_health(void){refill_calls++;
+#if RIVER_LONG_RUNTIME
+ if(ri_audio_queue.long_mode){for(unsigned i=0;i<4;i++){int ticket=ri_audio_queue_reserve(1024);if(ticket==1)ri_audio_queue_commit(input,1024,false);}return health();}
+#endif
+ fill(4);return health();}
 int main(void){
- reset();ri_audio_queue_push(input,1024);assert(!ri_audio_queue.used);assert(!ri_audio_queue_arm() && ri_audio_queue_arm()==EALREADY);
+ reset();ri_audio_queue_push(input,1024);assert(!ri_audio_queue.used);assert(!queue_arm_short() && queue_arm_short()==EALREADY);
  ri_audio_queue_push(NULL,1);ri_audio_queue_push(input,1025);assert(ri_audio_queue.rejected==2);
  fill(9);assert(ri_audio_queue.used==8192 && ri_audio_queue.overflows==1 && ri_audio_queue.dropped==1024);
  for(unsigned i=0;i<8;i++){assert(ri_audio_queue_pop(output,i)==1);assert(output[0]==(i?2048:0) && output[1]==(i?-2048:0));}
  assert(ri_audio_queue_pop(output,8)==-1 && ri_audio_queue.underruns==1);ri_audio_queue.stop=true;assert(!ri_audio_queue_pop(output,8));
- reset();assert(!ri_audio_queue_arm());ri_audio_queue_push(input,512);ri_audio_queue_push(input,512);assert(ri_audio_queue_pop(output,0)==1 && ri_audio_queue.consumed==1024);
+ reset();assert(!queue_arm_short());ri_audio_queue_push(input,512);ri_audio_queue_push(input,512);assert(ri_audio_queue_pop(output,0)==1 && ri_audio_queue.consumed==1024);
  fill(8);assert(ri_audio_queue_pop(output,11)==1 && !output[2046] && !output[2047]);
- reset();assert(!ri_audio_queue_arm());pthread_t threads[4];for(unsigned i=0;i<4;i++)assert(!pthread_create(&threads[i],NULL,producer,NULL));for(unsigned i=0;i<4;i++)assert(!pthread_join(threads[i],NULL));assert(ri_audio_queue.used==8192 && ri_audio_queue.accepted==8192 && ri_audio_queue.dropped==24*1024);
+ reset();assert(!queue_arm_short());pthread_t threads[4];for(unsigned i=0;i<4;i++)assert(!pthread_create(&threads[i],NULL,producer,NULL));for(unsigned i=0;i<4;i++)assert(!pthread_join(threads[i],NULL));assert(ri_audio_queue.used==8192 && ri_audio_queue.accepted==8192 && ri_audio_queue.dropped==24*1024);
  ownership_tests();
  for(unsigned mode=0;mode<6;mode++){
-  reset();assert(!ri_audio_queue_arm());fill(8);scenario=mode;struct ri_stream_state s={.page=(uintptr_t)dma,.physical=0x60000000,.handle=0xabcd};
+  reset();assert(!queue_arm_short());fill(8);scenario=mode;struct ri_stream_state s={.page=(uintptr_t)dma,.physical=0x60000000,.handle=0xabcd};
   if(!mode){ri_pipeline_health=refill_health;refill_calls=0;}
   if(mode==4)health_fail=1;
   if(mode==5)ri_audio_queue.stop=true;
@@ -114,6 +125,21 @@ int main(void){
   if(mode==5)assert(!error && !s.in_flight && !sends && !ri_pcm.poisoned);
   assert(maps==1 && unmaps==1);
  }
- reset();assert(!ri_audio_queue_arm());fill(4);struct ri_stream_state s={.page=(uintptr_t)dma,.physical=0x60000000,.handle=0xabcd};assert(ri_stream_pipeline(&s,0x5010000)==ENOBUFS && ri_audio_queue.underruns==1 && !s.in_flight && !ri_pcm.poisoned && s.completed==4);
+ reset();assert(!queue_arm_short());fill(4);struct ri_stream_state s={.page=(uintptr_t)dma,.physical=0x60000000,.handle=0xabcd};assert(ri_stream_pipeline(&s,0x5010000)==ENOBUFS && ri_audio_queue.underruns==1 && !s.in_flight && !ri_pcm.poisoned && s.completed==4);
+#if RIVER_LONG_RUNTIME
+ reset();assert(!ri_audio_queue_arm(true));
+ for(unsigned i=0;i<8;i++)assert(ri_audio_queue_reserve(1024)==1);
+ assert(ri_audio_queue.reserved==8192 && ri_audio_queue_reserve(1)==-EWOULDBLOCK && ri_audio_queue.backpressure==1 && !ri_audio_queue.used);
+ ri_audio_queue_commit(input,1024,false);assert(ri_audio_queue.used==1024 && ri_audio_queue.reserved==7168);
+ ri_audio_queue_commit(NULL,1024,true);assert(ri_audio_queue.reserved==6144 && ri_audio_queue.cancelled_frames==1024);
+ ri_audio_queue.stop=true;ri_audio_queue_commit(input,1024,false);assert(ri_audio_queue.reserved==5120 && ri_audio_queue.cancelled_frames==2048);
+ reset();assert(!ri_audio_queue_arm(true));for(unsigned i=0;i<8;i++){assert(ri_audio_queue_reserve(1024)==1);ri_audio_queue_commit(input,1024,false);}
+ assert(ri_audio_queue_pop(output,239)==1 && !output[2046] && !output[2047]);
+ struct ri_stream_state long_s={.page=(uintptr_t)dma,.physical=0x60000000,.handle=0xabcd};ri_pipeline_health=refill_health;
+ assert(!ri_stream_pipeline(&long_s,0x5010000) && long_s.completed==240 && !long_s.in_flight && !ri_pcm.poisoned && ri_audio_queue.max_owned==4 && !ri_audio_queue.underruns);
+ reset();assert(!ri_audio_queue_arm(true));struct ri_stream_state empty_s={.page=(uintptr_t)dma,.physical=0x60000000,.handle=0xabcd};
+ assert(ri_stream_pipeline(&empty_s,0x5010000)==ENOBUFS && now>22000000ULL && ri_audio_queue.underruns==1 && !empty_s.in_flight && !ri_pcm.poisoned);
+ puts("PASS runtime reservations, capacity/commit/cancel/stop,240-buffer refill, final ramp and bounded producer-jitter/underrun semantics");
+#endif
  puts("PASS actual live queue: overflow, partial chunks, clamp/ramps, concurrent writers; four-slot pipeline: live refill, out-of-order, duplicate, foreign endpoints, address/handle mismatch, timeout, NACK, health failure, stop and underrun ownership");
 }

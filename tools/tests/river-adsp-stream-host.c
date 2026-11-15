@@ -135,7 +135,7 @@ static int quiet_printf(const char *format,...) {(void)format;return 0;}
 #include "route-actual.h"
 #undef printf
 #define printf quiet_printf
-static struct {bool stop;} ri_audio_queue;
+static struct {bool stop,armed;unsigned used,discarded_at_stop;} ri_audio_queue;
 #include "stream-actual.h"
 /* Model pipeline return values here; full transport/queue is exercised by
  * test-river-live-pcm.py. This harness checks route/EOS/cleanup integration. */

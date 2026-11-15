@@ -32,7 +32,7 @@ Patch0327 now has a built and verified opt-in live PCM queue candidate: a
 separate DSP worker, four owned DMA slots and dynamic fault/clock monitoring.
 Patch0327 passed a bounded live-queue transport trial:12buffers, four DMA slots,
 ongoing app refill, zero queue underruns, rendered EOS and full cleanup. Mute
-verified377ms; maximum health check12.5ms. User acoustic feedback is pending.
+verified377ms; maximum health check12.5ms. The user missed listening, so audibility is unobserved.
 Unrestricted continuous playback and physical microphone capture remain pending.
 See `NOTES.md` for the exact image and current phone ownership.
 

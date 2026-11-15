@@ -168,10 +168,11 @@ static struct {bool complete;} ri_stream;
 static struct {bool muted,asm_open,adm_open,afe_started;int cleanup_error;} ri_route;
 static struct {bool poisoned;} ri_pcm;
 static struct ri_stream_state {bool complete,mapped,in_flight,afe_prepared,tone,native_pcm,queued_pcm;unsigned submitted;char note[1536];} ri_live_stream;
-static struct {bool enabled,stopped,cutoff;int error;uint64_t armed_at,unmuted_at,muted_at,max_check_ns;} ri_tone;
+static struct {bool enabled,stopped,cutoff,renewable;unsigned renewals;int error;uint64_t armed_at,unmuted_at,muted_at,max_check_ns;} ri_tone;
 static int (*ri_stream_output_start)(void),(*ri_stream_output_check)(void);
 static void (*ri_stream_output_stop)(void);
 static int ri_tone_start(void){ri_tone.enabled=true;return 0;}
+static int ri_live_start(void){return ri_tone_start();}
 static int ri_tone_check(void){return 0;}
 static void ri_tone_stop(void){ri_tone.stopped=true;}
 static unsigned live_calls,prepare_calls;

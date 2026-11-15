@@ -5,6 +5,32 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0327 user missed listening;0328 runtime candidate (2026-11-15)
+
+User was NOT listening to0327 trial. Audibility is unobserved, NOT a negative
+sound result.0327 transport/EOS/mute/cleanup pass remains valid. Post-test UI
+responsiveness was not independently confirmed by this reply. Do not replay
+consumed0327 controls; current phone remains safely muted with all one-shots
+consumed. New candidate0328 is being prepared for a fresh temporary boot.
+
+0328 batches a240block/5.12sec long mode, true capacity reservations BEFORE
+uiomove (EWOULDBLOCK leaves input unconsumed), cancellation on input-copy fault,
+22ms producer scheduling grace while exact owned completions are received,
+producer closure before route teardown, and a renewable750ms health lease.
+Only a complete IRQ1/IRQ3/FLL cycle within150ms may renew; expired leases cannot
+revive; watchdog never renews its own lease. Independent6sec hard cap remains.
+Short12block mode preserves0327 policy/deadline. Quiet attenuation/clamp stays.
+The HAL's actual retry behavior under EWOULDBLOCK remains a hardware validation
+item; do NOT claim end-to-end lossless playback from kernel unit tests alone.
+
+New controls --queue-arm-long/--queue-run-long, existing --queue-stop. Long mode
+must be armed explicitly; cannot switch a short arm into a long run. Host actual
+code tests pass240buffer refill, queue reservation/cancellation/concurrent
+capacity, actual cdev uio residual preservation, watchdog cycle/expiry/hard cap,
+and stream/EOS/route cleanup regressions. Build/device validation pending.
+Evidence inputs in work/runtime under the existing canonical buildworkspace.
+No further device controls have been sent since0327 trial; no subagents used.
+
 ## Active handoff:0327 live queue/EOS/mute transport PASS; user feedback pending (2026-11-15)
 
 FIRST LIVE device-write queue trial PASSED:12appPCM buffers through4ownedDMA

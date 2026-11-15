@@ -27,7 +27,7 @@
   synthetic. Do not describe snapshot replay as a continuous backend.
 - Patch0327 has a dedicated DSP worker,8block device-write queue and4ownedDMA
   slots. A bounded12block live trial passed ongoing refill, exact completions,
-  EOS,377ms mute and full cleanup; acoustic/post-test feedback is pending.
+  EOS,377ms mute and full cleanup; user missed listening; audibility is unobserved.
   Dynamic checks peaked12.5ms versus93ms full surveys. ALL0327route one-shots
   are consumed; do not repeat them. Runtime/lifecycle, health-based watchdog
   renewal, lossless producer backpressure and idle/recovery remain next.
