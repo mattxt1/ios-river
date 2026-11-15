@@ -35,11 +35,12 @@ diff --git a/bsd/dev/river_adsp_codec_route.h b/bsd/dev/river_adsp_codec_route.h
    ri_codec_path.attempted,ri_codec_path.complete,ri_codec_path.seen,ri_codec_path.touched,
    ri_codec_path.restored,ri_codec_path.bad_reg,ri_codec_path.port_map,ri_codec_path.port_before,
    ri_codec_path.port_live,ri_codec_path.rate,ri_codec_path.fll,ri_codec_path.amp_irq,
-@@ -227,3 +228,33 @@
+@@ -227,3 +228,35 @@
   NULL,0,river_adsp_codec_path_sysctl,"I","Explicit muted codec SLIMRX to AIF1 route test");
  SYSCTL_PROC(_debug,OID_AUTO,river_adsp_codec_path_status,CTLTYPE_STRING|CTLFLAG_RD|CTLFLAG_LOCKED,
   NULL,0,river_adsp_codec_path_status_sysctl,"A","Last muted codec route/restoration result");
 +
++#include <mach/thread_act.h>
 +/* The queue control/status mutex is independent of the ADSP mutex, so the
 + * producer and stop/status requests remain available throughout route setup,
 + * DSP waits and teardown. A kernel thread owns the whole route lifetime. */
@@ -52,7 +53,8 @@ diff --git a/bsd/dev/river_adsp_codec_route.h b/bsd/dev/river_adsp_codec_route.h
 + lck_mtx_lock(&ri_audio_queue_lock);
 + ri_audio_queue.error=error;ri_audio_queue.armed=false;ri_audio_queue.done=true;
 + lck_mtx_unlock(&ri_audio_queue_lock);
-+ thread_terminate_self();
++ (void)thread_terminate(current_thread());
++ thread_block(THREAD_CONTINUE_NULL);
 +}
 +static int
 +ri_audio_queue_launch(void)
