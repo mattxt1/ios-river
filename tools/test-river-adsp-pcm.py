@@ -35,6 +35,11 @@ with tempfile.TemporaryDirectory(prefix='river-adsp-apr-') as directory:
   section='diff --git a/bsd/dev/river_adsp_pcm.h'+patches.split('diff --git a/bsd/dev/river_adsp_pcm.h',1)[1].split('diff --git ',1)[0]
   subprocess.run(['/usr/bin/patch','--batch','--silent','-p1','-d',str(root/'source')],input=section.encode(),check=True)
   pcm=target.read_text()
+ target=root/'source/bsd/dev/river_adsp_pcm.h';target.parent.mkdir(parents=True,exist_ok=True);target.write_text(pcm)
+ sections=['diff --git '+x for x in (repo/'xnu/patches/0321-river-bounded-quiet-codec-pcm-tone.patch').read_text().split('diff --git ')[1:]]
+ text=''.join(x for x in sections if x.splitlines()[0].split()[2]=='a/bsd/dev/river_adsp_pcm.h')
+ subprocess.run(['patch','--batch','--silent','--fuzz=0','-p1','-d',str(root/'source')],input=text.encode(),check=True)
+ pcm=target.read_text()
  (root/'pcm-actual.h').write_text(pcm)
  (root/'pcm-stubs.h').write_text((repo/'tools/tests/river-adsp-pcm-stubs.h').read_text())
  apr=apr.replace('*(volatile uint8_t *)address=value;','host_write8(address,value);')

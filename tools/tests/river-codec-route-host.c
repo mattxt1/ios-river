@@ -167,7 +167,13 @@ static bool ri_afe_mute_hold;
 static struct {bool complete;} ri_stream;
 static struct {bool muted,asm_open,adm_open,afe_started;int cleanup_error;} ri_route;
 static struct {bool poisoned;} ri_pcm;
-static struct ri_stream_state {bool complete,mapped,in_flight,afe_prepared;unsigned submitted;char note[1536];} ri_live_stream;
+static struct ri_stream_state {bool complete,mapped,in_flight,afe_prepared,tone;unsigned submitted;char note[1536];} ri_live_stream;
+static struct {bool enabled,stopped,cutoff;int error;} ri_tone;
+static int (*ri_stream_output_start)(void),(*ri_stream_output_check)(void);
+static void (*ri_stream_output_stop)(void);
+static int ri_tone_start(void){ri_tone.enabled=true;return 0;}
+static int ri_tone_check(void){return 0;}
+static void ri_tone_stop(void){ri_tone.stopped=true;}
 static unsigned live_calls,prepare_calls;
 static int ri_stream_prepare_live(void){assert(!codec_held && !speaker_held);prepare_calls++;if(mode==55)return EREMOTE;ri_live_stream.afe_prepared=ri_route.afe_started=true;return 0;}
 static void ri_stream_cleanup(struct ri_stream_state *state){assert(!speaker_held);if(!ri_pcm.poisoned)state->afe_prepared=ri_route.afe_started=false;}
@@ -177,6 +183,7 @@ static int ri_stream_execute(struct ri_stream_state *state,unsigned session) {
  assert((regs[0x700]&0x80ff)==0x8038 && (regs[0x708]&0x80ff)==0x8038 && regs[0x519]==3 && (regs[0x5f5]&1));
  assert(amp_quiet() && amp[0x4800]==0x10000);live_calls++;
  assert(state->afe_prepared && ri_route.afe_started);
+ if(state->tone){assert(ri_stream_output_start && ri_stream_output_check && ri_stream_output_stop);assert(!ri_stream_output_start() && !ri_stream_output_check());ri_stream_output_stop();}
  state->submitted=4;state->complete=mode!=53 && mode!=54;
  if(mode==53){state->mapped=state->in_flight=ri_pcm.poisoned=ri_route.afe_started=true;return ETIMEDOUT;}
  state->afe_prepared=ri_route.afe_started=false;
@@ -318,7 +325,7 @@ int clock_baseline_main(void) {
 
 static void path_reset(unsigned scenario)
 {
- reset(scenario);live_calls=prepare_calls=0;memset(&ri_live_stream,0,sizeof(ri_live_stream));memset(&ri_pcm,0,sizeof(ri_pcm));memset(&ri_route,0,sizeof(ri_route));memset(&ri_codec_path,0,sizeof(ri_codec_path));memset(&ri_channel,0,sizeof(ri_channel));
+ reset(scenario);memset(&ri_tone,0,sizeof(ri_tone));ri_stream_output_start=NULL;ri_stream_output_check=NULL;ri_stream_output_stop=NULL;live_calls=prepare_calls=0;memset(&ri_live_stream,0,sizeof(ri_live_stream));memset(&ri_pcm,0,sizeof(ri_pcm));memset(&ri_route,0,sizeof(ri_route));memset(&ri_codec_path,0,sizeof(ri_codec_path));memset(&ri_channel,0,sizeof(ri_channel));
  ri_clock_data_test=NULL;ri_channel_active_test=NULL;ri_clock_data_restored=true;
  codec_held=speaker_held=0;ri_afe_mute_hold=ri_route.muted=ri_stream.complete=ri_ngd.address_valid=ri_ngd.enabled=true;ri_ngd.uncertain=false;
  amp[0x2024]|=0x10;memcpy(amp_initial,amp,sizeof(amp));
@@ -352,6 +359,7 @@ int main(void)
  path_reset(53);assert(ri_codec_path_run_mode(true)==ETIMEDOUT && live_calls==1 && ri_channel.uncertain && ri_channel.active && ri_live_stream.mapped && ri_codec_path.restored);check_restore();assert((amp[0x2024]&0x10) && !speaker_held && !codec_held);
  path_reset(55);assert(ri_codec_path_run_mode(true)==EREMOTE && prepare_calls==1 && !live_calls && !writes && !amp_writes && !ri_channel.attempted);
  path_reset(54);assert(ri_codec_path_run_mode(true)==EREMOTE && live_calls==1 && !ri_channel.uncertain && !ri_channel.active && ri_codec_path.restored);check_restore();
+ path_reset(0);assert(!ri_codec_path_run_mode(2) && ri_codec_path.complete && ri_tone.enabled && ri_tone.stopped);check_restore();assert(!ri_stream_output_start && !ri_stream_output_stop);
  assert(!ri_clock_write_allowed(0x5f7) && ri_clock_read_allowed(0x5f7) && !ri_clock_write_allowed(0x5d2));
  assert(!ri_clock_write_allowed(0x400) && !ri_clock_write_allowed(0x5f6));
  puts("actual-code muted SLIMRX/AIF route, FLL/AMP clock locks, GPIO SPI framing and rollback tests passed");

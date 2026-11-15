@@ -9,7 +9,7 @@ struct ri_apr_reply {uint32_t status,data[32];unsigned words;bool sent,complete;
 static struct {bool unmapped,asm_closed,poisoned;uint64_t physical;unsigned transactions;uint32_t rx_header,rx_source,rx_destination,rx_token,rx_opcode;} ri_pcm;
 static bool ri_afe_mute_hold,ri_speaker_ok;
 static unsigned ri_speaker_lock,lock_depth,commands,mode;
-static uint32_t mute_control,fail_opcode,fail_status,cleanup_fail_opcode,ops[32],digital;
+static uint32_t mute_control,fail_opcode,fail_status,cleanup_fail_opcode,ops[128],digital;
 static bool timeout_failure,mute_failure,afe_config_live;
 static void lck_mtx_lock(unsigned *p) {assert(p==&ri_speaker_lock && !lock_depth);lock_depth++;}
 static void lck_mtx_unlock(unsigned *p) {assert(p==&ri_speaker_lock && lock_depth==1);lock_depth--;}
@@ -26,7 +26,8 @@ typedef uint64_t addr64_t;
 #define VM_KERN_MEMORY_IOKIT 1
 #define KERN_SUCCESS 0
 static int kernel_map,kernel_pmap;
-static unsigned write_count,cleaned,barriers,allocations;
+static unsigned write_count,cleaned,barriers,allocations,output_starts,output_stops;
+static bool output_live,expected_tone;
 static uint32_t expected_pa,expected_stream=0x04010000;
 static unsigned char stream_page[PAGE_SIZE*2] __attribute__((aligned(PAGE_SIZE)));
 static int kmem_alloc_contig(int map,vm_offset_t *out,unsigned size,unsigned mask,unsigned low,unsigned high,unsigned flags,unsigned tag)
@@ -35,11 +36,13 @@ static ppnum_t pmap_find_phys(int map,addr64_t address)
 {assert(!map && address>=(uintptr_t)stream_page && address<(uintptr_t)stream_page+2*PAGE_SIZE);return mode==42?0:0x60000000/PAGE_SIZE+(address-(uintptr_t)stream_page)/PAGE_SIZE;}
 #define ptoa_64(n) ((n)*PAGE_SIZE)
 static void sweet_dcache_clean(vm_offset_t address,unsigned size)
-{assert(address>=(uintptr_t)stream_page && address<(uintptr_t)stream_page+2*PAGE_SIZE && size==PAGE_SIZE);for(unsigned i=0;i<size;i++)assert(!((unsigned char*)address)[i]);cleaned++;}
+{assert(address>=(uintptr_t)stream_page && address<(uintptr_t)stream_page+2*PAGE_SIZE && (size==PAGE_SIZE || size==4096));if(size==PAGE_SIZE){for(unsigned i=0;i<size;i++)assert(!((unsigned char*)address)[i]);}
+ else {assert(size==4096 && output_live);int16_t *v=(int16_t*)address;unsigned nonzero=0;for(unsigned i=0;i<1024;i++){assert(v[i*2]==v[i*2+1] && v[i*2]<=2048 && v[i*2]>=-2048);nonzero+=v[i*2]!=0;}assert(nonzero);}
+ cleaned++;}
 static void host_barrier(void){barriers++;}
 static int ri_pcm_transaction(struct ri_apr_request *r,struct ri_apr_reply *p)
 {
- memset(p,0,sizeof(*p));assert(!lock_depth && commands<32 && !ri_pcm.poisoned);
+ memset(p,0,sizeof(*p));assert(!lock_depth && commands<128 && !ri_pcm.poisoned);
  ops[commands++]=r->opcode;ri_pcm.transactions++;p->sent=true;
  if(r->opcode==fail_opcode || r->opcode==cleanup_fail_opcode) {
   p->status=fail_status;
@@ -57,10 +60,11 @@ static int ri_pcm_transaction(struct ri_apr_request *r,struct ri_apr_reply *p)
  case 0x10daa:
   assert(r->source==(expected_stream|0x507) && r->destination==(expected_stream|0x407) && r->words==3);
   assert(!r->payload[0] && !r->payload[1] && !r->payload[2]);break;
+ case 0x10bdb:assert(expected_tone && output_live && write_count==20 && r->response==0x10c1c && !r->words);p->words=mode==57?1:0;break;
  case 0x10bd3:assert(!r->words);break;
  case 0x10dab: {
   assert(r->source==(expected_stream|0x507) && r->destination==(expected_stream|0x407) && r->response==0x10d99 && r->words==8);
-  assert(write_count<4 && r->payload[0]==expected_pa+write_count*4096 && !r->payload[1]);
+  assert(write_count<(expected_tone?20u:4u) && r->payload[0]==expected_pa+(write_count&3)*4096 && !r->payload[1]);
   assert(r->payload[2]==0xaabbccdd && r->payload[3]==4096 && r->payload[4]==write_count && !r->payload[5] && !r->payload[6] && !r->payload[7]);
   write_count++;p->words=4;p->data[0]=r->payload[0];p->data[1]=0;p->data[2]=r->payload[2];p->data[3]=0;
   if(mode==30)p->data[0]^=32;
@@ -173,9 +177,12 @@ int route_baseline_main(void)
  return 0;
 }
 
+static int host_output_start(void){assert(!lock_depth && write_count==4);output_starts++;if(mode==56)return EIO;output_live=true;return 0;}
+static int host_output_check(void){assert(!lock_depth && output_live);return mode==58 && write_count>=8?ETIMEDOUT:0;}
+static void host_output_stop(void){assert(!lock_depth);output_stops++;output_live=false;}
 static void stream_reset(unsigned scenario)
 {
- reset(scenario);allocations=0;expected_stream=0x04010000;memset(&ri_live_stream,0,sizeof(ri_live_stream));memset(&ri_stream,0,sizeof(ri_stream));
+ reset(scenario);output_starts=output_stops=0;output_live=expected_tone=false;ri_stream_output_start=NULL;ri_stream_output_check=NULL;ri_stream_output_stop=NULL;allocations=0;expected_stream=0x04010000;memset(&ri_live_stream,0,sizeof(ri_live_stream));memset(&ri_stream,0,sizeof(ri_stream));
  ri_pcm.physical=0x50000000;write_count=cleaned=barriers=0;
  assert(ri_route_config()==0 && ri_route.config_readback);
  assert(ri_route_test(false)==0);
@@ -241,6 +248,18 @@ int main(void)
  assert(ri_live_stream.failed_opcode==0x100e5 && ri_stream_prepare_live()==EALREADY);
  stream_reset(2);assert(!ri_stream_test());commands=write_count=0;assert(!ri_stream_prepare_live());
  ri_stream_cleanup(&ri_live_stream);assert(!ri_route.afe_started && !ri_live_stream.afe_prepared);
+ /* Tone output is armed only after4 zero completions; EOS drain precedes mute. */
+ for(unsigned scenario=2;scenario<=58;scenario++) {
+  if(scenario!=2 && scenario!=56 && scenario!=57 && scenario!=58)continue;
+  stream_reset(2);assert(!ri_stream_test());commands=write_count=0;expected_stream=0x05010000;
+  assert(!ri_stream_prepare_live());ri_live_stream.tone=true;expected_tone=true;mode=scenario;
+  ri_stream_output_start=host_output_start;ri_stream_output_check=host_output_check;ri_stream_output_stop=host_output_stop;
+  int rc=ri_stream_execute(&ri_live_stream,5);assert(output_starts==1 && output_stops==1 && !output_live);
+  if(scenario==2)assert(!rc && ri_live_stream.complete && ri_live_stream.eos_rendered && ri_live_stream.completed==20 && ri_live_stream.bytes_completed==81920);
+  else if(scenario==56)assert(rc==EIO && write_count==4 && !ri_live_stream.mapped);
+  else if(scenario==57)assert(rc==EIO && ri_pcm.poisoned && ri_live_stream.mapped);
+  else assert(rc==ETIMEDOUT && !ri_live_stream.mapped && !ri_pcm.poisoned);
+ }
  puts("actual-code zero-PCM map/RUN/WRITE ownership, completion and failure teardown tests passed");
  return 0;
 }

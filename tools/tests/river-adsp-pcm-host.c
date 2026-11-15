@@ -364,6 +364,12 @@ int main(void)
  p[0]=(24u<<16)|0x150;assert(ri_pcm_decode(p,sizeof(p),&req,&rep)==RI_APR_BAD);
  p[0]=(28u<<16)|0x152;assert(ri_pcm_decode(p,sizeof(p),&req,&rep)==RI_APR_BAD);
 
+ struct ri_apr_request eos={.source=0x05010507,.destination=0x05010407,.token=0x1234,.opcode=0x10bdb,.response=0x10c1c};
+ uint32_t event[]={(20u<<16)|0x50,0x05010407,0x05010507,0x1234,0x10c1c,0};
+ memset(&rep,0,sizeof(rep));assert(ri_pcm_decode(event,20,&eos,&rep)==RI_APR_STATE && rep.complete && !rep.words);
+ event[3]++;assert(ri_pcm_decode(event,20,&eos,&rep)==RI_APR_STALE);event[3]--;
+ event[1]++;assert(ri_pcm_decode(event,20,&eos,&rep)==RI_APR_STALE);event[1]--;
+ event[0]=(24u<<16)|0x50;assert(ri_pcm_decode(event,24,&eos,&rep)==RI_APR_BAD);
  pcm_reset(100);assert(ri_pcm_map_test()==0);assert(commands==2 && ri_pcm.unmapped && !ri_pcm.mapped && ri_pcm.page);
  assert(opcodes[0]==0x10d92 && opcodes[1]==0x10d94);assert(ri_pcm_map_test()==EALREADY);
  assert(ri_pcm_asm_test()==0);assert(commands==5 && ri_pcm.asm_format && ri_pcm.asm_closed && !ri_pcm.asm_open);

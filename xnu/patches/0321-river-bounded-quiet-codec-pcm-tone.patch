@@ -1,0 +1,304 @@
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -28,6 +28,7 @@
+ #include <sys/systm.h>
+ #include <kern/clock.h>
+ #include <kern/thread.h>
++#include <kern/thread_call.h>
+ #include <kern/sched_prim.h>
+ #include <machine/machine_routines.h>
+ #include <pexpert/pexpert.h>
+@@ -4742,6 +4743,7 @@
+ #include <sys/systm.h>
+ #include <kern/clock.h>
+ #include <kern/thread.h>
++#include <kern/thread_call.h>
+ #include <kern/sched_prim.h>
+ #include <machine/machine_routines.h>
+ #include <pexpert/pexpert.h>
+diff --git a/bsd/dev/river_adsp_probe.h b/bsd/dev/river_adsp_probe.h
+--- a/bsd/dev/river_adsp_probe.h
++++ b/bsd/dev/river_adsp_probe.h
+@@ -111,6 +111,7 @@
+ #include "river_adsp_slim.h"
+ #include "river_adsp_ngd.h"
+ #include "river_adsp_channel.h"
++#include "river_adsp_tone.h"
+ #include "river_adsp_codec_route.h"
+ 
+ static int
+diff --git a/bsd/dev/river_adsp_tone.h b/bsd/dev/river_adsp_tone.h
+--- a/bsd/dev/river_adsp_tone.h
++++ b/bsd/dev/river_adsp_tone.h
+@@ -0,0 +1,88 @@
++/* Short quiet ASP playback test. No boost, trim, gain or reset writes.
++ * ADSP/codec own the route; all amplifier state and watchdog share speaker
++ * lock, while individual QUP2 transfers retain their existing serialization. */
++static struct {
++ bool attempted,active,enabled,stopped,cutoff;
++ uint32_t power,mute,volume,want_volume,irq1,irq3;
++ int error;
++} ri_tone;
++static thread_call_t ri_tone_timer;
++static bool
++ri_tone_mute_locked(void)
++{
++ ri_tone.active=false;
++ bool ok=ri_i2s_amp_write(0x2024,ri_tone.mute|0x10);
++ if(!ri_i2s_amp_write(0x2018,ri_tone.power&~1u))ok=false;
++ if(!ri_i2s_amp_write(0x6000,ri_tone.volume))ok=false;
++ ri_tone.stopped=ok;return ok;
++}
++static void
++ri_tone_timeout(thread_call_param_t a,thread_call_param_t b)
++{
++ (void)a;(void)b;lck_mtx_lock(&ri_speaker_lock);
++ if(ri_tone.active) {ri_tone.cutoff=true;if(!ri_tone_mute_locked())ri_tone.error=EIO;}
++ lck_mtx_unlock(&ri_speaker_lock);
++}
++static bool
++ri_tone_locked_clocks(void)
++{
++ uint32_t source=0,global=0,gain=0,format=0;
++ return ri_cs35l41_rd(0x4c00,&source) && source==8 &&
++  ri_cs35l41_rd(0x2014,&global) && (global&1) &&
++  ri_cs35l41_rd(0x6c04,&gain) && gain==0x220 &&
++  ri_cs35l41_rd(0x4808,&format) && !(format&0x33) &&
++  ri_cs35l41_rd(0x10090,&ri_tone.irq1) && !(ri_tone.irq1&0x800281c0u) &&
++  ri_cs35l41_rd(0x10098,&ri_tone.irq3) && !(ri_tone.irq3&0x10) &&
++  ri_tone.irq3!=0xffffffff && (ri_clock_read(0x1881)&0x100) &&
++  ri_clock_read(0x1881)!=0xffff && (ri_clock_read(0x700)&0x80ff)==0x8038 &&
++  (ri_clock_read(0x708)&0x80ff)==0x8038 && (ri_clock_read(0x5f7)&1) && ri_clock_read(0x519)==3;
++}
++static int
++ri_tone_start(void)
++{
++ int error=EBUSY;lck_mtx_lock(&ri_speaker_lock);
++ if(ri_tone.attempted)goto done;
++ if(!ri_afe_mute_hold || !ri_i2s_quiet() || !ri_tone_locked_clocks() ||
++    !ri_cs35l41_rd(0x2018,&ri_tone.power) || !ri_cs35l41_rd(0x2024,&ri_tone.mute) ||
++    !ri_cs35l41_rd(0x6000,&ri_tone.volume))goto done;
++ if(!ri_tone_timer)ri_tone_timer=thread_call_allocate(ri_tone_timeout,NULL);
++ if(!ri_tone_timer) {error=ENOMEM;goto done;}
++ ri_tone.attempted=true;
++ /* Fixed -24dB digital attenuation, signed11-bit eighth-dB PCM_VOL.
++  * Samples are additionally bounded to +/-2048 with5ms end ramps. */
++ ri_tone.want_volume=(ri_tone.volume&~0x3ff8u)|(((0u-192u)&0x7ffu)<<3);
++ ri_tone.active=true;uint64_t deadline;
++ clock_interval_to_deadline(750,NSEC_PER_MSEC,&deadline);
++ thread_call_enter_delayed(ri_tone_timer,deadline);
++ if(!ri_i2s_amp_write(0x6000,ri_tone.want_volume) ||
++    !ri_i2s_amp_write(0x2018,ri_tone.power|1u)) {
++  error=EIO;(void)ri_tone_mute_locked();goto done;
++ }
++ delay(1000);
++ if(!ri_tone_locked_clocks() || !ri_i2s_amp_write(0x2024,ri_tone.mute&~0x10u)) {
++  error=EIO;(void)ri_tone_mute_locked();goto done;
++ }
++ ri_tone.enabled=true;error=0;
++done:
++ ri_tone.error=error;lck_mtx_unlock(&ri_speaker_lock);return error;
++}
++static int
++ri_tone_check(void)
++{
++ int error=0;uint32_t power=0,mute=0,volume=0;lck_mtx_lock(&ri_speaker_lock);
++ if(!ri_tone.active || ri_tone.cutoff)error=ETIMEDOUT;
++ else if(!ri_tone_locked_clocks() || !ri_cs35l41_rd(0x2018,&power) || !(power&1) ||
++   !ri_cs35l41_rd(0x2024,&mute) || (mute&0x10) ||
++   !ri_cs35l41_rd(0x6000,&volume) || volume!=ri_tone.want_volume)error=EIO;
++ if(error)ri_tone.error=error;
++ lck_mtx_unlock(&ri_speaker_lock);return error;
++}
++static void
++ri_tone_stop(void)
++{
++ lck_mtx_lock(&ri_speaker_lock);
++ if(ri_tone.attempted && !ri_tone_mute_locked())ri_tone.error=EIO;
++ lck_mtx_unlock(&ri_speaker_lock);
++ /* Never wait with speaker lock held: the watchdog also needs that lock. */
++ if(ri_tone_timer)thread_call_cancel_wait(ri_tone_timer);
++}
+diff --git a/bsd/dev/river_adsp_pcm.h b/bsd/dev/river_adsp_pcm.h
+--- a/bsd/dev/river_adsp_pcm.h
++++ b/bsd/dev/river_adsp_pcm.h
+@@ -51,6 +51,12 @@
+   reply->complete=true;return RI_APR_STATE;
+  }
+  if(!request->response || packet[4]!=request->response)return RI_APR_STALE;
++ /* RENDERED_EOS is a zero-payload event; all identity/token checks above
++  * still apply. No other empty reply is accepted. */
++ if(request->opcode==0x10bdb && request->response==0x10c1c) {
++  if(words)return RI_APR_BAD;
++  reply->words=0;reply->complete=true;return RI_APR_STATE;
++ }
+  if(!words || words>32)return RI_APR_BAD;
+  memcpy(reply->data,data,words*4);reply->words=words;reply->complete=true;
+  return RI_APR_STATE;
+diff --git a/bsd/dev/river_adsp_stream.h b/bsd/dev/river_adsp_stream.h
+--- a/bsd/dev/river_adsp_stream.h
++++ b/bsd/dev/river_adsp_stream.h
+@@ -2,7 +2,7 @@
+  * No audible samples or /dev backend. Dedicated memory is permanent, and
+  * unresolved ownership is retained until reboot. ri_adsp_lock owns state. */
+ struct ri_stream_state {
+- bool attempted,mapped,running,in_flight,complete,arm_attempted,afe_prepared;
++ bool attempted,mapped,running,in_flight,complete,arm_attempted,afe_prepared,tone,eos_rendered;
+  vm_offset_t page;
+  uint64_t physical;
+  uint32_t handle,completion_status,failed_opcode,failed_status;
+@@ -14,11 +14,14 @@
+ };
+ static struct ri_stream_state ri_stream={.note="not requested; physical playback/capture pending"};
+ static struct ri_stream_state ri_live_stream={.note="not requested; active-route PCM pending"};
++static int (*ri_stream_output_start)(void);
++static int (*ri_stream_output_check)(void);
++static void (*ri_stream_output_stop)(void);
+ static int
+ ri_stream_result(struct ri_stream_state *state,const char *phase,int error)
+ {
+  snprintf(state->note,sizeof(state->note),
+-  "phase=%s error=%d session=%u attempted=%u poisoned=%u complete=%u page_retained=%u region_bytes=%u physical=%#llx handle=%#x mapped=%u running=%u in_flight=%u submitted=%u completed=%u bytes_completed=%u frames_completed=%u completion_status=%#x failed_opcode=%#x failed_status=%#x failure_rx_header=%#x failure_rx_source=%#x failure_rx_destination=%#x failure_rx_token=%#x failure_rx_opcode=%#x unmap_error=%d asm_open=%u adm_open=%u matrix=%u afe_started=%u amp_mute_retained=%u cleanup_error=%d cleanup_opcode=%#x cleanup_status=%#x rx_header=%#x rx_source=%#x rx_destination=%#x rx_token=%#x rx_opcode=%#x samples=zero_only ios_pcm_backend=0 capture=synthetic",
++  "phase=%s error=%d session=%u attempted=%u poisoned=%u complete=%u page_retained=%u region_bytes=%u physical=%#llx handle=%#x mapped=%u running=%u in_flight=%u submitted=%u completed=%u bytes_completed=%u frames_completed=%u completion_status=%#x failed_opcode=%#x failed_status=%#x failure_rx_header=%#x failure_rx_source=%#x failure_rx_destination=%#x failure_rx_token=%#x failure_rx_opcode=%#x unmap_error=%d asm_open=%u adm_open=%u matrix=%u afe_started=%u amp_mute_retained=%u cleanup_error=%d cleanup_opcode=%#x cleanup_status=%#x rx_header=%#x rx_source=%#x rx_destination=%#x rx_token=%#x rx_opcode=%#x samples=%s eos_rendered=%u ios_pcm_backend=0 capture=synthetic",
+   phase,error,state->session,state->attempted,ri_pcm.poisoned,state->complete,!!state->page,
+   state->page?(unsigned)PAGE_SIZE:0,(unsigned long long)state->physical,
+   state->handle,state->mapped,state->running,state->in_flight,
+@@ -29,7 +32,7 @@
+   state->unmap_error,ri_route.asm_open,ri_route.adm_open,ri_route.matrix,
+   ri_route.afe_started,ri_route.muted,ri_route.cleanup_error,ri_route.cleanup_opcode,
+   ri_route.cleanup_status,ri_pcm.rx_header,ri_pcm.rx_source,ri_pcm.rx_destination,
+-  ri_pcm.rx_token,ri_pcm.rx_opcode);
++  ri_pcm.rx_token,ri_pcm.rx_opcode,state->tone?"quiet600Hz":"zero_only",state->eos_rendered);
+  printf("RIVER STREAM: %s\n",state->note);return error;
+ }
+ static int
+@@ -91,10 +94,25 @@
+ done:
+  return ri_stream_result(&ri_live_stream,phase,error);
+ }
++static void
++ri_stream_tone_buffer(struct ri_stream_state *state,unsigned index)
++{
++ static const int16_t sine[80]={0,161,320,478,633,784,930,1070,1204,1330,1448,1557,1657,1746,1825,1892,1948,1991,2023,2042,2048,2042,2023,1991,1948,1892,1825,1746,1657,1557,1448,1330,1204,1070,930,784,633,478,320,161,0,-161,-320,-478,-633,-784,-930,-1070,-1204,-1330,-1448,-1557,-1657,-1746,-1825,-1892,-1948,-1991,-2023,-2042,-2048,-2042,-2023,-1991,-1948,-1892,-1825,-1746,-1657,-1557,-1448,-1330,-1204,-1070,-930,-784,-633,-478,-320,-161};
++ int16_t *p=(int16_t *)(state->page+(index&3)*4096);
++ unsigned start=(index-4)*1024;
++ for(unsigned i=0;i<1024;i++) {
++  unsigned frame=start+i,remaining=16383-frame;
++  unsigned ramp=frame<240?frame:remaining<240?remaining:240;
++  int value=(int)sine[frame%80]*(int)ramp/240;
++  p[i*2]=p[i*2+1]=(int16_t)value;
++ }
++ sweet_dcache_clean((vm_offset_t)p,4096);__asm__ volatile("dmb sy" ::: "memory");
++}
+ static int
+ ri_stream_execute(struct ri_stream_state *state,unsigned session)
+ {
+  if(state->attempted)return EALREADY;
++ if(state->tone && (!ri_stream_output_start || !ri_stream_output_check || !ri_stream_output_stop))return EBUSY;
+  if((!ri_route_ready() && !(state==&ri_live_stream && ri_stream_live_prepared())) || !ri_route.config_readback || !ri_route.cold_attempted ||
+     ri_route.cleanup_error || ri_route.failed_opcode || !ri_route.asm_format)return ri_stream_result(state,"prerequisite",EBUSY);
+  if(session!=4 && session!=5)return EINVAL;
+@@ -160,8 +178,16 @@
+  error=ri_stream_command(state,stream|0x507,stream|0x407,0x10daa,0,run,3,&reply);
+  if(error)goto done;
+  state->running=true;
+- for(unsigned i=0;i<4;i++) {
+-  uint64_t address=pa+(uint64_t)i*4096;
++ for(unsigned i=0;i<(state->tone?20u:4u);i++) {
++  if(state->tone && i>=4) {
++   if(i==4) {
++    if(state->completed!=4) {error=EIO;goto done;}
++    phase="quiet_output_start";error=ri_stream_output_start();if(error)goto done;
++   }
++   phase="quiet_output_check";error=ri_stream_output_check();if(error)goto done;
++   ri_stream_tone_buffer(state,i);
++  }
++  uint64_t address=pa+(uint64_t)(i&3)*4096;
+   uint32_t write[]={(uint32_t)address,(uint32_t)(address>>32),state->handle,4096,i,0,0,0};
+   phase="write_done";state->in_flight=true;
+   error=ri_stream_command(state,stream|0x507,stream|0x407,0x10dab,0x10d99,write,8,&reply);
+@@ -178,13 +204,21 @@
+   if(reply.data[3]) {state->failed_opcode=0x10dab;error=EREMOTE;goto done;}
+   state->completed++;state->bytes_completed+=4096;
+  }
+- phase="zero_pcm_complete";
++ if(state->tone) {
++  phase="rendered_eos";
++  error=ri_stream_command(state,stream|0x507,stream|0x407,0x10bdb,0x10c1c,NULL,0,&reply);
++  if(error)goto done;
++  if(reply.words) {ri_pcm.poisoned=true;error=EIO;goto done;}
++  state->eos_rendered=true;error=ri_stream_output_check();if(error)goto done;
++ }
++ phase=state->tone?"quiet_tone_complete":"zero_pcm_complete";
+ done:
++ if(state->tone && ri_stream_output_stop)ri_stream_output_stop();
+  ri_stream_cleanup(state);
+  if(!error && ri_route.cleanup_error) {phase="cleanup";error=ri_route.cleanup_error;}
+  if(!error && (state->mapped || state->in_flight || ri_route.asm_open ||
+     ri_route.adm_open || ri_route.afe_started)) {phase="ownership";error=EIO;}
+- state->complete=!error && state->completed==4;
++ state->complete=!error && state->completed==(state->tone?20u:4u) && (!state->tone || state->eos_rendered);
+  return ri_stream_result(state,phase,error);
+ }
+ static int
+diff --git a/bsd/dev/river_adsp_codec_route.h b/bsd/dev/river_adsp_codec_route.h
+--- a/bsd/dev/river_adsp_codec_route.h
++++ b/bsd/dev/river_adsp_codec_route.h
+@@ -156,12 +156,17 @@
+  lck_mtx_unlock(&ri_speaker_lock);lck_mtx_unlock(&ri_codec_lock);return error;
+ }
+ static int
+-ri_codec_path_run_mode(bool with_pcm)
+-{
++ri_codec_path_run_mode(unsigned mode)
++{
++ if(mode>2)return EINVAL;bool with_pcm=mode!=0,tone=mode==2;
+  if(ri_codec_path.attempted)return EALREADY;
+  if(!ri_stream.complete || !ri_route_ready() || !ri_route.muted || !ri_afe_mute_hold ||
+     !ri_ngd.address_valid || !ri_ngd.enabled || ri_ngd.uncertain || ri_channel.attempted)return EBUSY;
+  ri_codec_path.attempted=true;ri_codec_path.with_pcm=with_pcm;
++ if(tone) {
++  ri_live_stream.tone=true;ri_stream_output_start=ri_tone_start;
++  ri_stream_output_check=ri_tone_check;ri_stream_output_stop=ri_tone_stop;
++ }
+  int error=with_pcm?ri_stream_prepare_live():0;
+  if(!error) {
+   ri_channel_active_test=ri_codec_path_clock;
+@@ -171,20 +176,22 @@
+  if(with_pcm && ri_live_stream.afe_prepared)ri_stream_cleanup(&ri_live_stream);
+  if(!error && (ri_route.afe_started || ri_route.cleanup_error))error=EIO;
+  ri_codec_path.channel_error=error;
++ ri_stream_output_start=NULL;ri_stream_output_check=NULL;ri_stream_output_stop=NULL;
+  ri_codec_path.complete=!error && ri_codec_path.seen && ri_codec_path.restored &&
+   (!with_pcm || (ri_live_stream.complete && !ri_live_stream.mapped && !ri_live_stream.in_flight)) &&
++  (!tone || (ri_tone.enabled && ri_tone.stopped && !ri_tone.cutoff && !ri_tone.error)) &&
+   ri_channel.complete && ri_i2s_codec_restored && ri_i2s_amp_restored;
+  if(!error && !ri_codec_path.complete)error=EIO;
+  snprintf(ri_codec_path_note,sizeof(ri_codec_path_note),
+-  "phase=%s error=%d attempted=%u complete=%u route_seen=%u touched=%u route_restored=%u bad_reg=%#x port_map=%#x port_before=%#x port_live=%#x rate=%#x fll=%#x amp_irq=%#x clock_error=%d channel_error=%d channel_complete=%u connected=%u defined=%u active=%u uncertain=%u aif_restored=%u amp_restored=%u amp_locked=%u amp_mute_retained=%u afe_started=%u dsp_cleanup_error=%d live_mapped=%u live_in_flight=%u amp_output_stage_test_policy=disabled active_route_pcm=%u dsp_samples_submitted=%u ios_backend=discarded capture=synthetic live_pcm={%s} last_native_clock={%s}",
+-  ri_codec_path.complete?(with_pcm?"muted_codec_pcm_complete":"muted_codec_route_complete"):"muted_codec_route_stopped",error,
++  "phase=%s error=%d attempted=%u complete=%u route_seen=%u touched=%u route_restored=%u bad_reg=%#x port_map=%#x port_before=%#x port_live=%#x rate=%#x fll=%#x amp_irq=%#x clock_error=%d channel_error=%d channel_complete=%u connected=%u defined=%u active=%u uncertain=%u aif_restored=%u amp_restored=%u amp_locked=%u amp_mute_retained=%u afe_started=%u dsp_cleanup_error=%d live_mapped=%u live_in_flight=%u amp_output_stage_test_policy=%s quiet_tone=%u output_enabled=%u output_stopped=%u output_cutoff=%u active_route_pcm=%u dsp_samples_submitted=%u ios_backend=discarded capture=synthetic live_pcm={%s} last_native_clock={%s}",
++  ri_codec_path.complete?(tone?"quiet_codec_tone_complete":with_pcm?"muted_codec_pcm_complete":"muted_codec_route_complete"):"muted_codec_route_stopped",error,
+   ri_codec_path.attempted,ri_codec_path.complete,ri_codec_path.seen,ri_codec_path.touched,
+   ri_codec_path.restored,ri_codec_path.bad_reg,ri_codec_path.port_map,ri_codec_path.port_before,
+   ri_codec_path.port_live,ri_codec_path.rate,ri_codec_path.fll,ri_codec_path.amp_irq,
+   ri_codec_path.clock_error,ri_codec_path.channel_error,ri_channel.complete,ri_channel.connected,
+   ri_channel.defined,ri_channel.active,ri_channel.uncertain,ri_i2s_codec_restored,
+   ri_i2s_amp_restored,ri_i2s_amp_locked,ri_route.muted,ri_route.afe_started,
+-  ri_route.cleanup_error,ri_live_stream.mapped,ri_live_stream.in_flight,with_pcm,
++  ri_route.cleanup_error,ri_live_stream.mapped,ri_live_stream.in_flight,tone?"bounded_quiet_tone":"disabled",tone,ri_tone.enabled,ri_tone.stopped,ri_tone.cutoff,with_pcm,
+   ri_live_stream.submitted,ri_live_stream.note,ri_clock_note);
+  printf("RIVER CODEC PATH: %s\n",ri_codec_path_note);return error;
+ }
+@@ -198,8 +205,8 @@
+ {
+  int value=0,error=sysctl_handle_int(oidp,&value,0,req);
+  if(error || !req->newptr)return error;
+- if(value!=1 && value!=2)return EINVAL;
+- lck_mtx_lock(&ri_adsp_lock);error=value==1?ri_codec_path_run():ri_codec_path_run_mode(true);lck_mtx_unlock(&ri_adsp_lock);return error;
++ if(value<1 || value>3)return EINVAL;
++ lck_mtx_lock(&ri_adsp_lock);error=value==1?ri_codec_path_run():ri_codec_path_run_mode(value-1);lck_mtx_unlock(&ri_adsp_lock);return error;
+ }
+ static int
+ river_adsp_codec_path_status_sysctl SYSCTL_HANDLER_ARGS
