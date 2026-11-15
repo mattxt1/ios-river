@@ -28,6 +28,12 @@ Automatic association and lease-renew/endurance reliability remain pending. See 
 and the latest active [NOTES.md](NOTES.md) for evidence and current ownership.
 All active work uses canonical `/Users/matttyson/Developer/Codex` local storage.
 
+Patch0327 now has a built and verified opt-in live PCM queue candidate: a
+separate DSP worker, four owned DMA slots and dynamic fault/clock monitoring.
+The first hardware trial is still bounded to12blocks/750ms and has not booted.
+Unrestricted continuous playback and physical microphone capture remain pending.
+See `NOTES.md` for the exact image and current phone ownership.
+
 ## Status and evidence
 
 | Area | Recorded evidence | Current limits (2026-11-14) |

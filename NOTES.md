@@ -5,6 +5,49 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0327 image built/verified; temporary boot requested (2026-11-15)
+
+Native build through0327 PASSED exit0 in the same verified dxb/exact localKDK.
+Source46d310becae6a8ad7183c1546d31f71fe76c7f0f, kernel SHA
+b156fa0bb9303f8dff6422a1f2405e89a0bb3b2b51a636203169ec0f0b42b25f.
+Image outputs/river-live-pcm-wifi-46d310b.img, SHA
+068ae923ee7012a092ba359839117ae50080073237346ec5b340c4953e1f8777,
+27013120bytes/cmdline577. Kernel segments, source inputs, signed helper and
+all unrelated RiverFiles/Wi-Fi helpers verified. Updated ADSPhelper SHA
+f10ca71cc231071decd40eb11eda3c637f9272e7cf451a1446425b551a828e1c.
+Manifest outputs/live-pcm-wifi-build-manifest.json in evidenceworkspace.
+First compile found lock startup __LINE__ collisions and missing BSD-visible
+thread termination declaration; committed fixes passed native compilation.
+Sandbox then blocked dSYM /dev/fd access; approved escalation completed build.
+Preserved failed attempt logs. Seven actual-code sanitizer suites pass.
+
+Current phone STILL0326; every audio one-shot consumed, protective mute retained.
+NO device controls or reboot sent. User fastboot-readiness request pending,
+issued only AFTER this concrete image was fully verified. Temporary boot ONLY,
+never flash. Confirm productriver and image hash again before boot. After boot,
+use trusted Wi-Fi SSH fallback; USB failure remains unresolved. Wi-Fi unchanged.
+Fresh responsive-home confirmation before prerequisites and immediate listening
+cue before the live test. Do not interpret a built image as hardware success.
+
+New work/continuous scripts in evidenceworkspace, read before executing:
+verify-installed.py (Wi-Fi SSH; exact helper bytes and fresh unarmed statuses),
+prepare-device.py (same muted one-shot prerequisites, exits before codec route),
+stage-queue.py (install/verify30sec AVAudioPlayer/WAV; arm native readiness
+sensor ONLY, queue and physical route still unarmed), run-live.py (after cue,
+launch app, require fresh nonsilent native readiness, then arm/prefill livequeue,
+launch dedicated worker once, poll independent metadata, capture EOS/mute and
+full cleanup; app ends naturally). Native snapshot is NEVER claimed/replayed
+by this test; it avoids filling the live queue with initial app-startup silence.
+Live queue must supply12blocks from8block capacity; ongoing refill required.
+750ms watchdog unchanged; bounded validation trial, NOT unrestricted playback.
+Scripts refuse evidence overwrite. No script was executed on the device.
+
+Physical microphone, unbounded/lifecycle playback, underrun recovery/restart,
+producer backpressure beyond counted drop-newest, and endurance remain pending.
+Once live trial passes, retain all measured queue/health/EOS/mute/cleanup data,
+ask user audibility/responsiveness, then extend lifecycle/deadline behavior from
+concrete evidence. Do not repeat a consumed route in this boot.
+
 ## Active handoff:0327 live queue/pipeline implementation (2026-11-15)
 
 0327 adds an opt-in device-write queue and dedicated kernel DSP/route worker.
