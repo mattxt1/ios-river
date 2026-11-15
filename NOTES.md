@@ -5,6 +5,40 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0323 quiet DSP/EOS PASS;0324 amplifier slot fix tested (2026-11-14)
+
+User confirmed home responsive/readytolisten. prepare-device ranonce and
+stopped beforetone; its intentional SystemExit(message) returns1 with ready
+marker, not a devicefailure. Exactprerequisitefilesverified, then clear
+listenNOWcue sent before run-tone.py once.0323 quiet test PASSED:
+quiet_codec_tone_complete/error0/complete1,4zero+4tone=8submitted/completed,
+32768B/8192stereoframes,outputenabled1/stopped1/cutoff0,eos_rendered1,
+DSPcleanup0/mapped-inflight0,AFE/ASM/ADMclosed,channel6/6ACKs/uncertain0,
+codec/amp/AIF/pins/clock restored, mute retained. QMIpower/NGDretained.
+Userheard/postresponsivefeedback stillpending. Do not equate DSP/EOS with
+physicalsound. Allone-shotsconsumed thisboot; noactive retry.
+WiFi preruntone scalar0/result0, manualjoin requested andpending. Prior0322
+nativeDHCP/defaultDNS/Safari/off-onreconnect pass; currentrebootjoin nottested.
+
+Finalpath audit found amplifier RX slot mismatch in existing initialization:
+CS35L41 reg0x4820=3 selects RX1 slot3 (bits5:0), whilecodec TX slots0/1.
+PrimaryLinux/Cirrus include/sound/cs35l41.h RX1_SLOT_MASK0x3f,SHIFT0;
+cs35l41-lib.c cs35l41_set_channels assigns slotvalues, notenablemasks.
+RX1 enable0x10000 is correct, but clocklock saysnothing about receivedsamples.
+Downloadedprimarysources private work/audio-slot-audit/sources.json hashes;
+https://raw.githubusercontent.com/torvalds/linux/master/include/sound/cs35l41.h
+https://raw.githubusercontent.com/torvalds/linux/master/sound/soc/codecs/cs35l41-lib.c
+
+0324 candidate selectsRX1 slot0 whilemuted before enablingreceiver, preserving
+allotherbits; extendsouterI2S snapshot/restoration to0x4820, recordsoldslot,
+and rejects quietunmute ifslotnonzero orreceiverenablemaskwrong. Restores
+originallegacy slot3 aftertest, no newanalog/gain/boostwrites, unchanged85ms/
+750msboundedtest. Actualcode route/clock/rollback andtonegate sanitizer tests
+PASS, including seededslot3/upperbits, failedslotwrite restoringfullstate,
+wrongslot/disabledreceiver preventingunmute and mid-tone wrongslot rejection.
+Needcommit0324 before nativebuild/package; keep0323 untilfreshjoinlogscaptured.
+Physicalmic/continuousiOSbackend pending. Allpaths canonicalDeveloperlocal.
+
 ## Active handoff:0323 booted, passive verified; home/listening gate pending (2026-11-14)
 
 User fastbootready. Exact preferredimage0775ba2b... verified; productriver,

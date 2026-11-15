@@ -1,0 +1,97 @@
+diff --git a/bsd/dev/river_codec_i2s.h b/bsd/dev/river_codec_i2s.h
+--- a/bsd/dev/river_codec_i2s.h
++++ b/bsd/dev/river_codec_i2s.h
+@@ -7,10 +7,11 @@
+  0x519,0x51a,0x1710,0x1711,0x1714,0x1715
+ };
+ static const uint32_t ri_i2s_amp_regs[] = {
+- 0x2018,0x2024,0x6000,0x4800,0x4808,0x2c04,0x2c0c,0x4840,0x4830
++ 0x2018,0x2024,0x6000,0x4800,0x4808,0x2c04,0x2c0c,0x4840,0x4830,0x4820
+ };
+ static uint16_t ri_i2s_codec_saved[16];
+-static uint32_t ri_i2s_amp_saved[9], ri_i2s_irq_before, ri_i2s_irq_live;
++enum {RI_I2S_AMP_COUNT=sizeof(ri_i2s_amp_regs)/sizeof(ri_i2s_amp_regs[0])};
++static uint32_t ri_i2s_amp_saved[RI_I2S_AMP_COUNT], ri_i2s_irq_before, ri_i2s_irq_live;
+ static bool ri_i2s_touched, ri_i2s_codec_restored, ri_i2s_amp_restored, ri_i2s_amp_locked;
+ static char ri_i2s_note[512];
+ static const char *ri_i2s_amp_error="none";
+@@ -29,7 +30,7 @@
+ ri_i2s_amp_write(uint32_t reg, uint32_t val)
+ {
+  bool allowed = false;
+- for (unsigned i=0;i<9;i++) if (ri_i2s_amp_regs[i]==reg) allowed=true;
++ for (unsigned i=0;i<RI_I2S_AMP_COUNT;i++) if (ri_i2s_amp_regs[i]==reg) allowed=true;
+  uint32_t got=0;
+  if(!allowed) return ri_i2s_amp_fail("register_rejected",reg,val,0);
+  if(!ri_cs35l41_wr(reg,val)) return ri_i2s_amp_fail("write_failed",reg,val,0);
+@@ -73,21 +74,21 @@
+   uint16_t mask=(ri_i2s_codec_regs[i]==0x1710||ri_i2s_codec_regs[i]==0x1714)?0x7fff:0xffff;
+   if((got&mask)!=(ri_i2s_codec_saved[i]&mask)) return ri_i2s_snapshot_fail("codec_changed",ri_i2s_codec_regs[i],ri_i2s_codec_saved[i],got);
+  }
+- for(unsigned i=0;i<9;i++) if(!ri_cs35l41_rd(ri_i2s_amp_regs[i],&ri_i2s_amp_saved[i]))
++ for(unsigned i=0;i<RI_I2S_AMP_COUNT;i++) if(!ri_cs35l41_rd(ri_i2s_amp_regs[i],&ri_i2s_amp_saved[i]))
+   return ri_i2s_snapshot_fail("amp_read",ri_i2s_amp_regs[i],0,0);
+- for(unsigned i=0;i<9;i++) {
++ for(unsigned i=0;i<RI_I2S_AMP_COUNT;i++) {
+   uint32_t got=0;
+   if(!ri_cs35l41_rd(ri_i2s_amp_regs[i],&got)) return ri_i2s_snapshot_fail("amp_reread",ri_i2s_amp_regs[i],ri_i2s_amp_saved[i],0);
+   if(got!=ri_i2s_amp_saved[i]) return ri_i2s_snapshot_fail("amp_changed",ri_i2s_amp_regs[i],ri_i2s_amp_saved[i],got);
+  }
+  if(!ri_cs35l41_rd(0x10098,&ri_i2s_irq_before)) return ri_i2s_snapshot_fail("amp_irq_read",0x10098,0,0);
+  snprintf(ri_i2s_note,sizeof(ri_i2s_note),
+-     "i2s_snapshot=1 sys=%#x sr=%#x bclk=%#x txpin=%#x rxpin=%#x rate=%#x fmt=%#x bcpf=%#x txwl=%#x rxwl=%#x txen=%#x rxen=%#x gp9=%#x,%#x gp11=%#x,%#x amp_power=%#x amp_mute=%#x amp_fmt=%#x amp_pll=%#x irq=%#x",
++     "i2s_snapshot=1 sys=%#x sr=%#x bclk=%#x txpin=%#x rxpin=%#x rate=%#x fmt=%#x bcpf=%#x txwl=%#x rxwl=%#x txen=%#x rxen=%#x gp9=%#x,%#x gp11=%#x,%#x amp_power=%#x amp_mute=%#x amp_fmt=%#x amp_pll=%#x amp_rxslot=%#x irq=%#x",
+      ri_i2s_codec_saved[0],ri_i2s_codec_saved[1],ri_i2s_codec_saved[2],ri_i2s_codec_saved[3],
+      ri_i2s_codec_saved[4],ri_i2s_codec_saved[5],ri_i2s_codec_saved[6],ri_i2s_codec_saved[7],
+      ri_i2s_codec_saved[8],ri_i2s_codec_saved[9],ri_i2s_codec_saved[10],ri_i2s_codec_saved[11],
+      ri_i2s_codec_saved[12],ri_i2s_codec_saved[13],ri_i2s_codec_saved[14],ri_i2s_codec_saved[15],
+-     ri_i2s_amp_saved[0],ri_i2s_amp_saved[1],ri_i2s_amp_saved[4],ri_i2s_amp_saved[5],ri_i2s_irq_before);
++     ri_i2s_amp_saved[0],ri_i2s_amp_saved[1],ri_i2s_amp_saved[4],ri_i2s_amp_saved[5],ri_i2s_amp_saved[9],ri_i2s_irq_before);
+  return true;
+ }
+ static bool
+@@ -195,9 +196,9 @@
+  bool ok=ri_i2s_codec_restored && ri_clock_data_restored;
+  if(ok) {
+   // Clock consumers first; stage enable and original mute state last.
+-  const unsigned order[]={3,4,5,6,7,8,2,0,1};
+-  for(unsigned i=0;i<9;i++) if(!ri_i2s_amp_write(ri_i2s_amp_regs[order[i]],ri_i2s_amp_saved[order[i]])) { ok=false;break; }
+-  for(unsigned i=0;i<9;i++) {
++  const unsigned order[]={9,3,4,5,6,7,8,2,0,1};
++  for(unsigned i=0;i<RI_I2S_AMP_COUNT;i++) if(!ri_i2s_amp_write(ri_i2s_amp_regs[order[i]],ri_i2s_amp_saved[order[i]])) { ok=false;break; }
++  for(unsigned i=0;i<RI_I2S_AMP_COUNT;i++) {
+    uint32_t got=0;
+    if(!ri_cs35l41_rd(ri_i2s_amp_regs[i],&got)||got!=ri_i2s_amp_saved[i]) ok=false;
+   }
+diff --git a/bsd/dev/river_adsp_codec_route.h b/bsd/dev/river_adsp_codec_route.h
+--- a/bsd/dev/river_adsp_codec_route.h
++++ b/bsd/dev/river_adsp_codec_route.h
+@@ -56,6 +56,11 @@
+     !ri_clock_write(0x1712,saved[20]&~0x1ffu) ||
+     !ri_clock_write(0x1713,saved[21]&~0xe000u) ||
+     !ri_clock_write(0x5f5,saved[3]|1) ||
++    /* CS35L41 RX1_SLOT is bits5:0, not a channel-enable mask.
++     * Its legacy value3 selects nonexistent slot3 in our two-slot frame.
++     * Select codec TX slot0 while muted, preserving RX2/reserved bits;
++     * the outer I2S snapshot owns restoration of register0x4820. */
++    !ri_i2s_amp_write(0x4820,ri_i2s_amp_saved[9]&~0x3fu) ||
+     !ri_i2s_amp_write(0x4800,0x10000) ||
+     !ri_clock_write(0x519,3) || !ri_clock_write(0x501,pin_before&~0x20u)) {
+   error=EIO;goto restore;
+diff --git a/bsd/dev/river_adsp_tone.h b/bsd/dev/river_adsp_tone.h
+--- a/bsd/dev/river_adsp_tone.h
++++ b/bsd/dev/river_adsp_tone.h
+@@ -26,10 +26,12 @@
+ static bool
+ ri_tone_locked_clocks(void)
+ {
+- uint32_t source=0,global=0,gain=0,format=0;
++ uint32_t source=0,global=0,gain=0,format=0,slot=0,enables=0;
+  return ri_cs35l41_rd(0x4c00,&source) && source==8 &&
+   ri_cs35l41_rd(0x2014,&global) && (global&1) &&
+   ri_cs35l41_rd(0x6c04,&gain) && gain==0x220 &&
++  ri_cs35l41_rd(0x4820,&slot) && !(slot&0x3fu) &&
++  ri_cs35l41_rd(0x4800,&enables) && (enables&0x3000fu)==0x10000 &&
+   ri_cs35l41_rd(0x4808,&format) && !(format&0x33) &&
+   ri_cs35l41_rd(0x10090,&ri_tone.irq1) && !(ri_tone.irq1&0x800281c0u) &&
+   ri_cs35l41_rd(0x10098,&ri_tone.irq3) && !(ri_tone.irq3&0x10) &&

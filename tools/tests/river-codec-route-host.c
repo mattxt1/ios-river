@@ -45,8 +45,8 @@ static bool ri_cs35l41_rd(uint32_t reg,uint32_t *value) {
 }
 static bool ri_cs35l41_wr(uint32_t reg,uint32_t value) {
  assert(reg==0x2018||reg==0x2024||reg==0x6000||reg==0x4800||reg==0x4808||
-        reg==0x2c04||reg==0x2c0c||reg==0x4840||reg==0x4830);
- amp_writes++;if(amp_writes==amp_ignore)return false;
+        reg==0x2c04||reg==0x2c0c||reg==0x4840||reg==0x4830||reg==0x4820);
+ amp_writes++;if(amp_writes==amp_ignore || (mode==60 && reg==0x4820 && !(value&63)))return false;
  if((reg==0x4808&&(value&0x33))||(reg==0x2024&&!(value&0x10))||(reg==0x2018&&(value&1)))
   assert(codec_outputs_off());
  amp[reg]=value;return true;
@@ -181,7 +181,7 @@ static void ri_stream_cleanup(struct ri_stream_state *state){assert(!speaker_hel
 static int ri_stream_execute(struct ri_stream_state *state,unsigned session) {
  assert(state==&ri_live_stream && session==5 && codec_held && !speaker_held);
  assert((regs[0x700]&0x80ff)==0x8038 && (regs[0x708]&0x80ff)==0x8038 && regs[0x519]==3 && (regs[0x5f5]&1));
- assert(amp_quiet() && amp[0x4800]==0x10000);live_calls++;
+ assert(amp_quiet() && amp[0x4800]==0x10000 && amp[0x4820]==0xa5000100);live_calls++;
  assert(state->afe_prepared && ri_route.afe_started);
  if(state->tone){assert(ri_stream_output_start && ri_stream_output_check && ri_stream_output_stop);assert(!ri_stream_output_start() && !ri_stream_output_check());ri_stream_output_stop();}
  state->submitted=4;state->complete=mode!=53 && mode!=54;
@@ -211,7 +211,7 @@ static void reset(unsigned scenario) {
  pmic_mode = 0; pmic_pull = 4; pmic_writes = pmic_ignore = cmd_missing = pmic_reads = 0; ri_clock_mclk_cmd = 0;
  for (unsigned i = 0; i < 4; i++) { cfg[i] = 1; out[i] = 0; }
  memset(amp,0,sizeof(amp));amp[0]=0x35a40; amp[0x2018]=0x21; amp[0x2024]=0x100;
- amp[0x4808]=0x20200233;amp[0x2c04]=0x833;amp[0x4800]=0x10001;amp[0x4840]=24;amp[0x4830]=24;
+ amp[0x4808]=0x20200233;amp[0x2c04]=0x833;amp[0x4800]=0x10001;amp[0x4840]=24;amp[0x4830]=24;amp[0x4820]=0xa5000103;
  memcpy(amp_initial,amp,sizeof(amp));amp_writes=amp_ignore=amp_no_lock=gpio_reads=0;
  memset(regs, 0, sizeof(regs)); regs[0] = 0x6360; regs[1] = 1;
  regs[0x1710]=0x2001;regs[0x1714]=0xa001;
@@ -340,6 +340,7 @@ int main(void)
  check_restore();assert(!memcmp(amp,amp_initial,sizeof(amp)) && !codec_held && !speaker_held && ri_channel.complete);
  assert(ri_codec_path_run()==EALREADY);
  unsigned total_writes=writes;
+ path_reset(60);assert(ri_codec_path_run()==EIO && !ri_codec_path.complete && ri_codec_path.restored);check_restore();assert(!memcmp(amp,amp_initial,sizeof(amp)) && amp[0x4820]==0xa5000103);
  path_reset(52);assert(ri_codec_path_run()==ETIMEDOUT && !ri_codec_path.complete && ri_codec_path.restored);check_restore();
  path_reset(50);assert(ri_codec_path_run()==ENXIO && !ri_codec_path.complete && ri_codec_path.restored);check_restore();
  path_reset(0);regs[0x5e5]=8;memcpy(initial,regs,sizeof(regs));assert(ri_codec_path_run()==EBUSY && !ri_codec_path.touched && !writes && !amp_writes);check_pins();assert(!memcmp(regs,initial,sizeof(regs)));
