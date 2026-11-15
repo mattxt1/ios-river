@@ -5,6 +5,30 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0327 temporary boot accepted; fresh home/Wi-Fi gate pending (2026-11-15)
+
+User said fastboot ready. Reverified exact image SHA068ae923... and productriver,
+serialZY226HM8QB; temporary fastboot boot accepted0.836s. NO flash. CurrentPHONE
+is0327; no active audio controls sent. Old0326 consumed state applies only to
+priorboot. Evidence work/continuous/fastboot-preflight.json, verified-boot.json,
+fastboot-boot-46d310b.txt. Manifest now records327/currentboot accepted.
+
+Newboot Wi-Fi SSH initial read-only baseline timed out at192.168.1.232; no remote
+execution or active one-shot consumed. User fresh home responsive/Wi-Fi blue
+checkmark question pending. MUST await responsiveness before active controls.
+First local baseline attempt was denied by sandbox, then escalated attempt
+reached a network timeout. Preserve both separately before retrying PASSIVE
+verification only. UDPlogger now running; sandbox initially denied its bind,
+so it started after boot acceptance and may have missed early USB messages.
+
+After user Wi-Fi/home reply, preserve failed baseline-start as connection-timeout
+then work/continuous/verify-installed.py via trusted Wi-Fi SSH (HostKeyAlias
+192.168.7.2). This checks exact installed helpers and unarmed/untouched state.
+Then prepare-device.py ONCE muted, stage-queue.py (readiness arm only), explicit
+immediate listening cue, run-live.py ONCE. See next handoff for exact image,
+queue limits, scripts, provenance and remaining implementation work. No new
+microphone or unrestricted continuous-playback claim. All active paths local.
+
 ## Active handoff:0327 image built/verified; temporary boot requested (2026-11-15)
 
 Native build through0327 PASSED exit0 in the same verified dxb/exact localKDK.

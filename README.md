@@ -30,7 +30,7 @@ All active work uses canonical `/Users/matttyson/Developer/Codex` local storage.
 
 Patch0327 now has a built and verified opt-in live PCM queue candidate: a
 separate DSP worker, four owned DMA slots and dynamic fault/clock monitoring.
-The first hardware trial is still bounded to12blocks/750ms and has not booted.
+Patch0327 has temporarily booted; the12block/750ms hardware trial is pending.
 Unrestricted continuous playback and physical microphone capture remain pending.
 See `NOTES.md` for the exact image and current phone ownership.
 
