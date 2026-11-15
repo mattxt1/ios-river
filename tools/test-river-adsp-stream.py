@@ -34,6 +34,10 @@ with tempfile.TemporaryDirectory(prefix='river-adsp-route-') as directory:
  sections=['diff --git '+x for x in (repo/'xnu/patches/0326-river-stage-native-ios-pcm-for-bounded-playback.patch').read_text().split('diff --git ')[1:]]
  text=''.join(x for x in sections if x.splitlines()[0].split()[2]=='a/bsd/dev/river_adsp_stream.h')
  subprocess.run(['patch','--batch','--silent','--fuzz=0','-p1','-d',str(root/'source')],input=text.encode(),check=True)
+ sections=['diff --git '+x for x in (repo/'xnu/patches/0327-river-live-pcm-queue-and-dsp-pipeline.patch').read_text().split('diff --git ')[1:]]
+ text=''.join(x for x in sections if x.startswith('diff --git a/bsd/dev/river_adsp_stream.h '))
+ subprocess.run(['patch','--batch','--silent','--fuzz=0','-p1','-d',str(root/'source')],input=text.encode(),check=True)
+ stream_target.write_text(stream_target.read_text().replace('#include "river_adsp_pipeline.h"','static int ri_stream_pipeline(struct ri_stream_state *,uint32_t);'))
  (root/'route-actual.h').write_text(target.read_text())
  (root/'stream-actual.h').write_text(stream_target.read_text().split('static int\nriver_adsp_stream_sysctl',1)[0].replace('__asm__ volatile("dmb sy" ::: "memory");','host_barrier();'))
  binary=root/'route'

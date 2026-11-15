@@ -8,11 +8,12 @@ struct ri_apr_request {uint32_t source,destination,token,opcode,response;const u
 struct ri_apr_reply {uint32_t status,data[32];unsigned words;bool sent,complete;};
 static struct {bool unmapped,asm_closed,poisoned;uint64_t physical;unsigned transactions;uint32_t rx_header,rx_source,rx_destination,rx_token,rx_opcode;} ri_pcm;
 static bool ri_afe_mute_hold,ri_speaker_ok;
+static unsigned ri_audio_queue_lock;
 static unsigned ri_speaker_lock,lock_depth,commands,mode;
 static uint32_t mute_control,fail_opcode,fail_status,cleanup_fail_opcode,ops[128],digital;
 static bool timeout_failure,mute_failure,afe_config_live;
-static void lck_mtx_lock(unsigned *p) {assert(p==&ri_speaker_lock && !lock_depth);lock_depth++;}
-static void lck_mtx_unlock(unsigned *p) {assert(p==&ri_speaker_lock && lock_depth==1);lock_depth--;}
+static void lck_mtx_lock(unsigned *p) {assert((p==&ri_speaker_lock || p==&ri_audio_queue_lock) && !lock_depth);lock_depth++;}
+static void lck_mtx_unlock(unsigned *p) {assert((p==&ri_speaker_lock || p==&ri_audio_queue_lock) && lock_depth==1);lock_depth--;}
 static bool ri_cs35l41_rd(uint32_t reg,uint32_t *out) {assert(reg==0x2024 || reg==0x6000);*out=reg==0x2024?mute_control:digital;return !mute_failure;}
 static bool ri_cs35l41_wr(uint32_t reg,uint32_t value) {assert(reg==0x2024 || reg==0x6000);if(reg==0x2024)mute_control=value;else digital=value;return !mute_failure;}
 typedef uintptr_t vm_offset_t;
@@ -27,7 +28,7 @@ typedef uint64_t addr64_t;
 #define KERN_SUCCESS 0
 static int kernel_map,kernel_pmap;
 static unsigned write_count,cleaned,barriers,allocations,output_starts,output_stops;
-static bool output_live,expected_tone,eos_seen,expected_native;
+static bool output_live,expected_tone,eos_seen,expected_native,expected_queued;
 static uint32_t expected_pa,expected_stream=0x04010000;
 static unsigned char stream_page[PAGE_SIZE*2] __attribute__((aligned(PAGE_SIZE)));
 static int kmem_alloc_contig(int map,vm_offset_t *out,unsigned size,unsigned mask,unsigned low,unsigned high,unsigned flags,unsigned tag)
@@ -60,7 +61,7 @@ static int ri_pcm_transaction(struct ri_apr_request *r,struct ri_apr_reply *p)
  case 0x10daa:
   assert(r->source==(expected_stream|0x507) && r->destination==(expected_stream|0x407) && r->words==3);
   assert(!r->payload[0] && !r->payload[1] && !r->payload[2]);break;
- case 0x10bdb:assert(expected_tone && output_live && write_count==8 && r->response==0x10c1c && !r->words);p->words=mode==57?1:0;eos_seen=true;break;
+ case 0x10bdb:assert(expected_tone && output_live && write_count==(expected_queued?16u:8u) && r->response==0x10c1c && !r->words);p->words=mode==57?1:0;eos_seen=true;break;
  case 0x10bd3:assert(!r->words);break;
  case 0x10dab: {
   assert(r->source==(expected_stream|0x507) && r->destination==(expected_stream|0x407) && r->response==0x10d99 && r->words==8);
@@ -134,7 +135,16 @@ static int quiet_printf(const char *format,...) {(void)format;return 0;}
 #include "route-actual.h"
 #undef printf
 #define printf quiet_printf
+static struct {bool stop;} ri_audio_queue;
 #include "stream-actual.h"
+/* Model pipeline return values here; full transport/queue is exercised by
+ * test-river-live-pcm.py. This harness checks route/EOS/cleanup integration. */
+static int ri_stream_pipeline(struct ri_stream_state *state,uint32_t stream) {
+ assert(output_live && stream==expected_stream && state->completed==4);
+ if(mode==61) {state->in_flight=true;ri_pcm.poisoned=true;return ETIMEDOUT;}
+ if(mode==62)return ENOBUFS;
+ state->submitted+=12;state->completed+=12;state->bytes_completed+=12*4096;write_count+=12;return 0;
+}
 #undef printf
 static void reset(unsigned scenario)
 {
@@ -186,7 +196,7 @@ static int host_output_check(void){assert(!lock_depth && output_live && !eos_see
 static void host_output_stop(void){assert(!lock_depth);output_stops++;output_live=false;}
 static void stream_reset(unsigned scenario)
 {
- reset(scenario);output_starts=output_stops=0;output_live=expected_tone=eos_seen=expected_native=false;ri_stream_output_start=NULL;ri_stream_output_check=NULL;ri_stream_output_stop=NULL;allocations=0;expected_stream=0x04010000;memset(&ri_live_stream,0,sizeof(ri_live_stream));memset(&ri_stream,0,sizeof(ri_stream));
+ reset(scenario);output_starts=output_stops=0;output_live=expected_tone=eos_seen=expected_native=expected_queued=false;ri_stream_output_start=NULL;ri_stream_output_check=NULL;ri_stream_output_stop=NULL;allocations=0;expected_stream=0x04010000;memset(&ri_live_stream,0,sizeof(ri_live_stream));memset(&ri_stream,0,sizeof(ri_stream));
  ri_pcm.physical=0x50000000;write_count=cleaned=barriers=0;
  assert(ri_route_config()==0 && ri_route.config_readback);
  assert(ri_route_test(false)==0);
@@ -272,6 +282,16 @@ int main(void)
   assert(output_starts==1 && output_stops==1 && !output_live && !ri_live_stream.mapped && !ri_route.afe_started);
   if(scenario==2)assert(!rc && ri_live_stream.completed==8 && ri_live_stream.eos_rendered && strstr(ri_live_stream.note,"native_ios_snapshot"));
   else assert(rc==EBUSY && write_count==4 && !ri_live_stream.complete && !ri_pcm.poisoned);
+ }
+ for(unsigned scenario=2;scenario<=62;scenario++) {
+  if(scenario!=2 && scenario!=61 && scenario!=62)continue;
+  stream_reset(2);assert(!ri_stream_test());commands=write_count=0;expected_stream=0x05010000;
+  assert(!ri_stream_prepare_live());ri_live_stream.tone=ri_live_stream.queued_pcm=true;expected_tone=expected_queued=true;mode=scenario;
+  ri_stream_output_start=host_output_start;ri_stream_output_check=host_output_check;ri_stream_output_stop=host_output_stop;
+  int rc=ri_stream_execute(&ri_live_stream,5);assert(output_starts==1 && output_stops==1 && !output_live);
+  if(scenario==2)assert(!rc && ri_live_stream.complete && ri_live_stream.eos_rendered && ri_live_stream.completed==16 && !ri_live_stream.mapped && strstr(ri_live_stream.note,"live_ios_queue"));
+  if(scenario==61)assert(rc==ETIMEDOUT && ri_pcm.poisoned && ri_live_stream.mapped && ri_live_stream.in_flight);
+  if(scenario==62)assert(rc==ENOBUFS && !ri_pcm.poisoned && !ri_live_stream.mapped && !ri_live_stream.complete);
  }
  puts("actual-code zero-PCM map/RUN/WRITE ownership, completion and failure teardown tests passed");
  return 0;

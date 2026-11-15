@@ -42,5 +42,11 @@ int main(void){
  reset();clock_fll=0;assert(ri_tone_start()==EBUSY && !writes);stopped();
  reset();assert(!ri_tone_start());amp[0x10098]|=0x10;assert(ri_tone_check()==EIO);ri_tone_stop();stopped();
  reset();assert(!ri_tone_start());amp[0x6000]^=8;assert(ri_tone_check()==EIO);ri_tone_stop();stopped();
+ reset();assert(!ri_tone_start());ri_live_health_index=0;
+ assert(!ri_live_health() && !ri_live_health() && !ri_live_health());
+ amp[0x10090]|=0x80000000;assert(ri_live_health()==EIO && !ri_tone.active && ri_tone.stopped);ri_tone_stop();stopped();
+ reset();assert(!ri_tone_start());ri_live_health_index=1;amp[0x10098]|=0x10;assert(ri_live_health()==EIO && !ri_tone.active);ri_tone_stop();stopped();
+ reset();assert(!ri_tone_start());ri_live_health_index=2;clock_fll=0xffff;assert(ri_live_health()==EIO && !ri_tone.active);ri_tone_stop();stopped();
+ reset();assert(!ri_tone_start());timer(NULL,NULL);assert(ri_live_health()==ETIMEDOUT);ri_tone_stop();stopped();
  puts("actual-code quiet output attenuation, ownership/clock/fault gates, deadline mute and cleanup tests passed");return 0;
 }

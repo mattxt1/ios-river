@@ -167,7 +167,7 @@ static bool ri_afe_mute_hold;
 static struct {bool complete;} ri_stream;
 static struct {bool muted,asm_open,adm_open,afe_started;int cleanup_error;} ri_route;
 static struct {bool poisoned;} ri_pcm;
-static struct ri_stream_state {bool complete,mapped,in_flight,afe_prepared,tone,native_pcm;unsigned submitted;char note[1536];} ri_live_stream;
+static struct ri_stream_state {bool complete,mapped,in_flight,afe_prepared,tone,native_pcm,queued_pcm;unsigned submitted;char note[1536];} ri_live_stream;
 static struct {bool enabled,stopped,cutoff;int error;uint64_t armed_at,unmuted_at,muted_at,max_check_ns;} ri_tone;
 static int (*ri_stream_output_start)(void),(*ri_stream_output_check)(void);
 static void (*ri_stream_output_stop)(void);
@@ -205,6 +205,8 @@ static int ri_channel_test(void) {
 }
 static int quiet_printf(const char *format,...) {(void)format;return 0;}
 #define printf quiet_printf
+static int (*ri_pipeline_health)(void);
+static int ri_live_health(void){return 0;}
 #include "codec-route-added.h"
 #undef printf
 static void reset(unsigned scenario) {
@@ -359,6 +361,7 @@ int main(void)
  assert(amp_quiet() && !amp[0x4800] && !(regs[0x101]&0x40) && !regs[0x519] && (regs[0x102]&31)==3);
  check_pins();assert(!codec_held && !speaker_held);
  path_reset(0);assert(!ri_codec_path_run_mode(true) && live_calls==1 && ri_codec_path.complete && ri_live_stream.complete);check_restore();assert(!speaker_held && !codec_held);
+ path_reset(0);assert(!ri_codec_path_run_mode(4) && ri_live_stream.queued_pcm && ri_live_stream.tone && live_calls==1);check_restore();
  path_reset(0);assert(!ri_codec_path_run_mode(3) && native_claims==1 && ri_live_stream.native_pcm && ri_live_stream.tone && live_calls==1);check_restore();
  path_reset(0);native_ready=false;assert(ri_codec_path_run_mode(3)==EBUSY && !ri_codec_path.attempted && !writes && !amp_writes && !live_calls);
  path_reset(53);assert(ri_codec_path_run_mode(true)==ETIMEDOUT && live_calls==1 && ri_channel.uncertain && ri_channel.active && ri_live_stream.mapped && ri_codec_path.restored);check_restore();assert((amp[0x2024]&0x10) && !speaker_held && !codec_held);

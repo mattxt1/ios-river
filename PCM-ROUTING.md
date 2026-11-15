@@ -236,3 +236,29 @@ Continuous iOS backend and physical microphone remain pending. Do not claim
 physical playback from zeroPCM completions. Exact0320 source/build/manifest
 paths and KDK are in next historical entry. Keep Wi-Fi secondary.
 
+
+## Live PCM queue candidate0327
+
+`river-adsp-status --queue-arm` opts into an8192-frame CPU queue fed by actual
+48k stereoS16 device writes. The HAL writer copies only; whole incoming chunks
+are dropped on overflow and counted. `--queue-run` requires4096frames of
+prefill and starts a dedicated kernel thread owning the existing ADSP/codec
+route. Four DMA slots may be outstanding simultaneously. Token, services,
+ports, opcode, physical address and map handle must all match before reuse.
+`--queue-stop` and `--queue-status` remain available without taking ADSP lock.
+
+The initial live trial is limited to12blocks and the existing750ms independent
+mute deadline. It keeps the quiet attenuation/clamp and5ms edge ramps. Full
+static topology is checked at unmute; dynamic monitoring rotates amp IRQ1,
+IRQ3 and codec FLL lock, with one read per10ms interval rather than a93ms
+survey per21.33ms PCM block. Underrun immediately mutes, drains known published
+buffers through exact completions and tears down. Failed ownership checks
+retain the mapping and mark transport poisoned until reboot. No fabricated
+PCM fills underruns. A successful12block run requires producer replenishment
+because the queue holds eight blocks. This candidate is unverified on hardware;
+normal automatic continuous playback and physical microphone capture remain
+pending. Never run it on a boot whose codec route one-shot was already used.
+
+`python3 tools/test-river-live-pcm.py` compiles committed queue/pipeline and APR
+decoder code with sanitizer instrumentation and injected transport failures.
+The existing stream, amplifier and codec tests also apply0327 before testing.

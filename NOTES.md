@@ -5,6 +5,36 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0327 live queue/pipeline implementation (2026-11-15)
+
+0327 adds an opt-in device-write queue and dedicated kernel DSP/route worker.
+Eight1024-frame stereoS16 blocks of copied CPU storage feed four independently
+owned mapped DMA slots. Exact token/service/port/opcode/address/handle checks
+release slots; malformed replies/reset/timeout retain unresolved mappings.
+The producer never waits for DSP or performs hardware I/O. Queue pressure uses
+explicit nonblocking drop-newest counters. Underrun mutes immediately, then
+attempts exact completion drain before teardown; unknown ownership is retained.
+Runtime health rotates read-only amp IRQ1/IRQ3/FLL checks at10ms intervals,
+with full topology survey still required at unmute and independent750ms mute.
+The first trial consumes at most12blocks, exceeding queue capacity so it must
+receive fresh app writes. This is a bounded live-queue validation candidate,
+not yet unrestricted continuous playback. Physical microphone still synthetic.
+
+New helper controls --queue-arm/--queue-run/--queue-stop/--queue-status;
+run launches asynchronously, status/stop use only the independent queue lock.
+Existing synchronous route controls remain unchanged and cannot enter mode4.
+Actual-code sanitizer tests cover queue bounds/concurrent producers, clamp/
+ramps, live replenishment, four-slot ownership/out-of-order/duplicate/foreign
+replies, mismatch/timeout/NACK, health faults, underrun drain, EOS and teardown.
+Build/image/device validation pending. Current PHONE REMAINS0326, all audio
+one-shots consumed and amp muted. NO active controls were sent in this chat.
+Do not retry controls until a verified new image and fresh responsiveness gate.
+
+All work uses canonical Developer/Codex. Evidence/build workspace unchanged:
+2026-11-13/apr-communication-now-passes-the-dsp; work/continuous holds inputs.
+Reuse exact local KDK/build. Wi-Fi remains unchanged; trusted Wi-Fi SSH fallback
+is192.168.1.232/HostKeyAlias192.168.7.2. See0326 handoff below for device evidence.
+
 ## Publication handoff: audio/Wi-Fi through patch 0326 (2026-11-14)
 
 The user requested committing and pushing all work, updating the READMEs and

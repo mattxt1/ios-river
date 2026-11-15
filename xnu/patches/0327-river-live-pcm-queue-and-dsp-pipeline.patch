@@ -1,0 +1,424 @@
+diff --git a/bsd/dev/river_adsp_codec_route.h b/bsd/dev/river_adsp_codec_route.h
+--- a/bsd/dev/river_adsp_codec_route.h
++++ b/bsd/dev/river_adsp_codec_route.h
+@@ -163,13 +163,14 @@
+ static int
+ ri_codec_path_run_mode(unsigned mode)
+ {
+- if(mode>3)return EINVAL;bool with_pcm=mode!=0,tone=mode>=2,native=mode==3;
++ if(mode>4)return EINVAL;bool with_pcm=mode!=0,tone=mode>=2,native=mode==3,queued=mode==4;
+  if(ri_codec_path.attempted)return EALREADY;
+  if(!ri_stream.complete || !ri_route_ready() || !ri_route.muted || !ri_afe_mute_hold ||
+     !ri_ngd.address_valid || !ri_ngd.enabled || ri_ngd.uncertain || ri_channel.attempted)return EBUSY;
+  if(native && !ri_native_pcm_claim())return EBUSY;
+  ri_codec_path.attempted=true;ri_codec_path.with_pcm=with_pcm;
+  if(tone) {
++  ri_live_stream.queued_pcm=queued;ri_pipeline_health=queued?ri_live_health:NULL;
+   ri_live_stream.native_pcm=native;ri_live_stream.tone=true;ri_stream_output_start=ri_tone_start;
+   ri_stream_output_check=ri_tone_check;ri_stream_output_stop=ri_tone_stop;
+  }
+@@ -182,7 +183,7 @@
+  if(with_pcm && ri_live_stream.afe_prepared)ri_stream_cleanup(&ri_live_stream);
+  if(!error && (ri_route.afe_started || ri_route.cleanup_error))error=EIO;
+  ri_codec_path.channel_error=error;
+- ri_stream_output_start=NULL;ri_stream_output_check=NULL;ri_stream_output_stop=NULL;
++ ri_stream_output_start=NULL;ri_stream_output_check=NULL;ri_stream_output_stop=NULL;ri_pipeline_health=NULL;
+  ri_codec_path.complete=!error && ri_codec_path.seen && ri_codec_path.restored &&
+   (!with_pcm || (ri_live_stream.complete && !ri_live_stream.mapped && !ri_live_stream.in_flight)) &&
+   (!tone || (ri_tone.enabled && ri_tone.stopped && !ri_tone.cutoff && !ri_tone.error)) &&
+@@ -190,7 +191,7 @@
+  if(!error && !ri_codec_path.complete)error=EIO;
+  snprintf(ri_codec_path_note,sizeof(ri_codec_path_note),
+   "phase=%s error=%d attempted=%u complete=%u route_seen=%u touched=%u route_restored=%u bad_reg=%#x port_map=%#x port_before=%#x port_live=%#x rate=%#x fll=%#x amp_irq=%#x clock_error=%d channel_error=%d channel_complete=%u connected=%u defined=%u active=%u uncertain=%u aif_restored=%u amp_restored=%u amp_locked=%u amp_mute_retained=%u afe_started=%u dsp_cleanup_error=%d live_mapped=%u live_in_flight=%u amp_output_stage_test_policy=%s quiet_tone=%u output_enabled=%u output_stopped=%u output_cutoff=%u mute_verified_us=%llu output_window_us=%llu max_output_check_us=%llu active_route_pcm=%u dsp_samples_submitted=%u ios_backend=discarded capture=synthetic live_pcm={%s} last_native_clock={%s}",
+-  ri_codec_path.complete?(native?"native_codec_pcm_complete":tone?"quiet_codec_tone_complete":with_pcm?"muted_codec_pcm_complete":"muted_codec_route_complete"):"muted_codec_route_stopped",error,
++  ri_codec_path.complete?(queued?"live_queue_trial_complete":native?"native_codec_pcm_complete":tone?"quiet_codec_tone_complete":with_pcm?"muted_codec_pcm_complete":"muted_codec_route_complete"):"muted_codec_route_stopped",error,
+   ri_codec_path.attempted,ri_codec_path.complete,ri_codec_path.seen,ri_codec_path.touched,
+   ri_codec_path.restored,ri_codec_path.bad_reg,ri_codec_path.port_map,ri_codec_path.port_before,
+   ri_codec_path.port_live,ri_codec_path.rate,ri_codec_path.fll,ri_codec_path.amp_irq,
+@@ -227,3 +228,33 @@
+  NULL,0,river_adsp_codec_path_sysctl,"I","Explicit muted codec SLIMRX to AIF1 route test");
+ SYSCTL_PROC(_debug,OID_AUTO,river_adsp_codec_path_status,CTLTYPE_STRING|CTLFLAG_RD|CTLFLAG_LOCKED,
+  NULL,0,river_adsp_codec_path_status_sysctl,"A","Last muted codec route/restoration result");
++
++/* The queue control/status mutex is independent of the ADSP mutex, so the
++ * producer and stop/status requests remain available throughout route setup,
++ * DSP waits and teardown. A kernel thread owns the whole route lifetime. */
++static void
++ri_audio_queue_worker(void *arg,wait_result_t result)
++{
++ (void)arg;(void)result;
++ lck_mtx_lock(&ri_adsp_lock);int error=ri_codec_path_run_mode(4);
++ lck_mtx_unlock(&ri_adsp_lock);
++ lck_mtx_lock(&ri_audio_queue_lock);
++ ri_audio_queue.error=error;ri_audio_queue.armed=false;ri_audio_queue.done=true;
++ lck_mtx_unlock(&ri_audio_queue_lock);
++ thread_terminate(current_thread());
++}
++static int
++ri_audio_queue_launch(void)
++{
++ lck_mtx_lock(&ri_audio_queue_lock);
++ if(!ri_audio_queue.armed || ri_audio_queue.launched || ri_audio_queue.stop || ri_audio_queue.used<4096) {
++  lck_mtx_unlock(&ri_audio_queue_lock);return EBUSY;
++ }
++ ri_audio_queue.launched=true;lck_mtx_unlock(&ri_audio_queue_lock);
++ thread_t thread=THREAD_NULL;
++ if(kernel_thread_start(ri_audio_queue_worker,NULL,&thread)!=KERN_SUCCESS) {
++  lck_mtx_lock(&ri_audio_queue_lock);ri_audio_queue.error=ENOMEM;
++  ri_audio_queue.armed=false;ri_audio_queue.done=true;lck_mtx_unlock(&ri_audio_queue_lock);return ENOMEM;
++ }
++ thread_deallocate(thread);return 0;
++}
+diff --git a/bsd/dev/river_adsp_pipeline.h b/bsd/dev/river_adsp_pipeline.h
+--- /dev/null
++++ b/bsd/dev/river_adsp_pipeline.h
+@@ -0,0 +1,143 @@
++/* Four independently owned DMA slots; only this ADSP-locked worker accesses
++ * CID6 while the pipeline is active. Every reply is dispatched by exact token
++ * then decoded using the established service/port/opcode checks. */
++struct ri_pipeline_slot {
++ struct ri_apr_request request;
++ uint64_t address,submitted_ns;
++ bool owned;
++};
++static uint64_t
++ri_pipeline_now(void)
++{
++ uint64_t t,ns;clock_get_uptime(&t);absolutetime_to_nanoseconds(t,&ns);return ns;
++}
++static int
++ri_pipeline_publish(struct ri_apr_channel *ch,struct ri_pipeline_slot *slot,
++ uint32_t stream,uint64_t address,uint32_t handle,unsigned block)
++{
++ vm_offset_t smem=river_smd_smem;
++ struct ri_apr_channel again;
++ if(!ri_apr.received || !ri_apr.state || !ri_apr.owned || !ri_apr.opened ||
++    !ri_apr_dsp_ready(smem) || !ri_apr_resolve(smem,&again) ||
++    again.info!=ch->info || again.tx!=ch->tx || again.rx!=ch->rx ||
++    ri_rd(ch->info,0)!=2 || ri_rd(ch->info,20)!=2 || !ri_apr_indices(ch))return EIO;
++ if(slot->owned || ri_pcm.sequence==0xffffffffu-0x52420000u)return EOVERFLOW;
++ uint32_t head=ri_rd(ch->info,16),tail=ri_rd(ch->info,12);
++ if(((tail-head-4)&8191)<72)return EWOULDBLOCK;
++ slot->request=(struct ri_apr_request){.source=stream|0x507,.destination=stream|0x407,
++  .opcode=0x10dab,.response=0x10d99,.token=0x52420000u+(++ri_pcm.sequence)};
++ uint32_t frame[18]={52,0,0,0,0,(52u<<16)|0x250,
++  slot->request.source,slot->request.destination,slot->request.token,0x10dab,
++  (uint32_t)address,(uint32_t)(address>>32),handle,4096,block,0,0,0};
++ for(unsigned i=0;i<72;i+=4)ri_wr(ch->tx,(head+i)&8191,frame[i/4]);
++ __asm__ volatile("dmb sy" ::: "memory");
++ slot->address=address;slot->submitted_ns=ri_pipeline_now();slot->owned=true;
++ ri_pcm.transactions++;ri_wr(ch->info,16,(head+72)&8191);
++ ri_apr_write8(ch->info+8,1);ri_apr_notify(ch);return 0;
++}
++/* Exactly one packet per poll; no matching token => stale, no slot released.
++ * A malformed packet or transport reset poisons all unresolved ownership. */
++static int
++ri_pipeline_receive(struct ri_apr_channel *ch,struct ri_pipeline_slot slots[4],
++ uint32_t handle,unsigned *completed)
++{
++ if(!ri_apr_dsp_ready(river_smd_smem) || ri_rd(ch->info,0)!=2 ||
++    ri_rd(ch->info,20)!=2 || !ri_apr_indices(ch))return EIO;
++ uint32_t head=ri_rd(ch->info,36),tail=ri_rd(ch->info,32);
++ unsigned available=(head-tail)&8191;
++ if(available<20)return EAGAIN;
++ __asm__ volatile("dmb sy" ::: "memory");
++ uint32_t bytes=ri_rd(ch->rx,tail),packet[128];
++ if(bytes<20 || bytes>512 || (bytes&3))return EIO;
++ if(available<20+bytes)return EAGAIN;
++ for(unsigned i=0;i<bytes;i+=4)packet[i/4]=ri_rd(ch->rx,(tail+20+i)&8191);
++ ri_pcm.rx_header=packet[0];ri_pcm.rx_source=packet[1];ri_pcm.rx_destination=packet[2];
++ ri_pcm.rx_token=packet[3];ri_pcm.rx_opcode=packet[4];
++ struct ri_pipeline_slot *slot=NULL;
++ for(unsigned i=0;i<4;i++)if(slots[i].owned && slots[i].request.token==packet[3])slot=&slots[i];
++ struct ri_apr_reply reply={0};
++ /* Validate framing even for unrelated tokens. */
++ struct ri_apr_request unmatched={0};
++ int decoded=ri_pcm_decode(packet,bytes,slot?&slot->request:&unmatched,&reply);
++ if(decoded==RI_APR_BAD)return EIO;
++ __asm__ volatile("dmb sy" ::: "memory");
++ ri_wr(ch->info,32,(tail+20+bytes)&8191);ri_apr_write8(ch->info+9,1);
++ ri_apr_ack_flags(ch);ri_apr_notify(ch);
++ if(!slot || decoded==RI_APR_STALE || decoded==RI_APR_ACK_ONLY) {
++  ri_pcm.notifications++;return EINPROGRESS;
++ }
++ /* Even a basic NACK cannot return WRITE buffer ownership: retain mapping. */
++ if(decoded!=RI_APR_STATE || reply.words!=4 ||
++    reply.data[0]!=(uint32_t)slot->address || reply.data[1]!=(uint32_t)(slot->address>>32) ||
++    reply.data[2]!=handle)return EIO;
++ slot->owned=false;(*completed)++;
++ return reply.data[3]?EREMOTE:0;
++}
++static int (*ri_pipeline_health)(void);
++static int
++ri_stream_pipeline(struct ri_stream_state *state,uint32_t stream)
++{
++ struct ri_apr_channel ch;vm_offset_t smem=river_smd_smem;
++ if(!smem || !ri_apr_resolve(smem,&ch) ||
++    (uint32_t)(ch.info-smem)!=ri_apr.info_offset ||
++    (uint32_t)(ch.tx-smem)!=ri_apr.fifo_offset)return EBUSY;
++ vm_offset_t ipc=ml_io_map_unmappable(0x0b010000,0x4000,VM_WIMG_IO);
++ if(!ipc)return ENOMEM;
++ ch.ipc=ipc+0x1008;struct ri_pipeline_slot slots[4]={0};
++ unsigned submitted=0,completed=0,unrelated=0,max_owned=0,checks=0;bool stopping=false;
++ int error=0;bool drain=false;uint64_t health_at=0;
++ while(completed<12) {
++  for(unsigned i=0;i<4 && submitted<12 && !stopping;i++)if(!slots[i].owned) {
++   int16_t *p=(int16_t *)(state->page+i*4096);
++   int result=ri_audio_queue_pop(p,submitted);
++   if(result==0) {stopping=true;break;}
++   if(result<0) {error=ENOBUFS;drain=true;goto done;}
++   sweet_dcache_clean((vm_offset_t)p,4096);__asm__ volatile("dmb sy" ::: "memory");
++   error=ri_pipeline_publish(&ch,&slots[i],stream,state->physical+i*4096,state->handle,submitted);
++   if(error)goto done;
++   submitted++;state->submitted++;state->in_flight=true;
++   if(submitted-completed>max_owned)max_owned=submitted-completed;
++  }
++  if(stopping && completed==submitted)break;
++  uint64_t now=ri_pipeline_now();
++  if(now>=health_at) {
++   if(!ri_pipeline_health) {error=EIO;drain=true;goto done;}
++   checks++;if((error=ri_pipeline_health())) {drain=true;goto done;}
++   health_at=ri_pipeline_now()+10000000ULL;
++  }
++  unsigned before=completed;
++  error=ri_pipeline_receive(&ch,slots,state->handle,&completed);
++  if(completed!=before) {state->completed++;state->bytes_completed+=4096;unrelated=0;}
++  if(error==EINPROGRESS) {if(++unrelated>32) {error=EOVERFLOW;goto done;}error=0;}
++  else if(error==EAGAIN) {error=0;ri_wait(1);}
++  else if(error)goto done;
++  now=ri_pipeline_now();
++  for(unsigned i=0;i<4;i++)if(slots[i].owned && now-slots[i].submitted_ns>250000000ULL) {
++   error=ETIMEDOUT;goto done;
++  }
++ }
++ done:
++ /* A local underrun/health failure stops output immediately, then returns
++  * already-published buffers through exact completions while muted. A bad
++  * packet/reset/ownership mismatch never permits speculative recycling. */
++ if(error && drain) {
++  if(ri_stream_output_stop)ri_stream_output_stop();
++  uint64_t deadline=ri_pipeline_now()+250000000ULL;unsigned stale=0;
++  while(completed<submitted && ri_pipeline_now()<deadline) {
++   unsigned before=completed;
++   int result=ri_pipeline_receive(&ch,slots,state->handle,&completed);
++   if(completed!=before) {state->completed++;state->bytes_completed+=4096;}
++   if(result==EAGAIN)ri_wait(1);
++   else if(result==EINPROGRESS) {if(++stale>32)break;}
++   else if(result)break;
++  }
++ }
++ state->in_flight=false;
++ for(unsigned i=0;i<4;i++)if(slots[i].owned)state->in_flight=true;
++ if(error && state->in_flight)ri_pcm.poisoned=true;
++ ml_io_unmap(ipc,0x4000);
++ lck_mtx_lock(&ri_audio_queue_lock);
++ ri_audio_queue.dsp_submitted=submitted;ri_audio_queue.dsp_completed=completed;
++ ri_audio_queue.max_owned=max_owned;ri_audio_queue.health_checks=checks;
++ lck_mtx_unlock(&ri_audio_queue_lock);return error;
++}
+diff --git a/bsd/dev/river_adsp_stream.h b/bsd/dev/river_adsp_stream.h
+--- a/bsd/dev/river_adsp_stream.h
++++ b/bsd/dev/river_adsp_stream.h
+@@ -2,7 +2,7 @@
+  * No audible samples or /dev backend. Dedicated memory is permanent, and
+  * unresolved ownership is retained until reboot. ri_adsp_lock owns state. */
+ struct ri_stream_state {
+- bool attempted,mapped,running,in_flight,complete,arm_attempted,afe_prepared,tone,eos_rendered,native_pcm;
++ bool attempted,mapped,running,in_flight,complete,arm_attempted,afe_prepared,tone,eos_rendered,native_pcm,queued_pcm;
+  vm_offset_t page;
+  uint64_t physical;
+  uint32_t handle,completion_status,failed_opcode,failed_status;
+@@ -32,7 +32,7 @@
+   state->unmap_error,ri_route.asm_open,ri_route.adm_open,ri_route.matrix,
+   ri_route.afe_started,ri_route.muted,ri_route.cleanup_error,ri_route.cleanup_opcode,
+   ri_route.cleanup_status,ri_pcm.rx_header,ri_pcm.rx_source,ri_pcm.rx_destination,
+-  ri_pcm.rx_token,ri_pcm.rx_opcode,state->native_pcm?"native_ios_snapshot":state->tone?"quiet600Hz":"zero_only",state->eos_rendered);
++  ri_pcm.rx_token,ri_pcm.rx_opcode,state->queued_pcm?"live_ios_queue":state->native_pcm?"native_ios_snapshot":state->tone?"quiet600Hz":"zero_only",state->eos_rendered);
+  printf("RIVER STREAM: %s\n",state->note);return error;
+ }
+ static int
+@@ -114,6 +114,7 @@
+  }
+  sweet_dcache_clean((vm_offset_t)p,4096);__asm__ volatile("dmb sy" ::: "memory");return true;
+ }
++#include "river_adsp_pipeline.h"
+ static int
+ ri_stream_execute(struct ri_stream_state *state,unsigned session)
+ {
+@@ -184,7 +185,7 @@
+  error=ri_stream_command(state,stream|0x507,stream|0x407,0x10daa,0,run,3,&reply);
+  if(error)goto done;
+  state->running=true;
+- for(unsigned i=0;i<(state->tone?8u:4u);i++) {
++ for(unsigned i=0;i<(state->tone && !state->queued_pcm?8u:4u);i++) {
+   if(state->tone && i>=4) {
+    if(i==4) {
+     if(state->completed!=4) {error=EIO;goto done;}
+@@ -210,6 +211,12 @@
+   if(reply.data[3]) {state->failed_opcode=0x10dab;error=EREMOTE;goto done;}
+   state->completed++;state->bytes_completed+=4096;
+  }
++ if(state->queued_pcm) {
++  lck_mtx_lock(&ri_audio_queue_lock);bool stopped=ri_audio_queue.stop;
++  lck_mtx_unlock(&ri_audio_queue_lock);if(stopped) {error=ECANCELED;goto done;}
++  phase="queue_output_start";error=ri_stream_output_start();if(error)goto done;
++  phase="queue_pipeline";error=ri_stream_pipeline(state,stream);if(error)goto done;
++ }
+  if(state->tone) {
+   phase="rendered_eos";
+   error=ri_stream_command(state,stream|0x507,stream|0x407,0x10bdb,0x10c1c,NULL,0,&reply);
+@@ -226,7 +233,7 @@
+  if(!error && ri_route.cleanup_error) {phase="cleanup";error=ri_route.cleanup_error;}
+  if(!error && (state->mapped || state->in_flight || ri_route.asm_open ||
+     ri_route.adm_open || ri_route.afe_started)) {phase="ownership";error=EIO;}
+- state->complete=!error && state->completed==(state->tone?8u:4u) && (!state->tone || state->eos_rendered);
++ state->complete=!error && (state->queued_pcm?state->completed==state->submitted:state->completed==(state->tone?8u:4u)) && (!state->tone || state->eos_rendered);
+  return ri_stream_result(state,phase,error);
+ }
+ static int
+diff --git a/bsd/dev/river_adsp_tone.h b/bsd/dev/river_adsp_tone.h
+--- a/bsd/dev/river_adsp_tone.h
++++ b/bsd/dev/river_adsp_tone.h
+@@ -99,3 +99,27 @@
+  /* Never wait with speaker lock held: the watchdog also needs that lock. */
+  if(ri_tone_timer)thread_call_cancel_wait(ri_tone_timer);
+ }
++
++static unsigned ri_live_health_index,ri_live_health_checks;
++static int
++ri_live_health(void)
++{
++ uint64_t begin=ri_tone_now_ns();int error=0;uint32_t value=0;
++ lck_mtx_lock(&ri_speaker_lock);
++ if(!ri_tone.active || ri_tone.cutoff)error=ETIMEDOUT;
++ else switch(ri_live_health_index++%3) {
++ case 0:
++  if(!ri_cs35l41_rd(0x10090,&value) || (value&0x800281c0u))error=EIO;
++  break;
++ case 1:
++  if(!ri_cs35l41_rd(0x10098,&value) || value==0xffffffff || (value&0x10))error=EIO;
++  break;
++ default:
++  value=ri_clock_read(0x1881);if(value==0xffff || !(value&0x100))error=EIO;
++ }
++ ri_live_health_checks++;
++ if(error) {ri_tone.error=error;(void)ri_tone_mute_locked();}
++ uint64_t elapsed=ri_tone_now_ns()-begin;
++ if(elapsed>ri_tone.max_check_ns)ri_tone.max_check_ns=elapsed;
++ lck_mtx_unlock(&ri_speaker_lock);return error;
++}
+diff --git a/bsd/dev/river_audio_queue.h b/bsd/dev/river_audio_queue.h
+--- /dev/null
++++ b/bsd/dev/river_audio_queue.h
+@@ -0,0 +1,92 @@
++/* Opt-in live device-write queue. Queue lock never nests hardware/ADSP locks
++ * and no DSP waits run on a HAL writer. Whole incoming chunks are dropped
++ * on overflow (drop-newest); counters expose this bounded, nonblocking policy.
++ * First hardware trial retains the750ms independent mute deadline. */
++static LCK_GRP_DECLARE(ri_audio_queue_group,"river-audio-queue");
++static LCK_MTX_DECLARE(ri_audio_queue_lock,&ri_audio_queue_group);
++static struct {
++ bool armed,launched,stop,done;
++ unsigned head,used,high_water,underruns,overflows,rejected,peak;
++ uint64_t accepted,dropped,consumed;
++ unsigned dsp_submitted,dsp_completed,max_owned,health_checks;
++ int error;
++ int16_t samples[8192*2];
++} ri_audio_queue;
++static int ri_audio_queue_launch(void);
++static int
++ri_audio_queue_arm(void)
++{
++ int error=0;lck_mtx_lock(&ri_audio_queue_lock);
++ if(ri_audio_queue.armed || ri_audio_queue.launched || ri_audio_queue.done)error=EALREADY;
++ else {memset(&ri_audio_queue,0,sizeof(ri_audio_queue));ri_audio_queue.armed=true;}
++ lck_mtx_unlock(&ri_audio_queue_lock);return error;
++}
++static void
++ri_audio_queue_push(const int16_t *pcm,size_t frames)
++{
++ lck_mtx_lock(&ri_audio_queue_lock);
++ if(!ri_audio_queue.armed || ri_audio_queue.stop)goto out;
++ if(!pcm || frames>1024) {ri_audio_queue.rejected++;goto out;}
++ if(frames>8192-ri_audio_queue.used) {
++  ri_audio_queue.overflows++;ri_audio_queue.dropped+=frames;goto out;
++ }
++ for(unsigned i=0;i<frames;i++) {
++  unsigned n=(ri_audio_queue.head+ri_audio_queue.used+i)&8191;
++  for(unsigned c=0;c<2;c++) {
++   int value=pcm[i*2+c];unsigned magnitude=value<0?(unsigned)-value:(unsigned)value;
++   if(magnitude>ri_audio_queue.peak)ri_audio_queue.peak=magnitude;
++  }
++  ri_audio_queue.samples[n*2]=pcm[i*2];ri_audio_queue.samples[n*2+1]=pcm[i*2+1];
++ }
++ ri_audio_queue.used+=(unsigned)frames;ri_audio_queue.accepted+=frames;
++ if(ri_audio_queue.used>ri_audio_queue.high_water)ri_audio_queue.high_water=ri_audio_queue.used;
++ out:lck_mtx_unlock(&ri_audio_queue_lock);
++}
++/* 1=data,0=explicit stop,-1=underrun. No invented samples on underrun. */
++static int
++ri_audio_queue_pop(int16_t *pcm,unsigned block)
++{
++ if(!pcm || block>=12)return -1;
++ int result=1;lck_mtx_lock(&ri_audio_queue_lock);
++ if(ri_audio_queue.stop) {result=0;goto out;}
++ if(ri_audio_queue.used<1024) {ri_audio_queue.underruns++;result=-1;goto out;}
++ for(unsigned i=0;i<1024;i++) {
++  unsigned n=(ri_audio_queue.head+i)&8191,frame=block*1024+i;
++  unsigned remaining=12*1024-1-frame;
++  unsigned ramp=frame<240?frame:remaining<240?remaining:240;
++  for(unsigned c=0;c<2;c++) {
++   int value=ri_audio_queue.samples[n*2+c];
++   if(value>2048)value=2048;if(value<-2048)value=-2048;
++   pcm[i*2+c]=(int16_t)(value*(int)ramp/240);
++  }
++ }
++ ri_audio_queue.head=(ri_audio_queue.head+1024)&8191;
++ ri_audio_queue.used-=1024;ri_audio_queue.consumed+=1024;
++ out:lck_mtx_unlock(&ri_audio_queue_lock);return result;
++}
++static int
++river_audio_queue_sysctl SYSCTL_HANDLER_ARGS
++{
++ int value=0,error=sysctl_handle_int(oidp,&value,0,req);
++ if(error || !req->newptr)return error;
++ if(value==1)return ri_audio_queue_arm();
++ if(value==2)return ri_audio_queue_launch();
++ if(value!=3)return EINVAL;
++ lck_mtx_lock(&ri_audio_queue_lock);ri_audio_queue.stop=true;
++ lck_mtx_unlock(&ri_audio_queue_lock);return 0;
++}
++static int
++river_audio_queue_status_sysctl SYSCTL_HANDLER_ARGS
++{
++ char note[768];lck_mtx_lock(&ri_audio_queue_lock);
++ snprintf(note,sizeof(note),"armed=%u launched=%u stop=%u done=%u error=%d queued_frames=%u capacity_frames=8192 high_water=%u accepted_frames=%llu dropped_frames=%llu consumed_frames=%llu overflows=%u underruns=%u rejected=%u peak=%u dsp_submitted=%u dsp_completed=%u max_owned=%u health_checks=%u overflow_policy=drop_newest underrun_policy=mute_abort source=ios_device_write worker=dedicated_dsp trial_max_blocks=12 mute_deadline_ms=750 capture=synthetic",
++ ri_audio_queue.armed,ri_audio_queue.launched,ri_audio_queue.stop,ri_audio_queue.done,ri_audio_queue.error,
++ ri_audio_queue.used,ri_audio_queue.high_water,(unsigned long long)ri_audio_queue.accepted,
++ (unsigned long long)ri_audio_queue.dropped,(unsigned long long)ri_audio_queue.consumed,
++ ri_audio_queue.overflows,ri_audio_queue.underruns,ri_audio_queue.rejected,ri_audio_queue.peak,ri_audio_queue.dsp_submitted,ri_audio_queue.dsp_completed,ri_audio_queue.max_owned,ri_audio_queue.health_checks);
++ lck_mtx_unlock(&ri_audio_queue_lock);return sysctl_handle_string(oidp,note,sizeof(note),req);
++}
++SYSCTL_PROC(_debug,OID_AUTO,river_audio_queue,CTLTYPE_INT|CTLFLAG_RW|CTLFLAG_LOCKED,
++ NULL,0,river_audio_queue_sysctl,"I","One-shot live PCM trial:1 arm,2 launch worker,3 stop");
++SYSCTL_PROC(_debug,OID_AUTO,river_audio_queue_status,CTLTYPE_STRING|CTLFLAG_RD|CTLFLAG_LOCKED,
++ NULL,0,river_audio_queue_status_sysctl,"A","Live queue metadata; no samples");
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -4537,6 +4537,7 @@
+ 	       ri_cs35l41_irq3, ri_cs35l41_irq4);
+ }
+ 
++#include "river_audio_queue.h"
+ #include "river_native_pcm.h"
+ 
+ void
+@@ -4545,6 +4546,7 @@
+ 	if (!ri_speaker_ok || !pcm || frames == 0) return;
+ 	ri_audio_hw_frames += frames;
+ 	ri_native_pcm_push(pcm,frames);
++	ri_audio_queue_push(pcm,frames);
+ 
+ 	/* PCM transport to the audio hardware is not implemented yet. */
+ }
