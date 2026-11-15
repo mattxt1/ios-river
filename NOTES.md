@@ -5,6 +5,22 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0322 temporary boot accepted; home confirmation pending (2026-11-14)
+
+User confirmed fastboot readiness. Exact imageSHA749403b2... verified again;
+fastboot productriver, temporary boot accepted Sending/Booting OKAY (0.848s).
+No flash. USB logger active, boot records arriving. Initial readonly native
+DHCP query overUSB exceeded14s host deadline; no active controls sent and
+no evidence yet of phone responsiveness failure. Independent readonly DSP
+startup query pending. Home-screen responsiveness requested and must be
+confirmed before any active audio controls. Helper byte verification/passive
+baseline/native media readings still pending. Current boot0322; don't assume
+old0320 one-shot state or oldWiFi connectivity applies. Fresh runner prepared
+work/wifi-media/run-device.py --codec-tone once after gates, no old route test.
+Evidence work/wifi-media/fastboot-boot-c983486.txt and boot-c983486-udp.txt.
+Initial USB-specific UDPbind failed while interface absent; logger restarted
+on wildcard with strict192.168.7.2 sourcefilter, empty failedfile preserved.
+
 ## Active handoff:0322 combined image verified, waiting for fastboot (2026-11-14)
 
 Source c98348649ef381aa4984b3ee42af598252f07c73; native incrementalbuild exit0,
