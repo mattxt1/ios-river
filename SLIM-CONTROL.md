@@ -1,5 +1,21 @@
 # SLIMbus control continuation
 
+## Current result through patch 0326
+
+SLIMbus discovery, QMI power, NGD capability exchange, codec logical address
+0x8a, channel activation and clean teardown are verified. The corrected 48 kHz
+channel parameters use coefficient 3/root exponent 2. The complete speaker
+route now carries acoustically confirmed native iOS PCM snapshot playback.
+Amplifier RX slot 0 matches the codec's stereo slots 0/1; all route state is
+restored and mute retained afterward. Current one-shot ownership and next
+queued-playback work are recorded in the latest `NOTES.md`.
+
+## Historical control prerequisite design
+
+The following records describe earlier tests. Their pending-work statements
+and test order must not override the current handoff.
+
+
 0308 verified four zero-PCM completions with responsive iOS and full cleanup.
 0309 is a hardware-unvalidated control prerequisite, not physical playback.
 

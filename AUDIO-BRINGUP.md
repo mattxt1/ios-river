@@ -1,5 +1,8 @@
 # River iOS audio milestone
 
+> Current results are summarized first. Earlier dated sections below are
+> historical records and may describe superseded candidates or pending checks.
+
 Physical speaker output and a short segment of native iOS app PCM are now
 confirmed acoustically. On0326, AVAudioPlayer/device-write samples were staged
 and replayed through the DSP route; the user heard the sound and iOS stayed
@@ -58,7 +61,7 @@ User audible/posttestresponsive feedback is pending. No retry thisboot.
 stream sanitizer tests and nativebuild pass; image1482f80 verified, notbooted.
 Existing Wi-Fi media fix and diagnostics preserved in the same nextimage.
 
-## Current0321/0322 quiet-tone candidate (2026-11-14)
+## Historical 0321/0322 quiet-tone candidate (2026-11-14)
 
 0320 active muted codec route PCM passed4/4 with exact48k SLIMbus parameters,
 codec/amplifier clock lock and complete teardown. No audible output yet.

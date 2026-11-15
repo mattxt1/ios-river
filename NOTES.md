@@ -5,6 +5,30 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Publication handoff: audio/Wi-Fi through patch 0326 (2026-11-14)
+
+The user requested committing and pushing all work, updating the READMEs and
+documentation, and merging into the default branch. The user confirmed that
+`river` is the default branch. `origin` is mattxt1/ios-river. At review,
+origin/river was b7a01b2161d8157ae3ef996d928eaf943d949f7a and an ancestor of
+the audio branch (171 local commits ahead, none behind). Publish the complete
+codex/ios-audio-bringup history and fast-forward river; never force push.
+
+Current-facing README, AGENTS, local build instructions, PCM/SLIM routing and
+subsystem summaries now agree with the verified milestone: audible bounded
+native-app PCM replay, correct EOS/mute timing, full cleanup and responsive
+iOS. Continuous app playback and real microphone capture remain pending.
+Wi-Fi DHCP/default DNS, manual joins across boots, reconnect, browser use and
+verified SSH fallback pass; automatic association/endurance and the independent
+USB failure remain unresolved. Older dated records are historical.
+
+No device controls or rebuild are needed for this documentation/publication
+step. Preserve the current phone's consumed one-shot state and protective mute.
+Raw captures, SSH identities, KDK/firmware, test WAVs and boot images remain
+outside Git. The local source bundle and output docs should be refreshed from
+the committed publication revision after the push. Exact device evidence and
+next audio implementation constraints are in the active handoff below.
+
 ## Active handoff:0326 audible native-app PCM/EOS/mute PASS (2026-11-14)
 
 User HEARD the replay of actual AVAudioPlayer/device-write PCM and confirmed

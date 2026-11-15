@@ -1,45 +1,44 @@
 # Working on ios-river
 
-- **Read `NOTES.md` before starting**: It contains the project goal, hardware facts,
-  current blocker, local artifact locations, and the next concrete action.
-- **Agent Handoffs**: Update the active handoff in `NOTES.md` after each milestone
-  and before stopping. Record commits, exact build/boot results, sysctl readbacks,
-  and unfinished work. Distinguish verified observations from hypotheses.
-- **Kernel Builds**:
-  - Use the current exact KDK path from the active NOTES.md handoff; the earlier iCloud-backed KDK can be offloaded. The verified22G74 recovery is outside iCloud and does not change the toolchain version.
-  - Primary path: Local builds via `tools/river-local-build.sh` (see [LOCAL-BUILD.md](LOCAL-BUILD.md)).
-    Requires `KDKROOT=/Users/matttyson/Documents/Codex/2026-11-05/d-2/work/local-build/kdk-full/KDK.pkg/Payload`
-    and `RIVER_LOCAL_BUILD_ROOT=/Users/matttyson/Documents/Codex/2026-11-05/d-2/work/local-build`.
-    Changes under `xnu/patches` must be committed to git before invoking the script.
-  - Fallback path: Remote GitHub Actions via `tools/kbuild-river.sh` / `gh run`.
-- **Packaging & Booting**:
-  - Packaging script: `/Users/matttyson/Documents/Codex/2026-11-05/river-battery-implementation/work/package-river-audio.py`.
-  - Image size must stay strictly < 38 MB; boot cmdline must stay strictly < 608 bytes.
-  - Device bring-up uses temporary `fastboot boot` images only. Never flash boot,
-    recovery, firmware, or partition tables.
-  - The phone's eMMC `userdata` partition holds the HFS+ iOS root (`rd=emmc0s64 rootrw=1`).
-- **Hardware Topology & Subsystems**:
-  - **Audio Subsystem**:
-    - Kernel endpoints: `/dev/hakios-audio` and `/dev/hakios-mic` (patch 0270).
-    - CS35L41 smart speaker amplifier: I2C `0x40` on QUP2 (`0x078b6000`), reset on TLMM GPIO 94 (`0x0105e000`), IRQ on GPIO 63. Boost energized at 8.5V, 4500 mA peak, +17 dB analog power gain (`0x00006c04 = 0x220`).
-    - CS47L35 (Madera) audio hub codec: SPI bus 7 (`0x07af7000`), BLSP2 QUP3 (ID `0x6360`, revision1 verified), reset on TLMM GPIO 68 (`0x01044000`), IRQ on GPIO 46. A muted native AIF1 clock test on GPIO9/11 achieved both codec FLL and amplifier PLL lock, then restored all state. PCM transport is still unimplemented; clock lock does not establish audible playback.
-    - **Hardware Protection Interlock**: When `CS35L41_PLL_UNLOCK` is set (register `0x00010098` bit 4 = `0x10`), CS35L41 hardware safety logic enforces an automatic Hi-Z protective shutdown of the Class-D PWM H-bridge output stage. Physical sound requires a synchronous locked clock on ASP BCLK.
-    - **QUP2 Concurrency**: QUP2 is shared between CS35L41 audio amplifier operations and AW8697 haptic/input worker threads. All transfers must be serialized via `lck_mtx_t ri_qup2_lock`.
-  - **Battery Subsystem**:
-    - Hardware JG30 fuel gauge sampling via PM8953 FG/QG (patch 0267), published to IOKit `IOPMPowerSource`.
-  - **Display & Backlight**:
-    - 60 Hz flip path (`sweetfb_hz=60`, `riverblit=1`), native touch (`rivertouchlatch=0`).
-    - CoreBrightness TLMM PWM backlight driver (`riverbl=1`, patch 0269).
-  - **Networking**:
-    - WCNSS Wi-Fi (`en0`) managed by `org.river.net` launchd daemon.
-    - USB CDC-ECM Ethernet (`192.168.7.2`), root SSH via Dropbear on port 22.
-- **Current audio continuation**: Patch0299 authenticated stock ADSP startup passed: all four exact CX/XO ACKs, PAS1 status0/result0, slave-kernel ready state0x6 and user-confirmed responsive iOS afterward. Shared active/sleep CX384 and XO1 remain enabled until reboot by the experimental policy; do not invent baseline unvotes. The ready DSP created17 private APPS/ADSP records including item13 at SMEM+0x86300. Patch0300 live discovery passed with responsive iOS: apr_audio_svc CID6/flags0x201,40-byte controls,16KiB FIFO, host0/peer1 and empty rings; no GLINK records. Patch0301 opened CID6 and its40-byte request was consumed, but stopped at RXpoll2/EIO with56unclassified RX bytes unconsumed. iOS stayed responsive. Patch0302 live CORE exchange passed on1334e8c: exact V1/32-byte-header response, state1, both rings consumed and SMD OPENED2/2. Patch0303 hardware verified a retained16KiB ASM map/unmap and ASM stream open/48kHz stereo16-bit format/close; AFE GET returned matched status0x2 rejection. Patch0305 verified exact AFE configuration, ADM COPP0/matrix routing and muted AFE start/route/stop with successful resource cleanup. Patch0308 verified four mapped zero-PCM WRITE_DONE completions (16KiB) with clean teardown and responsive iOS. Patch0314 verified codec sink0/channel144 connection, activation and teardown;0316 muted SLIMRX-to-AIF routing passed with both mixer inputs and FLL/ampPLL locked, complete restoration and responsive iOS. No PCM submitted during that active route yet. Continuous APR/PCM transport, real PCM playback and physical microphone capture remain unimplemented. Start with newest NOTES.md and AUDIO-BRINGUP.md; zero global legacy channels does not imply an empty private partition.
-- Keep device dumps, serial numbers, private keys, firmware, and downloaded Apple artifacts out of Git.
-
-- **0320 correction**: Historical SLIMbus192-clock divisor/rootexp0 claims are superseded. Stock header uses6144 clocks/superframe (DIV8=768);48k mono16 uses coeff3/rootexp2, DEF_ACT payload byte0x20. 0320 corrected active-route zeroPCM passed4/4 with full cleanup. Audible playback/capture still pending. Read newest active NOTES.md.
-
-- **Local storage (user requirement,2026-11-14)**: Use `/Users/matttyson/Developer/Codex` and explicit canonical working directories for all future source/build/work/deliverables. Documents/Codex is only a compatibility symlink; the original cloud archive is historical recovery material. SSH identity is `.device-ssh/id_ed25519` under the local root. Persistent current KDKROOT is `/Users/matttyson/Developer/Codex/.dependencies/river-kdk-22G74/expanded/KDK.pkg/Payload`. Do not resume Download Now loops or use cloud-linked historical caches as active work. Read latest active NOTES.md.
-
-- **0324/0326 audio update**: User confirmed the0324 speaker chirp and responsive iOS after RX slot0 correction. A late watchdog cutoff still prevented full timing-policy success.0326 batches immediate-EOS mute timing and explicit bounded native-iOS-PCM snapshot/replay; host tests/native build pass, hardware validation pending. Continuous app playback and physical microphone capture remain pending. Read the latest active NOTES.md before controls; never consume the fresh codec route with a tone before the native-PCM test.
-
-- **0326 verified milestone**: User heard a short replay of actual AVAudioPlayer/device-write PCM; EOS, immediate mute inside750ms, full teardown and responsive iOS passed. Continuous output and physical microphone remain pending. Current route one-shots are consumed. USB networking failed independently; verified Wi-Fi SSH with the existing phone host key is the working control fallback. Read latest active NOTES.md for ownership, evidence and next queue/worker implementation constraints.
+- Read the latest active handoff in `NOTES.md` before device controls. Older
+  entries are historical. Update the handoff after milestones and before stopping.
+- All active work must use canonical `/Users/matttyson/Developer/Codex` paths.
+  Resolve symlinks; never use Documents, Desktop or iCloud as active storage.
+  `Documents/Codex` is only a compatibility symlink. See `LOCAL-STORAGE.md`.
+- Keep device SSH keys in an access-restricted local directory outside iCloud.
+  Never print private keys or commit credentials, raw device captures, firmware,
+  KDK/Apple artifacts, build outputs or private boot images.
+- Commit changes under `xnu/patches` before native kernel builds. Use
+  `tools/river-local-build.sh` and `LOCAL-BUILD.md`; the current exact KDK is
+  `/Users/matttyson/Developer/Codex/.dependencies/river-kdk-22G74/expanded/KDK.pkg/Payload`.
+  Preserve the verified build/toolchain unless a change is necessary.
+- Use `tools/river-repack-audio-diagnostics.py` for the current verified-image
+  repack workflow. Images must stay strictly below 38 MB, command lines below
+  608 bytes. Verify source, kernel, helper and base-image hashes.
+- Device experiments use temporary `fastboot boot` only. Never flash boot,
+  recovery, firmware or partition tables. Verify the device is River.
+- Check fresh-home responsiveness before active controls and provide a listening
+  cue immediately before an audible test. Respect one-shot ownership and never
+  repeat controls with uncertain DSP/channel state or overwrite evidence.
+- Through patch 0326, the user heard a chirp and a bounded replay of actual
+  AVAudioPlayer/device-write PCM. Exact buffer completions, rendered EOS,
+  immediate mute inside the 750 ms deadline, full teardown and responsive iOS
+  are verified. Continuous app output still discards samples and mic input is
+  synthetic. Do not describe snapshot replay as a continuous backend.
+- Current audio work needs a device-write queue, DSP worker and matched buffer
+  completion pipeline. A full hardware survey takes about 93 ms versus 21.33 ms
+  per 1024-frame PCM block. Keep DSP waits off the HAL writer thread, preserve
+  buffer ownership, lock order, fail-safe mute and teardown.
+- Audio topology: CS47L35 on SPI7/BLSP2 QUP3 (0x07af7000), reset GPIO 68;
+  CS35L41 on QUP2 I2C address 0x40, reset GPIO 94, IRQ GPIO 63. QUP2 is shared
+  with haptics and requires `ri_qup2_lock`. Codec and amp clocks must lock before
+  output enable. Amplifier RX slot 0 matches codec TX slots 0/1.
+- Wi-Fi patch 0322 fixes the invalid zero-entry media report. Native DHCP BOUND,
+  default routing/DNS, browser use, manual joins across boots and an off/on
+  reconnect pass. Automatic association, renewal/endurance and IPv6 Internet
+  remain pending. Never force DNS/rank to hide a native-service failure.
+- USB networking failed independently on the latest boot. Wi-Fi SSH verified
+  against the existing phone host key is the control fallback; do not trust a
+  new network host without verifying identity. See the latest `NOTES.md`.
+- Battery, display, touch and backlight status is documented in `README.md` and
+  subsystem docs. Do not infer charging or other subsystem success from audio.

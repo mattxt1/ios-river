@@ -1,5 +1,25 @@
 # Shared PCM and physical routing continuation
 
+## Current result through patch 0326
+
+Physical speaker playback and a bounded replay of actual iOS app PCM are
+acoustically confirmed. Shared mapping, ASM/AFE/ADM routing, exact WRITE_DONE
+completions, rendered EOS, protective mute and complete teardown passed.
+The latest test staged 4,096 stereo S16 frames from the real device-write
+path, then replayed them after four zero buffers. Mute was verified 525 ms
+from arming, within the unchanged 750 ms deadline.
+
+Continuous app playback and physical microphone capture remain pending.
+The next implementation needs queued buffers and a dedicated DSP worker;
+ordinary device status still truthfully reports discarded output and synthetic
+input. Read `AUDIO-BRINGUP.md` and the latest `NOTES.md` before controls.
+
+## Historical prerequisite design
+
+The following sections describe earlier bounded tests, not the current complete
+speaker path or a safe instruction to repeat consumed one-shot controls.
+
+
 The candidate contains prerequisite tests, not a physical audio backend.
 
 ## Same-boot test order

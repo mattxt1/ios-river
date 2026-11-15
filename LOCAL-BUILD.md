@@ -37,9 +37,9 @@ Commit the intended patch changes first; the helper refuses uncommitted or
 untracked files under `xnu/patches` because it builds from `HEAD`.
 
 ```sh
-# Example environment configuration for this workspace:
-export KDKROOT=/Users/matttyson/Documents/Codex/2026-11-05/d-2/work/local-build/kdk-full/KDK.pkg/Payload
-export RIVER_LOCAL_BUILD_ROOT=/Users/matttyson/Documents/Codex/2026-11-05/d-2/work/local-build
+# Current local environment; keep active build inputs outside iCloud:
+export KDKROOT=/Users/matttyson/Developer/Codex/.dependencies/river-kdk-22G74/expanded/KDK.pkg/Payload
+export RIVER_LOCAL_BUILD_ROOT=/Users/matttyson/Developer/Codex/.builds/river
 export DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer
 
 tools/river-local-build.sh

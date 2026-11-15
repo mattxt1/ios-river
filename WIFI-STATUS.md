@@ -1,5 +1,8 @@
 # River Wi-Fi implementation audit and handoff
 
+> Current results are summarized first. Earlier dated sections below are
+> historical records and may describe superseded candidates or pending checks.
+
 ##0326 normal connectivity and authenticated Wi-Fi SSH verified
 
 Bluecheckmark, nativeDHCP BOUND, usable defaultDNS/generalNWI and unbound
@@ -43,7 +46,7 @@ mediaentry fix restoring nativeDHCP/primaryDNS rather than retryworkaround.
 Safari/reconnect/reboot durability remains pending; no universalguarantee.
 Evidence private work/wifi-media/checkmark-join-* and work/wifi-default/*.
 
-## Current0322 candidate (2026-11-14)
+## Historical 0322 candidate (2026-11-14)
 
 0320 eventually shows a blue checkmark and scoped IP connectivity, while normal
 DNS fails. Read-only native queries prove media count0/status3 (active but
