@@ -5,6 +5,34 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0322 tone watchdog/cleanup verified;0323 shorter burst prepared (2026-11-14)
+
+User confirmed0322 home responsive. Active runner executed once: metadata,
+image auth/start,CORE,map/ASM,AFEconfig/ADM,standalonezeroPCM4/4,SLIMdiscovery,
+QMIpower/NGD/enumeration passed. PriorAFE GETstatus2 remains known nonfatal.
+Quiet route: output_enabled1,12submitted/12completed=4zero+8tone buffers,
+then independent750ms watchdog cut output at quiet_output_check/error60.
+Not fulltonePASS: output_cutoff1,eos_rendered0. Output_stopped1,mute_retained1,
+DSPcleanup0,mapped/inflight0,ASM/ADM/AFEclosed,channel6/6ACKs,noownership
+uncertainty,codec/amp/AIF/clock/pins restored. QMIpower/NGDretained; no retries
+thisboot. User audible-result/post-testresponsive question pending.
+
+Fresh network captures remain unassociated media count1/status1 valid1/active0;
+nativeDHCP INACTIVE/media inactive, defaultDNS no usable nameservers and
+ordinarygetaddrinfo fails. This is not an associated-network test. Settings
+join result pending; keep thisboot until joinlogs captured, don't rebootaway.
+Sources/evidence private work/wifi-media/{codec-tone,channel-status,post-slim,
+post-audio-*,wifi-join-followup-native}-c983486.txt. Updatedhelpers exactverified.
+
+0323 prepared: shorten tone to4buffers (85ms samples), after4zero buffers;
+fadeend nowframe4095. All hardwarechecks, attenuation and750ms mute deadline
+unchanged. Actual-code stream sanitizer tests pass4+4/EOS,first/lastsample0,
+midstream/postEOS-cutoff and cleanup; nofulltestrepeatneededforunchangedgate.
+Commit before nativebuild. Need fresh image/boot to test (one-shots consumed).
+Actual elapsedoverhead not instrumented; per-buffer hardware checks/serial
+APR mean nominalsampleduration is not the wallclockenablewindow. No claim
+watchdog failure or completedphysicalplayback without user/result evidence.
+
 ## Active handoff:0322 passive baseline verified, awaiting home confirmation (2026-11-14)
 
 Temporary boot accepted; installed ADSP/net/nativeDHCP-reader bytes match local
