@@ -448,6 +448,44 @@ static int sc_config(const char *name, const uint8_t *ip, const uint8_t *netmask
  return 1;
 }
 
+/* Read the service-owned publication rather than configd-owned global state.
+ * Match lease address/mask, interface and expected DHCP DNS before accepting
+ * ready; no credentials or packet contents are inspected. */
+static int sc_service_ready(const char *name) {
+ void *h=dlopen("/System/Library/Frameworks/SystemConfiguration.framework/SystemConfiguration",RTLD_LAZY);
+ if(!h || !persistent_ds){if(h)dlclose(h);return -1;}
+ SCDynamicStoreCopyValue_t copy=(SCDynamicStoreCopyValue_t)dlsym(h,"SCDynamicStoreCopyValue");
+ int (*sc_error)(void)=(int (*)(void))dlsym(h,"SCError");
+ if(!copy || !sc_error){dlclose(h);return -1;}
+ char id[64];get_service_id(name,id,sizeof(id));
+ CFStringRef key=CFStringCreateWithFormat(NULL,NULL,CFSTR("State:/Network/Service/%s/IPv4"),id);
+ CFPropertyListRef ip=copy(persistent_ds,key);int ip_error=ip?0:sc_error();CFRelease(key);
+ key=CFStringCreateWithFormat(NULL,NULL,CFSTR("State:/Network/Service/%s/DNS"),id);
+ CFPropertyListRef dn=copy(persistent_ds,key);int dns_error=dn?0:sc_error();CFRelease(key);
+ /* Apple SystemConfiguration.h kSCStatusNoKey=1004; other errors are not absence. */
+ if((!ip && ip_error!=1004) || (!dn && dns_error!=1004)){if(ip)CFRelease(ip);if(dn)CFRelease(dn);dlclose(h);return -1;}
+ int ready=0;
+ if(ip && dn && CFGetTypeID(ip)==CFDictionaryGetTypeID() && CFGetTypeID(dn)==CFDictionaryGetTypeID()) {
+  CFTypeRef addresses=CFDictionaryGetValue(ip,CFSTR("Addresses"));
+  CFTypeRef masks=CFDictionaryGetValue(ip,CFSTR("SubnetMasks"));
+  CFTypeRef servers=CFDictionaryGetValue(dn,CFSTR("ServerAddresses"));
+  CFTypeRef iface=CFDictionaryGetValue(ip,CFSTR("InterfaceName"));
+  CFStringRef expected=CFStringCreateWithFormat(NULL,NULL,CFSTR("%u.%u.%u.%u"),offered[0],offered[1],offered[2],offered[3]);
+  CFStringRef expected_mask=CFStringCreateWithFormat(NULL,NULL,CFSTR("%u.%u.%u.%u"),mask[0],mask[1],mask[2],mask[3]);
+  CFStringRef expected_interface=CFStringCreateWithCString(NULL,name,kCFStringEncodingUTF8);
+  const uint8_t *ns=memcmp(dns,"\0\0\0\0",4)?dns:gateway;
+  CFStringRef expected_dns=CFStringCreateWithFormat(NULL,NULL,CFSTR("%u.%u.%u.%u"),ns[0],ns[1],ns[2],ns[3]);
+  ready=addresses && masks && servers && iface && CFGetTypeID(addresses)==CFArrayGetTypeID() &&
+   CFGetTypeID(masks)==CFArrayGetTypeID() && CFGetTypeID(servers)==CFArrayGetTypeID() &&
+   CFArrayGetCount(addresses)>0 && CFArrayGetCount(masks)>0 && CFArrayGetCount(servers)>0 &&
+   CFEqual(CFArrayGetValueAtIndex(addresses,0),expected) &&
+   CFEqual(CFArrayGetValueAtIndex(masks,0),expected_mask) && CFEqual(iface,expected_interface) &&
+   CFArrayContainsValue(servers,CFRangeMake(0,CFArrayGetCount(servers)),expected_dns);
+  CFRelease(expected);CFRelease(expected_mask);CFRelease(expected_interface);CFRelease(expected_dns);
+ }
+ if(ip)CFRelease(ip);if(dn)CFRelease(dn);dlclose(h);return ready;
+}
+
 static int open_bpf_attached(const char *name, unsigned *buflen) {
  int fd = -1;
  for(unsigned k=0;k<256;k++){
@@ -575,6 +613,8 @@ static int get_80211_state(const char *name) {
  return val;
 }
 
+#include "river-net-settle.h"
+
 static void dhcp_daemon_loop(const char *name, int adddefault, int bg) {
  FILE *log = freopen("/tmp/river-net.log", "a", stdout);
  if (log) setvbuf(stdout, NULL, _IOLBF, 0);
@@ -584,7 +624,7 @@ static void dhcp_daemon_loop(const char *name, int adddefault, int bg) {
  if (nullfd >= 0) { dup2(nullfd, 0); close(nullfd); }
  puts("Entering river-net background monitor/renewal loop");
  fflush(stdout);
- time_t last_acquire = 0;
+ time_t last_acquire = 0;struct river_net_settle settle={.checks=8};
  while(1) {
   int st = get_80211_state(name);
   if (st == 4) { /* PHASE_JOINED */
@@ -592,7 +632,7 @@ static void dhcp_daemon_loop(const char *name, int adddefault, int bg) {
     printf("Interface %s associated (STATE=4); acquiring/publishing DHCP lease...\n", name);
     fflush(stdout);
     if (dhcp(name, adddefault)) {
-     last_acquire = time(NULL);
+     last_acquire = time(NULL);river_net_settle_reset(&settle,last_acquire);
     } else {
      sleep(2);
      continue;
@@ -606,20 +646,28 @@ static void dhcp_daemon_loop(const char *name, int adddefault, int bg) {
      if (!dhcp_renew_attempt(name)) {
       fprintf(stderr, "Secondary renewal failed; performing full DHCP re-bind\n");
       if (dhcp(name, adddefault)) {
-       last_acquire = time(NULL);
+       last_acquire = time(NULL);river_net_settle_reset(&settle,last_acquire);
       }
      } else {
-      last_acquire = time(NULL);
+      last_acquire = time(NULL);river_net_settle_reset(&settle,last_acquire);
      }
     } else {
-     last_acquire = time(NULL);
+     last_acquire = time(NULL);river_net_settle_reset(&settle,last_acquire);
     }
+   }
+   time_t now=time(NULL);
+   if(last_acquire && river_net_settle_due(&settle,now,1)) {
+    int ready=sc_service_ready(name);
+    int republish=river_net_settle_observed(&settle,now,ready);
+    printf("SC settle elapsed=%ld check=%u state=%d republish=%u budget_used=%u/3\n",
+     (long)(now-last_acquire),settle.checks,ready,republish,settle.republishes);
+    if(republish)sc_config(name,offered,mask,gateway,dns);
    }
   } else {
    if (last_acquire > 0) {
     printf("Interface %s disconnected (STATE=%d)\n", name, st);
     fflush(stdout);
-    last_acquire = 0;
+    last_acquire = 0;settle.checks=8;
    }
   }
   sleep(1);
