@@ -4,6 +4,17 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+##0322 quiet test interrupted safely;0323 shorter candidate ready (2026-11-14)
+
+The first quiet output attempt completed4silent+8tone buffers with output
+enabled before the independent750ms mute cutoff. Full DSP/codec/amp/channel
+teardown and retainedmute passed; renderedEOS/fulltone did not complete.
+User audible/posttestresponsive feedback is pending. No retry thisboot.
+0323 shortens tone to4buffers (85ms samples), retaining4silent completions,
+5ms ramps,-24dB,+/-2048samples,allchecks and unchanged750ms cutoff. Actualcode
+stream sanitizer tests and nativebuild pass; image1482f80 verified, notbooted.
+Existing Wi-Fi media fix and diagnostics preserved in the same nextimage.
+
 ## Current0321/0322 quiet-tone candidate (2026-11-14)
 
 0320 active muted codec route PCM passed4/4 with exact48k SLIMbus parameters,

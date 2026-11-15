@@ -5,6 +5,28 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0323 image ready;0322 Wi-Fi join/audible replies pending (2026-11-14)
+
+0322 quiet test completed4zero+8tone then750ms watchdog; output mute and full
+teardown verified, no active retry. User audible/posttestresponsive result
+pending. Wi-Fi Settings join requested; latest scalarstate0/result0, media
+count1 valid1 active0, nativeDHCP media inactive. No associatedDNS test yet.
+Do NOT request reboot before joinresult and live Wi-Fi logs are captured.
+
+0323 shorter85ms tone source1482f80c8eed2a87767b231e3d4fbe1b56381e2f built
+exit0 with exact localKDK and sameconfig; installedheader exactcandidate.
+Kernel98b49edcfdb6994dcf8793ee2f494c203bcb681bd814fa62049ed58b3b7f5c38.
+Verified outputs/river-short-tone-wifi-1482f80.img SHA
+d467464c2404bfb31752cb62924b8a4974218b4b4eefac5b53a5e06c57467838,
+26943488B/cmdline577, kernelpayload/unrelatedRiverFiles verified. All helpers
+preserved exactly from0322 base including Wi-Fi media reader/settle daemon;
+only tone samplecount/fade length changes.750ms mute and allchecks retained.
+Manifest outputs/short-tone-wifi-build-manifest.json. No bootattempt yet.
+Next captureWiFi afteruserjoin, askresultandrecheckdefaultresolver/getaddrinfo,
+then fresh temporary0323 bootwhenready. Prepare freshrunner under short-tone,
+neverreuse0322 evidence paths or repeat consumedone-shots. Mic/continuousiOS
+backend remain pending. All activepaths canonicalDeveloperlocalstorage.
+
 ## Active handoff:0322 tone watchdog/cleanup verified;0323 shorter burst prepared (2026-11-14)
 
 User confirmed0322 home responsive. Active runner executed once: metadata,
