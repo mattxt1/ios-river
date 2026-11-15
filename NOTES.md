@@ -5,6 +5,44 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0328 final image verified; fastboot readiness pending (2026-11-15)
+
+Final0328 native build11c08bbae5bd10139140936b25f8c18d20c15515 PASSED exit0,
+sameexactlocalKDK/build. KernelSHA
+cb9bd355d8efb218c5319648a71bcd5e70f5916d6afd835c34196acab2c10684.
+Verifiedimage outputs/river-runtime-pcm-wifi-11c08bb.img SHA
+3b4a606c8e8a8c7b92aa09a71cd53421b2742732f639125e27ebf17af70b6b00,
+27013120bytes/cmdline577; allkernelpayloadsegments/unrelatedRiverFiles/WiFi
+helpers preserved. ADSPhelperSHA
+f85c45af9e6573208f672fab332fd89a6bd1dc3c1ce57dad96d0409d94547a4b.
+Manifest outputs/runtime-pcm-wifi-build-manifest.json. Nativefirstpre-gatebuild
+also passed and was preserved; onlyfinalgatedimage is the nextcandidate.
+
+CurrentPHONE327 remainsmuted withALLone-shotsconsumed. Usermissedlistening to
+327soaudibilityunobserved; post-testUIunconfirmed. No328devicecontrols/reboot.
+Fastbootreadinessrequested AFTERfinalimageverification; replypending. Temporary
+bootONLY, neverflash; recheckimagehash andproductriver beforeboot.
+
+work/runtime scripts prepared/parsed, notdeviceexecuted. transport.py defaults
+trustedWiFi192.168.1.232/HostKeyAlias192.168.7.2; optionalRIVER_AUDIO_SSH_HOST
+192.168.7.2 usesUSB. verify-installed.py checksfreshunarmedstate/exacthelpers.
+AfterfreshhomeRESPONSIVE+readytolistenreply, prepare-device.py ONCE muted.
+stage-inputs.py verifiesexistingapphelperbytes and5760044byte persistent30sec
+WAV usingnewon-deviceSHA(no bulkcopy/readback), thenarmssnapshotreadinessONLY.
+run-long.py MUSTrunwithTTY: startsapp, provesnonsilentPCM, arm-long/prefill,
+run-longonce. WhenitprintsLISTENING_GATE_READY, amplifierisstilmuted andkernel
+waits15sec. Giveimmediatelisteningcue, thenwriteEXACTGO newline tothatPTY.
+Hostscriptallows10sectokenwait; absentGO sendsstopandfailswhilemuted. NoautoGO.
+Longtarget240blocks/5.12sec, rolling750ms complete-health-cycle lease, independent
+6sec hardcap, exactEOS/mute/cleanup required. FrameworkEWOULDBLOCK retry and
+longaudibility remainvalidationitems. No unrestricted/microphoneclaim.
+
+Currenttestinputexistingremote /private/var/tmp/river-live-two-note.wav is the
+FULL30secWAV SHA133ba2cc7a414fea16f219fd6bd3881319996a1671e268960f8f18819e30ec3e.
+Truncated10secfile from0327 staging is NOTusable and NEVERplayed. Do not repeat
+stage/route controls or overwriteevidence. Oncompletioncollectactualrenewals,
+backpressure/underruns, exact240completions/EOS/mute/cleanup; askheard+UIresult.
+
 ## Active handoff:0328 long runtime/listening gate ready for final build (2026-11-15)
 
 0328 host tests now also cover a muted listening gate before long-mode unmute:

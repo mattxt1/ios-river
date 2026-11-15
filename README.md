@@ -34,6 +34,9 @@ Patch0327 passed a bounded live-queue transport trial:12buffers, four DMA slots,
 ongoing app refill, zero queue underruns, rendered EOS and full cleanup. Mute
 verified377ms; maximum health check12.5ms. The user missed listening, so audibility is unobserved.
 Unrestricted continuous playback and physical microphone capture remain pending.
+Patch0328 is built and verified for a fresh temporary boot: a5.12second mode,
+capacity reservation before input copying, complete-cycle health lease renewal,
+and a muted listening gate before GO. Hardware validation remains pending.
 See `NOTES.md` for the exact image and current phone ownership.
 
 ## Status and evidence
