@@ -334,3 +334,40 @@ Combined image preserves verified publication observer and adds read-only
 getifaddrs to river-network-config-state: kernel flags/IPv4/mask for en0/ue0
 before route/SC state. Compile/sign and packed bytes verified; no configuration
 behavior change or native setter call. Device verification/fresh join pending.
+
+##0320 delayed Wi-Fi checkmark: scoped connectivity verified (2026-11-14)
+
+User reported blue Settings checkmark after phone idle for a while. All five
+read-only USB captures completed exit0: scalar57B/config10048B/DNS910B/
+monitor46650B/kernel262144B. State4/result1. New getifaddrs proves kernel
+en0IPv4 assigned,UP/RUNNING, connected/local/gateway routes now present.
+ServiceIPv4 and serviceDNS persist in this snapshot; globalDNS has servers.
+NWIen0 now flags0x5 IPv4=1/DNS=1 and scoped resolver ifindex8,A=1,2servers,
+reach0x20002. Compared with earlier spinner evidence, this is real partial
+native integration, not only a UI change. Current32 pre-checkmark kernel-address
+reads had failed before auth due offloaded key; don't invent that comparison.
+
+Remaining: configdPID35 still owns interface primary rank3Never; generalNWI
+IPv4 list empty and seven default resolvers have0nameservers/A/AAAA. Bounded
+existing probes explicitly bound toen0 passed gatewayTCP/HTTP302 and Internet
+numericTCP443; normal getaddrinfo(captive.apple.com) failed EAI_NONAME.
+Thus Wi-Fi data/Internet IP traffic works with interface scoping, but native
+default-network/DNS selection remains broken. Checkmark is not proof of
+normal Internet access. No configuration writes/restarts/overrides performed.
+
+Monitor current tail contains multiple automatic DHCP lease renewals accepted
+with1hour leases/T1~26-28min, each invoking existing sc_config publication.
+Initial acquisition calls addr_config/default_route/sc_config; renew only
+calls sc_config. Last renew logs all writes accepted, globalIPv4 immediate1/
+end0, serviceIPv4/DNS present at both checkpoints. Current snapshot has
+persisting service state and scoped resolver. Likely delayed checkmark is
+renewal/republication and native timing/race settling after initial association;
+not a proven exact renewal/owner cause: logs lack timestamps for UI transition.
+No new build or runtime change preceded the observation, only local host
+storage migration. Kernel uptime sampled about20437s. Source no user-triggered
+renew or IPConfiguration setter run. Need timestamped state transitions to
+pinpoint which publication/route event triggers the checkmark. Keep working
+on primary rank/default NWI/resolver service lifetime, not WPA retries.
+Private evidence work/wifi-checkmark/*-checkmark.txt and capture-manifest.json;
+raw network addresses/logs outside Git. Preserve this useful live0320 state
+until next audio image is concrete and user ready; no spontaneous reboot.
