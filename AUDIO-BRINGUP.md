@@ -9,6 +9,25 @@ and replayed through the DSP route; the user heard the sound and iOS stayed
 responsive. Continuous app playback and physical microphone capture remain
 pending. The normal driver still discards output and synthesizes input.
 
+##0327 live queue and four-slot DSP pipeline transport pass (2026-11-15)
+
+An opt-in queue now receives actual device-write PCM while a dedicated kernel
+thread owns the DSP route. Twelve app buffers completed through four DMA slots
+with exact identity/address/handle matching. The eight-block CPU queue supplied
+12blocks with continuing writer refill; the readiness snapshot stayed unclaimed.
+This is bounded live queue playback rather than frozen snapshot replay. User
+acoustic/post-test responsiveness feedback is pending. Runtime remains limited
+to256ms PCM and the unchanged750ms mute watchdog; normal automatic playback
+and physical microphone capture remain pending.
+
+The15rotating read-only amp IRQ/FLL checks peaked at12544us, versus93279us for
+the earlier full survey. RenderedEOS,376708us verified mute,289598us output
+window, no watchdog cutoff and all ownership/route teardown passed. Queue
+underruns werezero; setup/teardown+trial counted398drop-newest overflows, so
+lossless producer backpressure has NOT been established. Next work is runtime
+lifecycle, health-based watchdog renewal, backpressure and safe idle/recovery.
+Never repeat the consumed0327route controls. See newest NOTES.md.
+
 ##0326 audible native-app PCM and mute timing verified
 
 After media volume was raised, native staging captured4096 stereoS16 frames

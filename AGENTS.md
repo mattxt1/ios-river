@@ -25,10 +25,13 @@
   immediate mute inside the 750 ms deadline, full teardown and responsive iOS
   are verified. Continuous app output still discards samples and mic input is
   synthetic. Do not describe snapshot replay as a continuous backend.
-- Current audio work needs a device-write queue, DSP worker and matched buffer
-  completion pipeline. A full hardware survey takes about 93 ms versus 21.33 ms
-  per 1024-frame PCM block. Keep DSP waits off the HAL writer thread, preserve
-  buffer ownership, lock order, fail-safe mute and teardown.
+- Patch0327 has a dedicated DSP worker,8block device-write queue and4ownedDMA
+  slots. A bounded12block live trial passed ongoing refill, exact completions,
+  EOS,377ms mute and full cleanup; acoustic/post-test feedback is pending.
+  Dynamic checks peaked12.5ms versus93ms full surveys. ALL0327route one-shots
+  are consumed; do not repeat them. Runtime/lifecycle, health-based watchdog
+  renewal, lossless producer backpressure and idle/recovery remain next.
+  Keep DSP waits off the HAL writer, preserve ownership, lock order and mute.
 - Audio topology: CS47L35 on SPI7/BLSP2 QUP3 (0x07af7000), reset GPIO 68;
   CS35L41 on QUP2 I2C address 0x40, reset GPIO 94, IRQ GPIO 63. QUP2 is shared
   with haptics and requires `ri_qup2_lock`. Codec and amp clocks must lock before

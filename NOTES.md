@@ -5,6 +5,53 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0327 live queue/EOS/mute transport PASS; user feedback pending (2026-11-15)
+
+FIRST LIVE device-write queue trial PASSED:12appPCM buffers through4ownedDMA
+slots, exactcompletions, ongoingCPUqueue refill, renderedEOS, noqueueunderrun,
+fullASM/ADM/AFE/map/codec/AIF/amp/channel teardown, noownershipuncertainty.
+4silentpreroll+12live=16submitted/completed; native readiness snapshot stayed
+unclaimed and was NEVER replayed.8192framequeue supplied12288frames, so this
+required fresh app writes during playback. DSPworker andwriter ranseparately.
+Nativepeak5998/readiness and livequeuepeak6518; accepted20480, consumed12288,
+queued8192atstop. Drop-newest policy counted407552frames/398overflows during
+setup/teardown+trial; do NOT claim lossless backpressure or zero dropped audio.
+
+15dynamic read-only healthchecks; max12544us versus prior93279us fullsurvey.
+Mute verified376708us fromarming, outputwindow289598us, no750ms watchdogcutoff.
+Outputboundedto12blocks/256ms PCM; unrestrictedcontinuous/lifecycle operation
+andphysicalmicrophone remainpending. Source46d310b, exactverifiedimage asbelow.
+User HEARD/POST-RESPONSIVE question pending. No acoustic pass claimed yet.
+
+CURRENT PHONE0327: ALL startup/route/native-readiness/queue one-shots consumed.
+QMI/NGDpower retained; amp muted; map/ASM/ADM/AFE/channelclosed. NOactive retries.
+Liveapp exitednaturally after30sec; run-live.py exited0. Evidence work/continuous:
+live-result.json, queue-progress-8-46d310b.txt, codec/channel/route/audio-after-live,
+app-live, installed-helper-verification, installed-wav-verification; manifest
+outputs/live-pcm-wifi-build-manifest.json updated. Allactivepaths canonicallocal.
+
+InitialUSBread timedout duringboot, thenUSBSSH worked and exacthelpers/fresh
+state verified. Userconfirmed responsivehome andWiFi bluecheckmark. Muted
+prepare ranonce; expectedunconfiguredAFE NACK didnotpoisontransport, later
+config/readback/route/zeroPCM passed.5.76MB30secWAV USBcopy hit25sec localwait
+butcompletedremotely; smallerWiFicopy wastruncated andNEVERused. Readback of
+original30secWAV in256KiBchunks verifiedALL5760044bytes/SHA133ba2cc... before
+armingreadiness. TrustedWiFiSSH carriedcuedlive trial. BothUSB/WiFi read-only
+checks worked aftercopytimeouts; do NOT call this recurrence of0326USBstall.
+Large-copy throughput/timeout cause unproven. Scripts defaultUSB; set
+RIVER_AUDIO_SSH_HOST=192.168.1.232 forknownWiFi/HostKeyAlias192.168.7.2.
+
+Post-liveWiFi nativeDHCP BOUND/published, primary/generalNWI en0/defaultDNS,
+unboundDNS+HTTP200/AppleSuccess pass; work/continuous/post-live-wifi-*.
+NoWiFipatchchanges. Automaticassociation/renewal/endurance/IPv6 remainpending.
+
+NEXT: useraudibility/responsiveness first; preservecurrentboot consumedstate.
+Then extend runtime/lifecycle from this bounded livequeue proof: validated
+health-based watchdog renewal, explicitstop/drain and safe idle/underrun
+recovery, producerbackpressure and no setup/teardown drops, accurateHALflags.
+Keep exactAPR/ownedbuffers/lockorder andnoDSPwait onHALwriter. Batch related
+changes pernextbuild/boot. Physicalmic stillsynthetic; do notclaimcapture.
+
 ## Active handoff:0327 temporary boot accepted; fresh home/Wi-Fi gate pending (2026-11-15)
 
 User said fastboot ready. Reverified exact image SHA068ae923... and productriver,

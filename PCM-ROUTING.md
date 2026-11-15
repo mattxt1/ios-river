@@ -1,6 +1,6 @@
 # Shared PCM and physical routing continuation
 
-## Current result through patch 0326
+## Current result through patch 0327
 
 Physical speaker playback and a bounded replay of actual iOS app PCM are
 acoustically confirmed. Shared mapping, ASM/AFE/ADM routing, exact WRITE_DONE
@@ -10,7 +10,10 @@ path, then replayed them after four zero buffers. Mute was verified 525 ms
 from arming, within the unchanged 750 ms deadline.
 
 Continuous app playback and physical microphone capture remain pending.
-The next implementation needs queued buffers and a dedicated DSP worker;
+0327 now has a dedicated DSP worker and four-slot queued completion pipeline.
+Its bounded12block live trial passed ongoing refill, EOS/mute and full cleanup;
+user acoustic feedback is pending. Runtime lifecycle and producer backpressure
+remain next;
 ordinary device status still truthfully reports discarded output and synthetic
 input. Read `AUDIO-BRINGUP.md` and the latest `NOTES.md` before controls.
 
@@ -255,7 +258,7 @@ survey per21.33ms PCM block. Underrun immediately mutes, drains known published
 buffers through exact completions and tears down. Failed ownership checks
 retain the mapping and mark transport poisoned until reboot. No fabricated
 PCM fills underruns. A successful12block run requires producer replenishment
-because the queue holds eight blocks. This candidate is unverified on hardware;
+because the queue holds eight blocks. The bounded live-queue transport passed on hardware; user acoustic feedback is pending;
 normal automatic continuous playback and physical microphone capture remain
 pending. Never run it on a boot whose codec route one-shot was already used.
 
