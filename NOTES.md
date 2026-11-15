@@ -5,6 +5,21 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0322 passive baseline verified, awaiting home confirmation (2026-11-14)
+
+Temporary boot accepted; installed ADSP/net/nativeDHCP-reader bytes match local
+verified image helpers exactly. USB SSH readonly DSP status and all passive
+baselines pass: start/stream/slim/NGD/channel/codec not requested. No active
+controls sent. Initial14s SSH/nativequery timeout resolved on independent
+retry; do not infer a hang. Native media nowcount1/status1 valid1/active0,
+consistent with fresh unassociated interface. NativeIPv4DHCP INACTIVE with
+media inactive, IPv6inactive. Need freshjoin after home confirmation to test
+active1/nativeDHCP/defaultDNS, not yet a Wi-Fi-fix success claim. Evidence
+work/wifi-media/initial-native-dhcp-media-c983486.txt, baseline*-c983486.txt,
+installed-helper-verification.json. User home responsiveness reply pending;
+then run exact --codec-tone sequence once, ask audible result/responsiveness,
+collectjoin/DHCP/DNS. Earlier handoff pendingverification items superseded.
+
 ## Active handoff:0322 temporary boot accepted; home confirmation pending (2026-11-14)
 
 User confirmed fastboot readiness. Exact imageSHA749403b2... verified again;
