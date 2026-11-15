@@ -52,7 +52,7 @@ diff --git a/bsd/dev/river_adsp_codec_route.h b/bsd/dev/river_adsp_codec_route.h
 + lck_mtx_lock(&ri_audio_queue_lock);
 + ri_audio_queue.error=error;ri_audio_queue.armed=false;ri_audio_queue.done=true;
 + lck_mtx_unlock(&ri_audio_queue_lock);
-+ thread_terminate(current_thread());
++ thread_terminate_self();
 +}
 +static int
 +ri_audio_queue_launch(void)
@@ -315,8 +315,6 @@ diff --git a/bsd/dev/river_audio_queue.h b/bsd/dev/river_audio_queue.h
 + * and no DSP waits run on a HAL writer. Whole incoming chunks are dropped
 + * on overflow (drop-newest); counters expose this bounded, nonblocking policy.
 + * First hardware trial retains the750ms independent mute deadline. */
-+static LCK_GRP_DECLARE(ri_audio_queue_group,"river-audio-queue");
-+static LCK_MTX_DECLARE(ri_audio_queue_lock,&ri_audio_queue_group);
 +static struct {
 + bool armed,launched,stop,done;
 + unsigned head,used,high_water,underruns,overflows,rejected,peak;
@@ -325,6 +323,8 @@ diff --git a/bsd/dev/river_audio_queue.h b/bsd/dev/river_audio_queue.h
 + int error;
 + int16_t samples[8192*2];
 +} ri_audio_queue;
++static LCK_GRP_DECLARE(ri_audio_queue_group,"river-audio-queue");
++static LCK_MTX_DECLARE(ri_audio_queue_lock,&ri_audio_queue_group);
 +static int ri_audio_queue_launch(void);
 +static int
 +ri_audio_queue_arm(void)
