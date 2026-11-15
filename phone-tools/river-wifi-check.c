@@ -1,4 +1,5 @@
-/* Bounded connectivity probe bound to en0, never the USB interface. Uses
+/* Bounded connectivity probe: en0-bound by default, --default checks ordinary
+ * routing and verifies the resulting source address belongs to en0. Uses
  * Apple's public captive-portal HTTP test; no credentials or response body
  * are printed. A response is a connectivity observation, not a TLS test. */
 #include <sys/socket.h>
@@ -11,6 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <ifaddrs.h>
 
 static void expired(int signo)
 {
@@ -22,9 +24,11 @@ static void expired(int signo)
 
 int main(int argc, char **argv)
 {
- if (argc > 2) { fputs("usage: river-wifi-check [resolved-Apple-IPv4]\n",stderr); return 2; }
+ if (argc > 2) { fputs("usage: river-wifi-check [resolved-Apple-IPv4|--default]\n",stderr); return 2; }
+ int default_route=argc==2 && !strcmp(argv[1],"--default");
+ int numeric_target=argc==2 && !default_route;
  struct in_addr numeric;
- if (argc == 2 && inet_pton(AF_INET,argv[1],&numeric) != 1) {
+ if (numeric_target && inet_pton(AF_INET,argv[1],&numeric) != 1) {
   fputs("Expected numeric IPv4 address\n",stderr); return 2;
  }
  signal(SIGALRM, expired);
@@ -33,14 +37,14 @@ int main(int argc, char **argv)
  unsigned index = if_nametoindex("en0");
  if (!index) { perror("en0"); return 1; }
  struct addrinfo hints = { .ai_family=AF_INET, .ai_socktype=SOCK_STREAM }, *list=NULL;
- if (argc == 2) hints.ai_flags = AI_NUMERICHOST;
- int error = getaddrinfo(argc == 2 ? argv[1] : "captive.apple.com", "80", &hints, &list);
+ if (numeric_target) hints.ai_flags = AI_NUMERICHOST;
+ int error = getaddrinfo(numeric_target ? argv[1] : "captive.apple.com", "80", &hints, &list);
  if (error) { fprintf(stderr,"DNS: %s\n",gai_strerror(error)); return 1; }
  int fd = -1;
  for (struct addrinfo *it=list; it; it=it->ai_next) {
   fd=socket(it->ai_family,it->ai_socktype,it->ai_protocol);
   if (fd<0) continue;
-  if (setsockopt(fd,IPPROTO_IP,IP_BOUND_IF,&index,sizeof(index))) {
+  if (!default_route && setsockopt(fd,IPPROTO_IP,IP_BOUND_IF,&index,sizeof(index))) {
    perror("IP_BOUND_IF"); close(fd); freeaddrinfo(list); return 1;
   }
   if (!connect(fd,it->ai_addr,it->ai_addrlen)) break;
@@ -49,8 +53,19 @@ int main(int argc, char **argv)
  freeaddrinfo(list);
  if (fd<0) { perror("connect on en0"); return 1; }
  unsigned bound=0; socklen_t bound_size=sizeof(bound);
- if (getsockopt(fd,IPPROTO_IP,IP_BOUND_IF,&bound,&bound_size) || bound!=index) {
+ if (!default_route && (getsockopt(fd,IPPROTO_IP,IP_BOUND_IF,&bound,&bound_size) || bound!=index)) {
   fputs("Socket interface binding changed\n",stderr); close(fd); return 1;
+ }
+ if(default_route) {
+  struct sockaddr_in source; socklen_t size=sizeof(source);struct ifaddrs *list=NULL;
+  int matched=0;
+  if(!getsockname(fd,(struct sockaddr *)&source,&size) && size>=sizeof(source) && source.sin_family==AF_INET && !getifaddrs(&list)) {
+   for(struct ifaddrs *it=list;it;it=it->ifa_next)
+    if(it->ifa_addr && !strcmp(it->ifa_name,"en0") && it->ifa_addr->sa_family==AF_INET &&
+       ((struct sockaddr_in *)it->ifa_addr)->sin_addr.s_addr==source.sin_addr.s_addr)matched=1;
+   freeifaddrs(list);
+  }
+  if(!matched){fputs("Default route did not select an en0 source address\n",stderr);close(fd);return 1;}
  }
  const char request[]="GET /hotspot-detect.html HTTP/1.1\r\nHost: captive.apple.com\r\nConnection: close\r\n\r\n";
  size_t sent=0;
@@ -75,7 +90,7 @@ int main(int argc, char **argv)
  }
  char *body=strstr(response,"\r\n\r\n");
  int success=body && strstr(body+4,"<TITLE>Success</TITLE>")!=NULL;
- printf("interface=en0 bound_index=%u numeric_target=%d http_status=%d bytes=%zu apple_success_marker=%d\n",
-     bound,argc==2,status,count,success);
+ printf("interface=en0 bound_index=%u numeric_target=%d default_route=%d http_status=%d bytes=%zu apple_success_marker=%d\n",
+     bound,numeric_target,default_route,status,count,success);
  return status==200 && success ? 0 : 1;
 }

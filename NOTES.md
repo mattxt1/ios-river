@@ -5,6 +5,34 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0322 native DHCP/default DNS and ordinary route PASS (2026-11-14)
+
+User corrected earlier Spinner reply: misclick, actually BLUE CHECKMARK.
+Renamed captures to checkmark-join-* and recorded correction in private
+work/wifi-media/checkmark-join-capture-manifest.json. Do not describe this as
+an associated spinner failure. Live state4/result1, media count1/status3,
+valid1/active1. Settled nativeDHCP summary BOUND, IsPublished1 and
+RouterARPVerified1. First summary timedout2sec, successful boundedretry saved;
+not a networkfailure. IPv6RA Soliciting/unpublished, not IPv6connectivityproof.
+GlobalIPv4 primaryen0/router set, generalNWI rank0en0/DNS flag, defaultresolver
+A1 with2nameservers/reachable. Prior configd Never assertion nowABSENT
+(en0assertion_count0). Ordinary getaddrinfo(captive.apple.com) andHTTP200/
+AppleSuccess pass. New --default probe does not bindinterface; verifies
+getsockname sourcebelongs toen0 and HTTP200/Success PASS, bound_index0.
+Legacy boundprobe alsoPASS. Evidence work/wifi-default/{default-route,
+bound-route}-c983486.txt. This proves ordinaryDNS/defaultIPv4 flow on thisjoin.
+Helper settle checks1..8 allstate1 with0republishes. Supports0322 media-count
+fix as mechanism, not claimreliabilityeveryreboot/network. Safari/reconnect
+UI requests pending. Keep0322 until reconnectlogs captured before nextboot.
+
+Audio audible resultUNKNOWN: user wasn't listening; do not infer no sound.
+0322 independent mute cutoff/fullcleanup previouslyverified; noactive retries.
+0323 shorter85ms candidate already built/verified; preserve750ms watchdog.
+Give explicit listenheads-up after nextfreshhomeconfirmation beforetone.
+Readonly Wi-Fi helper gains --default ordinaryroute probe, compiled-Werror,
+signed/deployed/livePASS. Packaging supportsincluding it withoutkernelrebuild.
+No networksettings/rank/manualDNS writes performed by diagnostic probe.
+
 ## Active handoff:0323 image ready;0322 Wi-Fi join/audible replies pending (2026-11-14)
 
 0322 quiet test completed4zero+8tone then750ms watchdog; output mute and full

@@ -1,5 +1,20 @@
 # River Wi-Fi implementation audit and handoff
 
+##0322 native DHCP, ordinary DNS and default routing verified (2026-11-14)
+
+User confirmed BLUE CHECKMARK (initial Spinner answer explicitly corrected as
+a misclick). Media nowcount1/status3 => validactive. NativeDHCP is BOUND,
+IsPublished=true, RouterARPVerified=true. PrimaryIPv4 en0/defaultgateway,
+generalNWI en0 and usable defaultDNS nowpublished. en0 rankassertioncount0:
+previous configd Never-primary assertion no longer present. Ordinary
+getaddrinfo(captive.apple.com) andHTTP200/AppleSuccess pass. The new explicit
+--default probe also passes with no IP_BOUND_IF; sourceaddress verified en0,
+so defaulttraffic is not accidentally carried overUSB. NoDNS/rankmutation by
+probe. Helper16sec settlechecks needed0repairs. This supports the0322 missing
+mediaentry fix restoring nativeDHCP/primaryDNS rather than retryworkaround.
+Safari/reconnect/reboot durability remains pending; no universalguarantee.
+Evidence private work/wifi-media/checkmark-join-* and work/wifi-default/*.
+
 ## Current0322 candidate (2026-11-14)
 
 0320 eventually shows a blue checkmark and scoped IP connectivity, while normal

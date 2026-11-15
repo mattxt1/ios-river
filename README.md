@@ -12,25 +12,26 @@ parts of the port. Do not rely on the device to protect personal data or use it
 for sensitive accounts. Battery capacity remains a voltage/current estimate;
 charging-policy validation is incomplete.
 
-Updated November 13, 2026. `1334e8c` (through patch0302) booted to a
-responsive home screen and passed authenticated ADSP startup plus a matched
-APR CORE state query. The DSP returned state1 with a version1/32-byte APR
-header; both SMD rings are fully consumed and the channel remains open.
-Read-only post-query surveys work, and the user confirmed iOS remained
-responsive after the successful APR exchange.
-Shared CX/XO requirements remain enabled until reboot. Physical playback and
-microphone capture remain unimplemented; shared PCM buffer mapping and
-ASM/AFE/codec routing are next. See [AUDIO-BRINGUP.md](AUDIO-BRINGUP.md).
+Updated November 14, 2026. Through0322, authenticated ADSP startup, APR,
+shared PCM mapping, ASM/AFE/ADM routing, SLIMbus codec routing and active
+muted PCM completion are verified. The first quiet-output attempt completed
+four silent plus eight tone buffers before its independent mute cutoff;
+cleanup passed. Audible result is unknown because the user wasn't listening.
+A shorter0323 quiet-tone candidate is built, pending a fresh temporary boot.
+Continuous iOS playback still discards samples; microphone input is synthetic.
+See [AUDIO-BRINGUP.md](AUDIO-BRINGUP.md).
 
-On c3d9af8, the usual Wi-Fi network was visible and the second join completed
-WPA (state4/result1); native IP/DNS remains incomplete. Earlier bb395d6 testing
-produced a Settings checkmark and numeric HTTP200 through en0; ordinary DNS
-still failed. [NOTES.md](NOTES.md) records dated device evidence, current
-artifacts and outstanding work; [RIVER.md](RIVER.md) records earlier bring-up.
+On0322, a confirmed blue Wi-Fi checkmark now agrees with native DHCP BOUND,
+primary en0 routing, a usable default resolver, ordinary DNS lookup, and an
+unbound HTTP connectivity check through Wi-Fi. The media ioctl previously
+returned zero entries, which made Apple treat the link as invalid. Reconnect
+and fresh-boot reliability are still pending. See [WIFI-STATUS.md](WIFI-STATUS.md)
+and the latest active [NOTES.md](NOTES.md) for evidence and current ownership.
+All active work uses canonical `/Users/matttyson/Developer/Codex` local storage.
 
 ## Status and evidence
 
-| Area | Recorded evidence | Current limits (2026-11-13) |
+| Area | Recorded evidence | Current limits (2026-11-14) |
 | --- | --- | --- |
 | Boot and storage | Stock Motorola bootloader loads a temporary image via `fastboot boot`; XNU mounts an HFS+ iOS root on eMMC `userdata` (`rd=emmc0s64 rootrw=1`). | Preparing that root overwrites Android user data. Temporary fastboot boot only; physical partitions are never flashed. |
 | CPU and memory | Four Cortex-A53 Gold cores (`cpus=4`) and ~3.38 GiB usable RAM on the full-RAM configuration. | Firmware carveouts stay excluded. Silver cores remain parked. |
@@ -39,9 +40,9 @@ artifacts and outstanding work; [RIVER.md](RIVER.md) records earlier bring-up.
 | Touch & UI Interaction | Synaptics touch controller operational (`riverinput=1`, `rivertouchlatch=0`). Lockscreen unlocks cleanly at 60 fps without touch regressions. | Canvas is cropped iPhone X geometry; UI elements are fully interactive. |
 | Home & SpringBoard | SpringBoard lockscreen, home screen, settings navigation, and app launch operational. App switcher functional with replica layer. | PosterBoard background load requires initial settle time on boot. |
 | Battery & Power | Hardware battery monitoring via Qualcomm PM8953 FG/QG and JG30 battery curve (`0267-river-battery-jg30-power-source.patch`). Publishes observed voltage/current/status and estimated capacity to IOKit `IOPMPowerSource`. | Integrated0290/0291 preserve last-valid samples, reject invalid current and remove charger-enable writes from sampling/diagnostics. Host checks and full build pass; live SweetBattery/IOPMPowerSource/IOPS publication agrees at85%,4194–4195mV, external/notcharging/notfull with valid/nonfallback flags. Failure recovery, load/cable/charging validation remains pending; percentage is a load-sensitive estimate. See [BATTERY-STATUS.md](BATTERY-STATUS.md). |
-| Wi-Fi & Networking | WCNSS WPA2 association and protected traffic work intermittently. Patches0289/0295 correct state/completion handling,0296 adds native link notifications, and0297 refreshes bounded scan results and supports named discovery. Host tests and full kernel builds pass; latest device testing found the usual AP and completed the second WPA attempt (state4/result1). | First attempt received no M3 despite repeated M2 submissions; the cause is unproven. Native IP/DNS remains incomplete, with configd holding a Never-primary assertion. Numeric HTTP200 and a Settings checkmark were observed on an earlier boot, not established on the latest one. See [WIFI-STATUS.md](WIFI-STATUS.md). |
+| Wi-Fi & Networking | 0322 media ioctl correction enables a valid active link; native DHCP BOUND, primary en0/default DNS, ordinary lookup and unbound HTTP200/AppleSuccess verified with a user-confirmed blue checkmark. | Safari/reconnect and fresh-boot reliability pending. IPv6 Internet not established. See [WIFI-STATUS.md](WIFI-STATUS.md). |
 | USB & Connectivity | USB CDC-ECM Ethernet and Dropbear root SSH (`192.168.7.2`). Driver implements bus disconnect/reconnect auto-recovery (`0244-river-usb-reconnect.patch`). | SSH and diagnostic transfer work, with intermittent USB connection/handshake timeouts observed during audio bring-up; a fresh temporary boot sometimes restored access. |
-| Audio Subsystem | Virtual audio endpoints `/dev/hakios-audio` and `/dev/hakios-mic` (`0270-river-audio-subsystem.patch`). CoreAudio HAL and `mediaserverd` integration verified (`river-media-capability`). Dynamic volume ioctl wired to hardware amplifier;0293 corrects signed attenuation and verifies the level before unmuting (host/full-build and live register checks pass). iOS recorder and playback calls complete, but microphone data is synthetic and output PCM is discarded. | Codec/amplifier clock lock, stock ADSP metadata acceptance and17MiB no-start firmware staging verified. Physical microphone capture and speaker playback remain unimplemented; locked outbound handshake creation and readback now verified. Patch0299 authenticated startup and remote ready passed on-device with retained shared power requirements. APR/physical PCM remains pending.0294 validates exact RPM response IDs/frames before future audio power votes (host sanitizer checks and full build pass; exact-ID device ACK validation passed on bb395d6). |
+| Audio Subsystem | Active muted PCM4/4, ASM/AFE/ADM, codec/SLIMbus route, clock locks and teardown verified. Quiet output enabled and 8tone buffers completed before independent mute cutoff; full cleanup passed. | Audible result unknown; shorter0323 test pending. Continuous iOS playback still discarded, capture synthetic. See [AUDIO-BRINGUP.md](AUDIO-BRINGUP.md). |
 | Speaker Amplifier HW | Cirrus CS35L41 smart amplifier probed at I2C `0x40` on QUP2 (`0271-river-cs35l41-speaker-amp.patch`). Driver configures the boost converter for 8.5V (`0x00002018 = 0x21`), 4500 mA peak, +17 dB analog power gain (`0x00006c04 = 0x220`). Reset lines released for CS35L41 (GPIO 94) and CS47L35 audio hub (GPIO 68). Tone test sysctl `debug.river_speaker_test` implemented. | Muted clock-only test verified codec FLL and amplifier PLL lock on source `fa7283f`, with complete state restoration. Physical PCM transport remains unimplemented. **Hardware Safety Interlock:** Idle raw status register `0x00010098` readback shows `irq3 = 0x20000010` (`CS35L41_PLL_UNLOCK = 0x10`). The CS35L41 Class-D output stage is held in protective shutdown by silicon logic until an external locked clock is supplied to ASP from CS47L35 AIF1 or LPASS. Concurrent QUP2 access requires serialization. |
 | Haptics & Buttons | Awinic AW8697 haptic driver on QUP2 (`0x5a`). Verified on-device vibration pulses (`/usr/local/bin/vibrate 50`). Physical volume and power keys mapped via SPMI / TLMM. | Touch feedback and sysctl vibration work. Core Haptics subsystem reports synthetic profile. |
 | Camera & Torch | Hardware mapping established from device tree (PMI632 flash/torch, OV12A10 rear, S5K4H7 front). Experimental torch pulse interlocked for safety. | Camera pipeline (CCI, VFE, CSI-PHY) not yet brought up in XNU. |

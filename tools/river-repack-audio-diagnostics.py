@@ -29,7 +29,7 @@ def require(condition, message):
         raise ValueError(message)
 
 
-def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None, network_state=None, ipconfig=None):
+def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None, network_state=None, ipconfig=None, wifi_check=None):
     require(blob[:8] == b'RIVFILES', 'Invalid RiverFiles magic')
     count, = struct.unpack_from('<I', blob, 8)
     require(count <= 64 and 12 + count * 128 <= len(blob), 'Invalid file table')
@@ -40,6 +40,7 @@ def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None, ne
     net_found = 0
     network_state_found = 0
     ipconfig_found = 0
+    wifi_check_found = 0
     for i in range(count):
         name, mode, off, size, reserved = struct.unpack_from('<112sIIII', blob, 12 + 128 * i)
         require(off + size <= len(blob), 'File outside container')
@@ -67,6 +68,10 @@ def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None, ne
             ipconfig_found += 1
             if ipconfig is not None:
                 data = ipconfig
+        if name.split(b'\0')[0] == b'/usr/local/bin/river-wifi-check':
+            wifi_check_found += 1
+            if wifi_check is not None:
+                data = wifi_check
         entries.append((name, mode, data, reserved))
     require(found == 1, 'Expected exactly one existing clock helper')
     require(adsp_found <= 1, 'Duplicate ADSP helper')
@@ -84,6 +89,9 @@ def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None, ne
     require(ipconfig_found <= 1, 'Duplicate IPConfiguration reader')
     if ipconfig is not None and not ipconfig_found:
         entries.append((b'/usr/local/bin/river-ipconfig-state', 0o755, ipconfig, 0))
+    require(wifi_check_found <= 1, 'Duplicate connectivity probe')
+    if wifi_check is not None and not wifi_check_found:
+        entries.append((b'/usr/local/bin/river-wifi-check', 0o755, wifi_check, 0))
     count = len(entries)
     require(count <= 64, 'Too many RiverFiles entries')
     offset = (12 + count * 128 + 15) & ~15
@@ -101,6 +109,7 @@ def main():
     ap.add_argument('--kernel', type=Path, required=True)
     ap.add_argument('--clock-helper', type=Path, required=True)
     ap.add_argument('--adsp-helper', type=Path)
+    ap.add_argument('--wifi-check-helper', type=Path, help='Optional bounded connectivity probe')
     ap.add_argument('--ipconfig-helper', type=Path, help='Optional read-only native DHCP/media reader')
     ap.add_argument('--network-state-helper', type=Path, help='Optional read-only kernel/SC state reader')
     ap.add_argument('--net-helper', type=Path, help='Optional existing Wi-Fi daemon with publication observations')
@@ -178,7 +187,10 @@ def main():
     ipconfig = args.ipconfig_helper.read_bytes() if args.ipconfig_helper else None
     if ipconfig is not None:
         require(ipconfig[:8] == bytes.fromhex('cffaedfe0c000001'), 'Expected arm64 native DHCP reader')
-    blobs['RiverFiles'] = replace_helper(prior_files, replacement, adsp_helper, wifi_helper, net_helper, network_state, ipconfig)
+    wifi_check = args.wifi_check_helper.read_bytes() if args.wifi_check_helper else None
+    if wifi_check is not None:
+        require(wifi_check[:8] == bytes.fromhex('cffaedfe0c000001'), 'Expected arm64 connectivity probe')
+    blobs['RiverFiles'] = replace_helper(prior_files, replacement, adsp_helper, wifi_helper, net_helper, network_state, ipconfig, wifi_check)
     # Compare the actual containers: every unrelated file and metadata survives.
     def files(blob):
         result = {}
@@ -194,7 +206,8 @@ def main():
                        (b'/usr/local/bin/river-wifi-monitor-state', wifi_helper),
                        (b'/usr/local/bin/river-net', net_helper),
                        (b'/usr/local/bin/river-network-config-state', network_state),
-                       (b'/usr/local/bin/river-ipconfig-state', ipconfig)]:
+                       (b'/usr/local/bin/river-ipconfig-state', ipconfig),
+                       (b'/usr/local/bin/river-wifi-check', wifi_check)]:
         if data is not None:
             changed[name] = data
     require(set(after) == set(before) | set(changed), 'Unexpected file set')
@@ -246,6 +259,8 @@ def main():
                     cmdline_bytes=len(cmdline), kernel_payload_segments_verified=True,
                     clock_helper_sha256=digest(replacement), temporary_boot_only=True)
     manifest['unrelated_riverfiles_verified'] = True
+    if wifi_check is not None:
+        manifest['wifi_check_helper_sha256'] = digest(wifi_check)
     if ipconfig is not None:
         manifest['ipconfig_helper_sha256'] = digest(ipconfig)
     if network_state is not None:
