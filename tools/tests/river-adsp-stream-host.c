@@ -28,7 +28,7 @@ typedef uint64_t addr64_t;
 #define KERN_SUCCESS 0
 static int kernel_map,kernel_pmap;
 static unsigned write_count,cleaned,barriers,allocations,output_starts,output_stops;
-static bool output_live,expected_tone,eos_seen,expected_native,expected_queued;
+static bool output_live,expected_tone,eos_seen,expected_native,expected_queued,expected_long;
 static uint32_t expected_pa,expected_stream=0x04010000;
 static unsigned char stream_page[PAGE_SIZE*2] __attribute__((aligned(PAGE_SIZE)));
 static int kmem_alloc_contig(int map,vm_offset_t *out,unsigned size,unsigned mask,unsigned low,unsigned high,unsigned flags,unsigned tag)
@@ -61,7 +61,7 @@ static int ri_pcm_transaction(struct ri_apr_request *r,struct ri_apr_reply *p)
  case 0x10daa:
   assert(r->source==(expected_stream|0x507) && r->destination==(expected_stream|0x407) && r->words==3);
   assert(!r->payload[0] && !r->payload[1] && !r->payload[2]);break;
- case 0x10bdb:assert(expected_tone && output_live && write_count==(expected_queued?16u:8u) && r->response==0x10c1c && !r->words);p->words=mode==57?1:0;eos_seen=true;break;
+ case 0x10bdb:assert(expected_tone && output_live && write_count==(expected_queued?(expected_long?244u:16u):8u) && r->response==0x10c1c && !r->words);p->words=mode==57?1:0;eos_seen=true;break;
  case 0x10bd3:assert(!r->words);break;
  case 0x10dab: {
   assert(r->source==(expected_stream|0x507) && r->destination==(expected_stream|0x407) && r->response==0x10d99 && r->words==8);
@@ -135,7 +135,12 @@ static int quiet_printf(const char *format,...) {(void)format;return 0;}
 #include "route-actual.h"
 #undef printf
 #define printf quiet_printf
-static struct {bool stop,armed;unsigned used,discarded_at_stop;} ri_audio_queue;
+static struct {bool stop,armed,long_mode,waiting_output,go;unsigned used,discarded_at_stop;} ri_audio_queue;
+#if RIVER_LONG_RUNTIME
+static uint64_t host_gate_now;
+static uint64_t ri_pipeline_now(void){return host_gate_now;}
+static void ri_wait(unsigned ms){assert(!lock_depth);host_gate_now+=(uint64_t)ms*1000000ULL;if(mode==63)ri_audio_queue.go=true;if(mode==64)ri_audio_queue.stop=true;}
+#endif
 #include "stream-actual.h"
 /* Model pipeline return values here; full transport/queue is exercised by
  * test-river-live-pcm.py. This harness checks route/EOS/cleanup integration. */
@@ -143,7 +148,7 @@ static int ri_stream_pipeline(struct ri_stream_state *state,uint32_t stream) {
  assert(output_live && stream==expected_stream && state->completed==4);
  if(mode==61) {state->in_flight=true;ri_pcm.poisoned=true;return ETIMEDOUT;}
  if(mode==62)return ENOBUFS;
- state->submitted+=12;state->completed+=12;state->bytes_completed+=12*4096;write_count+=12;return 0;
+ unsigned n=expected_long?240:12;state->submitted+=n;state->completed+=n;state->bytes_completed+=n*4096;write_count+=n;return 0;
 }
 #undef printf
 static void reset(unsigned scenario)
@@ -196,7 +201,7 @@ static int host_output_check(void){assert(!lock_depth && output_live && !eos_see
 static void host_output_stop(void){assert(!lock_depth);output_stops++;output_live=false;}
 static void stream_reset(unsigned scenario)
 {
- reset(scenario);output_starts=output_stops=0;output_live=expected_tone=eos_seen=expected_native=expected_queued=false;ri_stream_output_start=NULL;ri_stream_output_check=NULL;ri_stream_output_stop=NULL;allocations=0;expected_stream=0x04010000;memset(&ri_live_stream,0,sizeof(ri_live_stream));memset(&ri_stream,0,sizeof(ri_stream));
+ reset(scenario);output_starts=output_stops=0;output_live=expected_tone=eos_seen=expected_native=expected_queued=expected_long=false;memset(&ri_audio_queue,0,sizeof(ri_audio_queue));ri_stream_output_start=NULL;ri_stream_output_check=NULL;ri_stream_output_stop=NULL;allocations=0;expected_stream=0x04010000;memset(&ri_live_stream,0,sizeof(ri_live_stream));memset(&ri_stream,0,sizeof(ri_stream));
  ri_pcm.physical=0x50000000;write_count=cleaned=barriers=0;
  assert(ri_route_config()==0 && ri_route.config_readback);
  assert(ri_route_test(false)==0);
@@ -293,6 +298,19 @@ int main(void)
   if(scenario==61)assert(rc==ETIMEDOUT && ri_pcm.poisoned && ri_live_stream.mapped && ri_live_stream.in_flight);
   if(scenario==62)assert(rc==ENOBUFS && !ri_pcm.poisoned && !ri_live_stream.mapped && !ri_live_stream.complete);
  }
+#if RIVER_LONG_RUNTIME
+ for(unsigned scenario=63;scenario<=65;scenario++) {
+  stream_reset(2);assert(!ri_stream_test());commands=write_count=0;expected_stream=0x05010000;
+  assert(!ri_stream_prepare_live());ri_live_stream.tone=ri_live_stream.queued_pcm=true;expected_tone=expected_queued=expected_long=true;
+  ri_audio_queue.long_mode=true;mode=scenario;host_gate_now=0;
+  ri_stream_output_start=host_output_start;ri_stream_output_check=host_output_check;ri_stream_output_stop=host_output_stop;
+  int rc=ri_stream_execute(&ri_live_stream,5);assert(output_stops==1 && !output_live && !ri_audio_queue.waiting_output && !ri_live_stream.mapped);
+  if(scenario==63)assert(!rc && output_starts==1 && ri_live_stream.complete && ri_live_stream.completed==244 && ri_live_stream.eos_rendered);
+  if(scenario==64)assert(rc==ECANCELED && !output_starts && !ri_live_stream.complete);
+  if(scenario==65)assert(rc==ETIMEDOUT && !output_starts && !ri_live_stream.complete && host_gate_now==15000000000ULL);
+ }
+ puts("PASS actual listening gate: no output until GO, long EOS, explicit stop and timeout clean the still-muted route");
+#endif
  puts("actual-code zero-PCM map/RUN/WRITE ownership, completion and failure teardown tests passed");
  return 0;
 }

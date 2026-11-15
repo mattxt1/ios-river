@@ -42,9 +42,11 @@ with tempfile.TemporaryDirectory(prefix='river-adsp-route-') as directory:
   sections=['diff --git '+x for x in next((repo/'xnu/patches').glob('0328-*.patch')).read_text().split('diff --git ')[1:]]
   text=''.join(x for x in sections if x.startswith('diff --git a/bsd/dev/river_adsp_stream.h '))
   subprocess.run(['patch','--batch','--silent','--fuzz=0','-p1','-d',str(root/'source')],input=text.encode(),check=True)
+  section=next(x for x in sections if x.startswith('diff --git a/bsd/dev/river_audio_gate.h '))
+  (root/'river_audio_gate.h').write_text('\n'.join(x[1:] for x in section.splitlines() if x.startswith('+') and not x.startswith('+++'))+'\n')
  stream_target.write_text(stream_target.read_text().replace('#include "river_adsp_pipeline.h"','static int ri_stream_pipeline(struct ri_stream_state *,uint32_t);'))
  (root/'route-actual.h').write_text(target.read_text())
  (root/'stream-actual.h').write_text(stream_target.read_text().split('static int\nriver_adsp_stream_sysctl',1)[0].replace('__asm__ volatile("dmb sy" ::: "memory");','host_barrier();'))
  binary=root/'route'
- subprocess.run([os.environ.get('CC','cc'),'-O1','-g','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-I',str(root),str(repo/'tools/tests/river-adsp-stream-host.c'),'-o',str(binary)],check=True)
+ subprocess.run([os.environ.get('CC','cc'),'-O1','-g','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-DRIVER_LONG_RUNTIME='+str(int(args.runtime)),'-I',str(root),str(repo/'tools/tests/river-adsp-stream-host.c'),'-o',str(binary)],check=True)
  subprocess.run([str(binary)],check=True)

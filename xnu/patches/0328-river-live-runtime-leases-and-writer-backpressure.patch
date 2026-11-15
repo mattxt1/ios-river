@@ -95,7 +95,23 @@ diff --git a/bsd/dev/river_adsp_pipeline.h b/bsd/dev/river_adsp_pipeline.h
 diff --git a/bsd/dev/river_adsp_stream.h b/bsd/dev/river_adsp_stream.h
 --- a/bsd/dev/river_adsp_stream.h
 +++ b/bsd/dev/river_adsp_stream.h
-@@ -229,6 +229,11 @@
+@@ -115,6 +115,7 @@
+  sweet_dcache_clean((vm_offset_t)p,4096);__asm__ volatile("dmb sy" ::: "memory");return true;
+ }
+ #include "river_adsp_pipeline.h"
++#include "river_audio_gate.h"
+ static int
+ ri_stream_execute(struct ri_stream_state *state,unsigned session)
+ {
+@@ -214,6 +215,7 @@
+  if(state->queued_pcm) {
+   lck_mtx_lock(&ri_audio_queue_lock);bool stopped=ri_audio_queue.stop;
+   lck_mtx_unlock(&ri_audio_queue_lock);if(stopped) {error=ECANCELED;goto done;}
++  phase="queue_listening_gate";error=ri_audio_queue_wait_output();if(error)goto done;
+   phase="queue_output_start";error=ri_stream_output_start();if(error)goto done;
+   phase="queue_pipeline";error=ri_stream_pipeline(state,stream);if(error)goto done;
+  }
+@@ -229,6 +231,11 @@
   phase=state->tone?"quiet_tone_complete":"zero_pcm_complete";
  done:
   if(state->tone && ri_stream_output_stop)ri_stream_output_stop();
@@ -235,6 +251,33 @@ diff --git a/bsd/dev/river_audio.c b/bsd/dev/river_audio.c
  
  		now = mach_absolute_time();
  		lck_mtx_lock(&river_audio_lock);
+diff --git a/bsd/dev/river_audio_gate.h b/bsd/dev/river_audio_gate.h
+--- /dev/null
++++ b/bsd/dev/river_audio_gate.h
+@@ -0,0 +1,23 @@
++/* Prepare the route while muted; long mode requires a separate GO after the
++ * host issues its listening cue. Never hold queue mutex across sleep or I/O.
++ * Timeout/stop closes the prepared route without enabling the amplifier. */
++static int
++ri_audio_queue_wait_output(void)
++{
++ lck_mtx_lock(&ri_audio_queue_lock);
++ bool gated=ri_audio_queue.long_mode;
++ if(gated)ri_audio_queue.waiting_output=true;
++ lck_mtx_unlock(&ri_audio_queue_lock);
++ if(!gated)return 0;
++ int error=ETIMEDOUT;uint64_t until=ri_pipeline_now()+15000000000ULL;
++ while(ri_pipeline_now()<until) {
++  lck_mtx_lock(&ri_audio_queue_lock);
++  bool stop=ri_audio_queue.stop,go=ri_audio_queue.go;
++  lck_mtx_unlock(&ri_audio_queue_lock);
++  if(stop) {error=ECANCELED;break;}
++  if(go) {error=0;break;}
++  ri_wait(1);
++ }
++ lck_mtx_lock(&ri_audio_queue_lock);ri_audio_queue.waiting_output=false;
++ lck_mtx_unlock(&ri_audio_queue_lock);return error;
++}
 diff --git a/bsd/dev/river_audio_queue.h b/bsd/dev/river_audio_queue.h
 --- a/bsd/dev/river_audio_queue.h
 +++ b/bsd/dev/river_audio_queue.h
@@ -249,7 +292,7 @@ diff --git a/bsd/dev/river_audio_queue.h b/bsd/dev/river_audio_queue.h
 + * Long trial:240blocks, renewable750ms health lease, independent6sec cap. */
  static struct {
 - bool armed,launched,stop,done;
-+ bool armed,launched,stop,done,long_mode;
++ bool armed,launched,stop,done,long_mode,waiting_output,go;
   unsigned head,used,high_water,underruns,overflows,rejected,peak;
   uint64_t accepted,dropped,consumed;
   unsigned dsp_submitted,dsp_completed,max_owned,health_checks;
@@ -350,7 +393,7 @@ diff --git a/bsd/dev/river_audio_queue.h b/bsd/dev/river_audio_queue.h
    unsigned ramp=frame<240?frame:remaining<240?remaining:240;
    for(unsigned c=0;c<2;c++) {
     int value=ri_audio_queue.samples[n*2+c];
-@@ -69,8 +107,8 @@
+@@ -69,8 +107,14 @@
  {
   int value=0,error=sysctl_handle_int(oidp,&value,0,req);
   if(error || !req->newptr)return error;
@@ -358,29 +401,35 @@ diff --git a/bsd/dev/river_audio_queue.h b/bsd/dev/river_audio_queue.h
 - if(value==2)return ri_audio_queue_launch();
 + if(value==1 || value==5)return ri_audio_queue_arm(value==5);
 + if(value==2 || value==4)return ri_audio_queue_launch(value==4);
++ if(value==6) {
++  lck_mtx_lock(&ri_audio_queue_lock);
++  bool ok=ri_audio_queue.waiting_output && ri_audio_queue.long_mode && !ri_audio_queue.stop && !ri_audio_queue.go;
++  if(ok)ri_audio_queue.go=true;
++  lck_mtx_unlock(&ri_audio_queue_lock);return ok?0:EBUSY;
++ }
   if(value!=3)return EINVAL;
   lck_mtx_lock(&ri_audio_queue_lock);ri_audio_queue.stop=true;
   lck_mtx_unlock(&ri_audio_queue_lock);return 0;
-@@ -78,15 +116,17 @@
+@@ -78,15 +122,17 @@
  static int
  river_audio_queue_status_sysctl SYSCTL_HANDLER_ARGS
  {
 - char note[768];lck_mtx_lock(&ri_audio_queue_lock);
 - snprintf(note,sizeof(note),"armed=%u launched=%u stop=%u done=%u error=%d queued_frames=%u capacity_frames=8192 high_water=%u accepted_frames=%llu dropped_frames=%llu consumed_frames=%llu overflows=%u underruns=%u rejected=%u peak=%u dsp_submitted=%u dsp_completed=%u max_owned=%u health_checks=%u overflow_policy=drop_newest underrun_policy=mute_abort source=ios_device_write worker=dedicated_dsp trial_max_blocks=12 mute_deadline_ms=750 capture=synthetic",
 + char note[1024];lck_mtx_lock(&ri_audio_queue_lock);
-+ snprintf(note,sizeof(note),"armed=%u launched=%u stop=%u done=%u error=%d queued_frames=%u capacity_frames=8192 high_water=%u accepted_frames=%llu dropped_frames=%llu consumed_frames=%llu overflows=%u underruns=%u rejected=%u peak=%u dsp_submitted=%u dsp_completed=%u max_owned=%u health_checks=%u long_mode=%u reserved_frames=%u backpressure=%u cancelled_frames=%u discarded_at_stop=%u target_blocks=%u overflow_policy=%s underrun_policy=mute_abort source=ios_device_write worker=dedicated_dsp initial_mute_deadline_ms=750 long_hard_limit_ms=6000 capture=synthetic",
++ snprintf(note,sizeof(note),"armed=%u launched=%u stop=%u done=%u error=%d queued_frames=%u capacity_frames=8192 high_water=%u accepted_frames=%llu dropped_frames=%llu consumed_frames=%llu overflows=%u underruns=%u rejected=%u peak=%u dsp_submitted=%u dsp_completed=%u max_owned=%u health_checks=%u long_mode=%u waiting_output=%u go=%u reserved_frames=%u backpressure=%u cancelled_frames=%u discarded_at_stop=%u target_blocks=%u overflow_policy=%s underrun_policy=mute_abort source=ios_device_write worker=dedicated_dsp initial_mute_deadline_ms=750 long_hard_limit_ms=6000 capture=synthetic",
   ri_audio_queue.armed,ri_audio_queue.launched,ri_audio_queue.stop,ri_audio_queue.done,ri_audio_queue.error,
   ri_audio_queue.used,ri_audio_queue.high_water,(unsigned long long)ri_audio_queue.accepted,
   (unsigned long long)ri_audio_queue.dropped,(unsigned long long)ri_audio_queue.consumed,
 - ri_audio_queue.overflows,ri_audio_queue.underruns,ri_audio_queue.rejected,ri_audio_queue.peak,ri_audio_queue.dsp_submitted,ri_audio_queue.dsp_completed,ri_audio_queue.max_owned,ri_audio_queue.health_checks);
 + ri_audio_queue.overflows,ri_audio_queue.underruns,ri_audio_queue.rejected,ri_audio_queue.peak,ri_audio_queue.dsp_submitted,ri_audio_queue.dsp_completed,ri_audio_queue.max_owned,ri_audio_queue.health_checks,
-+ ri_audio_queue.long_mode,ri_audio_queue.reserved,ri_audio_queue.backpressure,ri_audio_queue.cancelled_frames,ri_audio_queue.discarded_at_stop,ri_audio_queue.target_blocks,
++ ri_audio_queue.long_mode,ri_audio_queue.waiting_output,ri_audio_queue.go,ri_audio_queue.reserved,ri_audio_queue.backpressure,ri_audio_queue.cancelled_frames,ri_audio_queue.discarded_at_stop,ri_audio_queue.target_blocks,
 + ri_audio_queue.long_mode?"reject_before_uio":"drop_newest");
   lck_mtx_unlock(&ri_audio_queue_lock);return sysctl_handle_string(oidp,note,sizeof(note),req);
  }
  SYSCTL_PROC(_debug,OID_AUTO,river_audio_queue,CTLTYPE_INT|CTLFLAG_RW|CTLFLAG_LOCKED,
 - NULL,0,river_audio_queue_sysctl,"I","One-shot live PCM trial:1 arm,2 launch worker,3 stop");
-+ NULL,0,river_audio_queue_sysctl,"I","One-shot live PCM trial:1 arm short,2 run short,3 stop,4 run long,5 arm long");
++ NULL,0,river_audio_queue_sysctl,"I","One-shot live PCM trial:1 arm short,2 run short,3 stop,4 run long,5 arm long,6 cued GO");
  SYSCTL_PROC(_debug,OID_AUTO,river_audio_queue_status,CTLTYPE_STRING|CTLFLAG_RD|CTLFLAG_LOCKED,
   NULL,0,river_audio_queue_status_sysctl,"A","Live queue metadata; no samples");
 diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c

@@ -265,3 +265,21 @@ pending. Never run it on a boot whose codec route one-shot was already used.
 `python3 tools/test-river-live-pcm.py` compiles committed queue/pipeline and APR
 decoder code with sanitizer instrumentation and injected transport failures.
 The existing stream, amplifier and codec tests also apply0327 before testing.
+
+## Runtime/backpressure candidate0328
+
+Long mode explicitly arms240blocks with `--queue-arm-long` and launches with
+`--queue-run-long`. It reserves CPU queue space before `uiomove`; a full queue
+returns `EWOULDBLOCK` without consuming input. Input-copy failure releases the
+reservation. The native framework's retry behavior still needs device proof.
+A temporarily empty CPU queue allows22ms producer scheduling grace and receives
+owned completions; permanent starvation mutes and drains exactly as before.
+
+Only a full passing IRQ1/IRQ3/FLL health cycle within150ms may extend the750ms
+watchdog lease. Expired leases cannot revive, timer callbacks never renew health,
+and an independent6second cap bounds the5.12second PCM trial. The prepared muted
+route waits for `--queue-go` after a listening cue;15second timeout or explicit
+stop cleans up without enabling output. Short mode retains0327's original cap.
+Actual cdev, queue, pipeline, lease and gate tests pass. Hardware validation is
+pending. Current0327 controls are consumed; a new verified temporary boot is
+required. Normal automatic playback and physical microphone remain pending.

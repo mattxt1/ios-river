@@ -5,6 +5,21 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0328 long runtime/listening gate ready for final build (2026-11-15)
+
+0328 host tests now also cover a muted listening gate before long-mode unmute:
+worker prepares route, exposes waiting_output=1, then only --queue-go allows
+output.15sec timeout or --queue-stop closes the still-muted route cleanly.
+This permits a cue immediately before GO instead of before slow setup. Short
+mode remains ungated with its original750ms cutoff. No new controls on0327.
+
+ADSPhelper --file-sha256 hashes a bounded regular nonsymlink file locally on
+phone; host execution matches known5760044byte WAV/SHA133ba2cc... . Newboot can
+verify the existing persistent testWAV without138sec readback or another copy.
+Native first0328 build1b7810a passed, then listening gate was added before any
+packaging/boot. Final committed gate/helper/native build still required.
+Currentphone327 allone-shotsconsumed; audible327 is unobserved(user notlistening).
+
 ## Active handoff:0327 user missed listening;0328 runtime candidate (2026-11-15)
 
 User was NOT listening to0327 trial. Audibility is unobserved, NOT a negative

@@ -79,12 +79,35 @@ static int stage_image(const char *path) {
  if(sysctlbyname("debug.river_adsp_stage",NULL,NULL,&packet,12)) {perror("ADSP image digest");return 1;}
  return 0;
 }
+static int file_sha256(const char *path) {
+ int fd=open(path,O_RDONLY|O_NOFOLLOW);struct stat st;
+ if(fd<0){perror("Hash input");return 1;}
+ if(fstat(fd,&st) || !S_ISREG(st.st_mode) || st.st_size<0 || st.st_size>64*1024*1024) {
+  fprintf(stderr,"Hash input must be a regular file of at most64MiB\n");close(fd);return 1;
+ }
+ CC_SHA256_CTX state;unsigned char buffer[32768],digest[CC_SHA256_DIGEST_LENGTH];
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+ CC_SHA256_Init(&state);off_t total=0;
+ while(total<st.st_size) {
+  size_t count=(size_t)(st.st_size-total);if(count>sizeof(buffer))count=sizeof(buffer);
+  ssize_t n=read(fd,buffer,count);if(n<0 && errno==EINTR)continue;
+  if(n<=0){perror("Hash read");close(fd);return 1;}
+  CC_SHA256_Update(&state,buffer,(CC_LONG)n);total+=n;
+ }
+ CC_SHA256_Final(digest,&state);
+#pragma clang diagnostic pop
+ close(fd);printf("sha256=");for(unsigned i=0;i<sizeof(digest);i++)printf("%02x",digest[i]);
+ printf(" bytes=%lld\n",(long long)total);return 0;
+}
 int main(int argc,char **argv) {
+ if(argc==3 && !strcmp(argv[1],"--file-sha256"))return file_sha256(argv[2]);
  int rc=0,request=1;
  const char *status="debug.river_adsp_status";
- if(argc==2 && (!strcmp(argv[1],"--queue-arm") || !strcmp(argv[1],"--queue-run") || !strcmp(argv[1],"--queue-stop") || !strcmp(argv[1],"--queue-status") || !strcmp(argv[1],"--queue-arm-long") || !strcmp(argv[1],"--queue-run-long"))) {
+ if(argc==2 && (!strcmp(argv[1],"--queue-arm") || !strcmp(argv[1],"--queue-run") || !strcmp(argv[1],"--queue-stop") || !strcmp(argv[1],"--queue-status") || !strcmp(argv[1],"--queue-arm-long") || !strcmp(argv[1],"--queue-run-long") || !strcmp(argv[1],"--queue-go"))) {
   status="debug.river_audio_queue_status";
   if(!strcmp(argv[1],"--queue-arm-long"))request=5;
+  if(!strcmp(argv[1],"--queue-go"))request=6;
   if(!strcmp(argv[1],"--queue-run-long"))request=4;
   if(!strcmp(argv[1],"--queue-run"))request=2;
   if(!strcmp(argv[1],"--queue-stop"))request=3;
@@ -156,7 +179,7 @@ int main(int argc,char **argv) {
  } else if(argc==3&&!strcmp(argv[1],"--metadata")) rc=metadata_test(argv[2]);
  else if(argc==3&&!strcmp(argv[1],"--stage-image")) rc=stage_image(argv[2]);
  else if(argc!=1) {
-  fprintf(stderr,"Usage: %s [--probe|--handshake-init|--metadata PATH|--stage-image PATH|--start|--start-status|--apr|--apr-status|--pcm-map|--asm-test|--afe-probe|--pcm-status|--afe-config|--adm-route|--afe-route|--route-status|--pcm-silence|--stream-status|--slim-discover|--slim-power|--slim-ngd|--slim-status|--ngd-enumerate|--ngd-status|--channel-test|--channel-status|--codec-route|--codec-route-status|--codec-pcm|--codec-tone|--codec-native-pcm|--native-stage-arm|--native-stage-status|--queue-arm|--queue-run|--queue-stop|--queue-status|--queue-arm-long|--queue-run-long]\n",argv[0]);return 2;
+  fprintf(stderr,"Usage: %s [--probe|--handshake-init|--metadata PATH|--stage-image PATH|--start|--start-status|--apr|--apr-status|--pcm-map|--asm-test|--afe-probe|--pcm-status|--afe-config|--adm-route|--afe-route|--route-status|--pcm-silence|--stream-status|--slim-discover|--slim-power|--slim-ngd|--slim-status|--ngd-enumerate|--ngd-status|--channel-test|--channel-status|--codec-route|--codec-route-status|--codec-pcm|--codec-tone|--codec-native-pcm|--native-stage-arm|--native-stage-status|--queue-arm|--queue-run|--queue-stop|--queue-status|--queue-arm-long|--queue-run-long|--queue-go|--file-sha256 PATH]\n",argv[0]);return 2;
  }
  char note[8192]={0};size_t n=sizeof(note)-1;
  if(sysctlbyname(status,note,&n,NULL,0)) {perror("ADSP status");return 1;}
