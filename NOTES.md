@@ -5,6 +5,29 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0323 booted, passive verified; home/listening gate pending (2026-11-14)
+
+User fastbootready. Exact preferredimage0775ba2b... verified; productriver,
+temporaryfastbootboot accepted0.836s. Image river-short-tone-wifi-1482f80-default.
+Installed ADSP/net/nativeDHCP/defaultprobe helpers matchlocalbytes exactly.
+Allpassiveaudio statuses notrequested; noaudioactivecontrols sent thisboot.
+Home responsive AND ready/listening question pending. Do not startuntilreply.
+Host scripts nowseparate preparation and tone for a precisecue:
+work/short-tone/prepare-device.py runs sameknownprerequisites, exits immediately
+before --codec-tone with successreadymarker (no tone/outputenable). Then say
+startingbriefchirpnow and run work/short-tone/run-tone.py ONCE. Thischecks
+savedzeroPCM/enumprerequisites and sends onlytone+readonlypoststatus. Do not
+runfullrun-device.py afterprepare orrepeatconsumedprerequisites. Allfresh
+logsO_EXCL/0600. Needaskheard/postresponsiveaftertone andbatchfreshbootWiFi.
+
+First WiFiqueriesENXIO whilefirmwarestaging; laterbootlogs showedpower/reset/
+SMEMprogress and querysucceeded state1/result0. Noassociationyet; notproof
+ofbootregression, andnoassociatedDNSclaimforthisboot. Recheckautojoin/status
+andrequestusualnetworkjoinafterhomeconfirmed. Prior0322 Safari/reconnect/
+nativeDHCP/defaultDNS verified. Bootlogwork/short-tone/boot-1482f80-udp.txt,
+fastboot/passivebaseline/installedhelperchecks samefolder. USBloggeractive.
+No deviceflash, noadditionalkernelbuild, noactivecontrols whilegatepending.
+
 ## Active handoff:0322 Safari/reconnect PASS;0323+defaultprobe ready (2026-11-14)
 
 User says Safarihttps://example.com loads normally and bluecheckmark returns
