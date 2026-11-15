@@ -1,8 +1,21 @@
 # River iOS audio milestone
 
-The next milestone is physical playback and microphone capture through iOS.
-The current driver consumes output PCM and generates synthetic input. Neither
-successful iOS API calls nor increasing frame counters prove physical audio.
+Physical speaker output is now confirmed: the user heard the0324 chirp and
+iOS remained responsive. Continuous app playback and physical microphone
+capture are the next milestones. The current device backend still discards
+ordinary output and synthesizes input; API success alone is insufficient.
+
+##0324 audible speaker output;0326 native PCM candidate ready
+
+The corrected CS35L41 receive slot delivered an audible chirp. Four zero and
+four tone buffers plus renderedEOS completed with full DSP/codec/amp/channel
+cleanup. A late750ms watchdog cutoff still prevented an overall timing pass.
+0325 now mutes immediately after EOS and measures mute/check latencies.
+0326 adds explicit short native-iOS-PCM staging and replay, using samples from
+/dev/hakios-audio, with frame bounds, a frozen snapshot, quiet clamping/ramps,
+and the same independent750ms deadline. This remains a staged replay test,
+not continuous app playback. Host sanitizer tests and the combined native
+build pass; verified5594c21 image is waiting for a temporary boot.
 
 ##0323 bounded DSP/EOS pass;0324 physical receive-slot correction ready (2026-11-14)
 

@@ -5,6 +5,49 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff: audible0324 confirmed; combined0326 image verified (2026-11-14)
+
+User HEARD0324 chirp and confirmed responsive iOS. First physical speaker
+playback is established. All4zero+4tone buffers/renderedEOS and cleanup pass;
+overall timing policy still failed because the750ms watchdog fired near final
+handling. Current phone0324: all one-shots consumed, QMIpower/NGD retained,
+amp muted, no PCM/ASM/ADM/AFE/channel ownership remains. No active retries.
+Wi-Fi0324 blue checkmark plus nativeDHCP BOUND/defaultDNS/unboundHTTP pass;
+all logs saved in work/amp-slot/checkmark-wifi-*. Previous Safari/Google and
+reconnect tests passed. Automatic association/renewal/endurance still pending.
+
+Native build through0326 PASSED exit0 with the same exact local KDK/config.
+Kernel SHA4664cb9817ff541d23f6188f9492890b29661d121a0231b539aeca76bb242666.
+Preferred next image outputs/river-native-pcm-wifi-5594c21.img SHA
+2db3512827bf926f396ee50faefcee4e26097e4e69a34a892bc5098ba94dcf78,
+26996736B/cmdline577. Kernelpayload and unrelated RiverFiles/data/metadata
+verified, Wi-Fi helpers preserved. Updated ADSP helper source5594c21/SHA
+98bf337da17b2dfa35f9ec600e7391a9161e8c4b0e46c8f4a3f9db7e74001fc1.
+Manifest outputs/native-pcm-wifi-build-manifest.json. Source/helper/kernel
+provenance exact.0325 immediate-EOS mute+timing and0326 native staging/replay
+batched in ONE native build. Hardware validation of these changes pending.
+
+Fastboot readiness requested only after image/log verification; reply pending.
+Fresh host scripts work/native-pcm: verify-installed.py, passive-baseline.py,
+prepare-device.py (muted prerequisites, stops before codec route),
+run-native-stage.py (installs/byte-verifies signed AVAudioPlayer helper and
+controlled WAV, arms one-shot snapshot, plays through native iOS device while
+mute hold is active, requires ready1/claimed0/frames4096/peak>8/rejected0),
+run-native-play.py (one explicitly cued --codec-native-pcm request),
+capture-boot.py and capture-wifi.py LABEL. Normal app stream is still not a
+continuous hardware backend; status continues advertising discarded output
+and synthetic input. Replay is a short frozen native-PCM snapshot only.
+
+On nextboot verify image/product, start logger, temporary boot only. Home and
+listening confirmation before active controls. Run prepare once, then stage
+native PCM; if staging fails, inspect logs and DO NOT send native replay.
+When ready, cue listenNOW and run native replay ONCE. Do not first consume
+route with --codec-tone or rerun fullrunner. Record source/native metadata,
+renderedEOS, mute_verified_us/output_window_us/max_output_check_us, cleanup,
+user audibility/responsiveness, and Wi-Fi. Current raw/native test files are
+private local work only; all active workspace/source/key paths canonical
+Developer/Codex. Physical mic and continuous app playback remain next.
+
 ## Active handoff: first audible speaker output; native PCM candidate prepared (2026-11-14)
 
 The user HEARD the0324 chirp and confirmed iOS remained responsive. This is
