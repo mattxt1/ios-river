@@ -12,12 +12,12 @@ parts of the port. Do not rely on the device to protect personal data or use it
 for sensitive accounts. Battery capacity remains a voltage/current estimate;
 charging-policy validation is incomplete.
 
-Updated November 14, 2026. Physical speaker playback is confirmed: the user
-heard the0324 chirp and iOS stayed responsive after the receive-slot fix.
-DSP buffers/renderedEOS and full cleanup passed; a late mute-watchdog cutoff
-still needs timing validation. A verified0326 image batches immediate-EOS
-muting with short native-iOS-PCM staging/replay. Continuous app playback and
-physical microphone capture remain pending. See [AUDIO-BRINGUP.md](AUDIO-BRINGUP.md).
+Updated November 14, 2026. Physical speaker playback is confirmed, including
+an audible short replay of native iOS AVAudioPlayer PCM on0326. Buffers,
+renderedEOS, immediate mute within750ms, full cleanup and responsive iOS all
+passed. Continuous app playback and physical microphone capture remain
+pending; the normal device backend still discards output and synthesizes input.
+See [AUDIO-BRINGUP.md](AUDIO-BRINGUP.md).
 
 On0322, a confirmed blue Wi-Fi checkmark now agrees with native DHCP BOUND,
 primary en0 routing, a usable default resolver, ordinary DNS lookup, and an
@@ -41,7 +41,7 @@ All active work uses canonical `/Users/matttyson/Developer/Codex` local storage.
 | Battery & Power | Hardware battery monitoring via Qualcomm PM8953 FG/QG and JG30 battery curve (`0267-river-battery-jg30-power-source.patch`). Publishes observed voltage/current/status and estimated capacity to IOKit `IOPMPowerSource`. | Integrated0290/0291 preserve last-valid samples, reject invalid current and remove charger-enable writes from sampling/diagnostics. Host checks and full build pass; live SweetBattery/IOPMPowerSource/IOPS publication agrees at85%,4194–4195mV, external/notcharging/notfull with valid/nonfallback flags. Failure recovery, load/cable/charging validation remains pending; percentage is a load-sensitive estimate. See [BATTERY-STATUS.md](BATTERY-STATUS.md). |
 | Wi-Fi & Networking | 0322 media ioctl correction enables a valid active link; native DHCP BOUND, primary en0/default DNS, ordinary lookup and unbound HTTP200/AppleSuccess verified with a user-confirmed blue checkmark. | Safari and one off/on reconnect pass; fresh-boot/renewal reliability pending. IPv6 Internet not established. See [WIFI-STATUS.md](WIFI-STATUS.md). |
 | USB & Connectivity | USB CDC-ECM Ethernet and Dropbear root SSH (`192.168.7.2`). Driver implements bus disconnect/reconnect auto-recovery (`0244-river-usb-reconnect.patch`). | SSH and diagnostic transfer work, with intermittent USB connection/handshake timeouts observed during audio bring-up; a fresh temporary boot sometimes restored access. |
-| Audio Subsystem | User heard0324 speaker chirp; DSP/AFE/ADM/SLIMbus/codec/amp path and full teardown verified. | Late mute deadline remains under investigation.0326 native PCM snapshot/replay candidate built; continuous iOS output still discarded, input synthetic. |
+| Audio Subsystem | User heard0324 chirp and0326 native-app PCM replay; buffers, renderedEOS, mute timing and full teardown passed. | Snapshot replay is bounded; continuous iOS output and real microphone capture remain pending. |
 | Speaker Amplifier HW | Cirrus CS35L41 smart amplifier probed at I2C `0x40` on QUP2 (`0271-river-cs35l41-speaker-amp.patch`). Driver configures the boost converter for 8.5V (`0x00002018 = 0x21`), 4500 mA peak, +17 dB analog power gain (`0x00006c04 = 0x220`). Reset lines released for CS35L41 (GPIO 94) and CS47L35 audio hub (GPIO 68). Tone test sysctl `debug.river_speaker_test` implemented. | Muted clock-only test verified codec FLL and amplifier PLL lock on source `fa7283f`, with complete state restoration. Physical PCM transport remains unimplemented. **Hardware Safety Interlock:** Idle raw status register `0x00010098` readback shows `irq3 = 0x20000010` (`CS35L41_PLL_UNLOCK = 0x10`). The CS35L41 Class-D output stage is held in protective shutdown by silicon logic until an external locked clock is supplied to ASP from CS47L35 AIF1 or LPASS. Concurrent QUP2 access requires serialization. |
 | Haptics & Buttons | Awinic AW8697 haptic driver on QUP2 (`0x5a`). Verified on-device vibration pulses (`/usr/local/bin/vibrate 50`). Physical volume and power keys mapped via SPMI / TLMM. | Touch feedback and sysctl vibration work. Core Haptics subsystem reports synthetic profile. |
 | Camera & Torch | Hardware mapping established from device tree (PMI632 flash/torch, OV12A10 rear, S5K4H7 front). Experimental torch pulse interlocked for safety. | Camera pipeline (CCI, VFE, CSI-PHY) not yet brought up in XNU. |

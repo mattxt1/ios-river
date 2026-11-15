@@ -1,9 +1,25 @@
 # River iOS audio milestone
 
-Physical speaker output is now confirmed: the user heard the0324 chirp and
-iOS remained responsive. Continuous app playback and physical microphone
-capture are the next milestones. The current device backend still discards
-ordinary output and synthesizes input; API success alone is insufficient.
+Physical speaker output and a short segment of native iOS app PCM are now
+confirmed acoustically. On0326, AVAudioPlayer/device-write samples were staged
+and replayed through the DSP route; the user heard the sound and iOS stayed
+responsive. Continuous app playback and physical microphone capture remain
+pending. The normal driver still discards output and synthesizes input.
+
+##0326 audible native-app PCM and mute timing verified
+
+After media volume was raised, native staging captured4096 stereoS16 frames
+from the real iOS device-write path, peak9141, with no rejected writes. Four
+zero plus four native buffers and renderedEOS completed; user heard playback.
+Immediate EOS mute passed with no watchdog cutoff: mute verified525082us from
+arming, output window435582us, full cleanup and responsive iOS. The first
+muted-volume AVAudioPlayer attempt produced onlysilence and correctly failed
+the staging gate; it was not replayed. No generatedtone substituted forappPCM.
+
+The93ms maximum full hardware check per buffer is slower than a21.33ms PCM
+block. Continuous playback needs queued DSP submission/completion and worker
+ownership, rather than extending this synchronous snapshot loop. Wi-Fi now
+also carries authenticated SSH when the independent USB network stops.
 
 ##0324 audible speaker output;0326 native PCM candidate ready
 

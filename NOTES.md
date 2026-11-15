@@ -5,6 +5,60 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0326 audible native-app PCM/EOS/mute PASS (2026-11-14)
+
+User HEARD the replay of actual AVAudioPlayer/device-write PCM and confirmed
+iOS responsive. Native snapshot/replay passed4zero+4nativebuffers, exact
+renderedEOS, complete1, all DSP/codec/amp/AIF/channel teardown, no uncertainty
+or watchdog cutoff. mute_verified_us525082/output_window_us435582/
+max_output_check_us93279. This validates0325 immediate EOS mute inside the
+unchanged750ms deadline. Snapshot peak9141, frames4096, claimed1, rejected0.
+Source traces work/native-pcm/native-play-5594c21.txt, native-stage-after,
+channel-status/post-native and native-play-result.json. Manifest updated.
+Current phone0326, all startup/route one-shots consumed; QMI/NGD power retained,
+amp muted, PCM map/ASM/ADM/AFE/channel closed. Do not repeat active route tests.
+Continuous iOS backend remains discarded, mic synthetic; a frozen short
+native-app segment is verified, not ongoing playback/capture.
+
+First AVAudioPlayer attempt succeeded at API level but supplied onlysilence:
+armed1,frames0,observed81920. Readiness gate correctly prevented replay.
+User raised MEDIA VOLUME; repeat AVAudioPlayer staging (without rearming)
+produced nonzeroPCM and froze4096frames/peak9141/rejected0. No synthetic/raw
+sample substitution. Source metadata in native-stage-ready.json, volume retry
+logs. Causal evidence supports mixer volume causing the silent first attempt.
+Keep this prerequisite in next test; API success does not establish PCM.
+
+USB failed BEFORE any active request: firstmetadata TCPconnecttimeout255,
+no remoteexecution. Replug with responsivehome did notrestoreUSB. Hosten6
+active192.168.7.1, peer192.168.7.2 unreachable/noARPentry. sudoARPclear not
+performed (passwordrequired). WiFimanualjoin bluecheckmark, ping192.168.1.232
+thenSSH worked with HostKeyAlias192.168.7.2, confirming existingphonehostkey.
+Readonly startup notrequested verified before safely retrying preparation.
+FailedTCP log renamed metadata-connect-timeout-before-control-5594c21.txt;
+original evidence preserved, no repeat of consumedDSPoperation. Allcurrent
+native-pcm active runners nowuse verifiedWiFiaddress/HostKeyAlias. Old USB
+verify-installed.py remains useful forUSB but don'tassume USBreachable.
+
+WiFi0326 nativeDHCP BOUND/published, primaryen0/generalNWI/defaultDNS and
+unboundnormalDNS+HTTP200/AppleSuccess PASS; captures post-native-wifi-*.
+This is now sufficientfor authenticated devicecontrol overWiFi too. NoDNS/
+rankforcing. Automaticassociation/renewal/endurance/IPv6internet stillpending.
+Bounded dmesg viaWiFi shows USBsetup events and RX1047/TX1517 counters stop
+advancing; kernelue0stillhas192.168.7.2, so addressdeletion is ruledout.
+USB endpoint/controller/hostARP rootcause remains unproven. Don't describe
+WiFiworking or responsiveUI as USBworking; preserve WiFi fallbackuntilfixed.
+
+Nextaudioimplementation: continuous device-write queue -> dedicated DSPworker,
+multipleownedbuffers and matchedWRITE_DONE pipeline, instead of snapshot and
+synchronous perbufferfullregistersurvey. Currentfullhealthcheck takes93ms
+versus1024frames21.33ms; simpleloopingwouldunderflow. Preserve endpoint/source/
+token/address/handle checks, outputfail-safe, mutexorder and exactteardown.
+Establish producerbackpressure/underrun semantics and routeworker ownership;
+noDSPwait on HALwriter, no hardwareI/O underPCMqueue mutex. Batchqueue/worker
+and reducedread-onlydynamic healthmonitor in onebuildwhenready, whilekeeping
+WiFifix. Micphysical routing/read protocol stillpending. Allactivepaths
+canonicalDeveloperlocal, sourcebundle updated; no clouddependencies.
+
 ## Active handoff:0326 boot/passive verified; native playback gate pending (2026-11-14)
 
 User confirmed fastboot readiness. Exact0326 image2db35128... and productriver

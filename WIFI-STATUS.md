@@ -1,5 +1,14 @@
 # River Wi-Fi implementation audit and handoff
 
+##0326 normal connectivity and authenticated Wi-Fi SSH verified
+
+Bluecheckmark, nativeDHCP BOUND, usable defaultDNS/generalNWI and unbound
+HTTP200 pass again. SSH on the phone's DHCP address192.168.1.232 is verified
+against its already-known USB hostkey; it carried DSP preparation, nativePCM
+staging/replay and posttests. This provides a working control fallback for an
+independent USB-network failure. USBstillhasitskernelIP but stopped responding;
+rootcause notproven. Automaticassociation/lease-renew/endurance stillpending.
+
 ##0323 post-reboot manual join and Google verified (2026-11-14)
 
 Afteranother temporaryboot, user confirmedbluecheckmark andGoogleloads
