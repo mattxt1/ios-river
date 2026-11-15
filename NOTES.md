@@ -5,6 +5,28 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0322 combined image verified, waiting for fastboot (2026-11-14)
+
+Source c98348649ef381aa4984b3ee42af598252f07c73; native incrementalbuild exit0,
+using same verified22G74 local KDK/Xcode/config. Installed kernel exact SHA
+f0d1992daad63ad7f7ca1f54200c82799e65a97c5835a3c415ad69bfcf93a82f.
+Image outputs/river-quiet-tone-wifi-media-c983486.img SHA
+749403b22efa03f579571a7747773f1865da030fe5c927d15ba3636b6f7b038e,
+26943488B, cmdline577B, kernelpayload and unrelatedRiverFiles verified.
+Contains0321 quiet tone,0322 media fix, bounded Wi-Fi settle daemon8bd81e0,
+read-only nativeDHCP/media reader. Existing network-address reader preserved
+exactly from verified0320 base; unchanged clock helper recovered from same
+verified local base image (historical standalone binaries absent, no cloud
+rehydration). Manifest quiet-tone-wifi-media-build-manifest.json records hashes.
+Phone still0320; no active tests repeated. Fastboot readiness requested only
+after this concrete image passed verification. Onfreshboot verify installed
+helper hashes and inactive audio baseline; get home responsiveness before
+running run-device.py once. Test is --codec-tone, not prior route/channel
+one-shots. Ask whether short quiet tone heard and still responsive afterward.
+Collect nativeDHCP/media, address/routes/defaultDNS before/after freshjoin;
+check repeat joins/reconnect and ordinary lookup before claiming Wi-Fi fixed.
+Physicalmic/continuousiOSbackend remain pending. All activepaths canonicallocal.
+
 ## Active handoff:0321 quiet tone built;0322 native Wi-Fi media fix prepared (2026-11-14)
 
 Canonical Developer/Codex storage remains mandatory. Device still0320 with

@@ -1,5 +1,22 @@
 # River Wi-Fi implementation audit and handoff
 
+## Current0322 candidate (2026-11-14)
+
+0320 eventually shows a blue checkmark and scoped IP connectivity, while normal
+DNS fails. Read-only native queries prove media count0/status3 (active but
+invalid to IPConfiguration), DHCP INACTIVE/unpublished/network changed.
+Apple bootp interfaces.c requires count>0 and IFM_AVALID; wireless DHCP also
+requires ACTIVE.0322 reports one media entry, copies a bounded list correctly
+for32/packed64/kernel64 callers, and keeps authenticated-generation ACTIVE
+policy. Actual-code ASan/UBSan tests and nativebuild pass. Fresh hardware
+validation pending; rankNever/defaultDNS are not yet claimed fixed.
+The same image contains bounded post-DHCP service-state repairs (8bd81e0),
+read-only nativeDHCP/media inspection, and the quiet audio test. Do not force
+publicDNS/rank as a substitute for native DHCP/primary-route verification.
+Candidate c983486 imageSHA749403b22efa03f579571a7747773f1865da030fe5c927d15ba3636b6f7b038e.
+Everything below is dated historical context and may be superseded.
+
+
 Updated 2026-11-13. Patch0295 built and temporarily booted in `bb395d6`; direct queries confirm state4/result1 after joining. The user subsequently confirmed a Settings checkmark after the existing DHCP helper was restarted with observational SC logging. Native UI completion is now observed; it is not yet a reliable automatic connection or verified Internet result. WPA/protected DHCP exchange, helper DHCP ACKs and an IPv4 address are observed. Earlier DNS and bound numeric connection probes failed; fresh resolver/route observations remain in progress. Patch0296 native link-event readiness is prepared but not yet device-validated. The audit agent did not access the phone; device observations were supplied by the main agent.
 
 **Build/boot update, 2026-11-13:** full XNU build through0289–0291 passed
