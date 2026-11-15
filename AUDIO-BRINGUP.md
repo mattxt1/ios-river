@@ -4,6 +4,20 @@ The next milestone is physical playback and microphone capture through iOS.
 The current driver consumes output PCM and generates synthetic input. Neither
 successful iOS API calls nor increasing frame counters prove physical audio.
 
+##0323 bounded DSP/EOS pass;0324 physical receive-slot correction ready (2026-11-14)
+
+After explicit listening readiness/cue,0323 completed4silent+4tone buffers,
+renderedEOS and full teardown with no watchdog cutoff. Amplifieroutputenabled
+thenmuted; clocks/codec/AIF/channel restored, no unresolvedDSPownership.
+Useraudible/postresponsivefeedbackpending; do notclaimphysicalsound yet.
+Finalpathaudit found legacyamp4820=3 selectsRX1slot3 whilecodecTXuses0/1.
+0324selectsslot0withreadback/snapshot/fullrestore and rejects wrongslot or
+missingRX1enablebeforeunmute. PrimaryLinux/Cirrus CS35L41 header and
+cs35l41_set_channels confirm slotfield bits5:0. Actualcode sanitizer tests and
+nativebuild pass; image4e298f3 verified, notyetbooted. Same85ms/-24dB/750ms
+mute policy and Wi-Fi fix; no boost/gainincrease. ContinuousiOSbackend and
+physicalmicrophone capture stillpending.
+
 ##0322 quiet test interrupted safely;0323 shorter candidate ready (2026-11-14)
 
 The first quiet output attempt completed4silent+8tone buffers with output

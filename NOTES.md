@@ -5,6 +5,31 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0323 DSP/EOS PASS,0324 slot image ready; userresults pending (2026-11-14)
+
+Currentphone0323, all audioone-shotsconsumed; quiet4zero+4tone/EOS PASS and
+fullcleanup/retainedmute. Useraudible/postresponsivefeedback pending. Fresh
+WiFi requested, latestscalarstate1/result0, noassociatedDNSclaimthisboot.
+Prior0322nativeDHCP/defaultDNS/unboundHTTP/Safari/off-onreconnectallPASS.
+KEEPcurrentbootuntiluserjoinresult/liveWiFilogscaptured; don'trebootaway.
+
+0324slotfixnativebuild exit0, sameexactKDK/config. Kernel SHA
+65cba559e8dafe136f0dcf742d0cfdd27465bb9002d6875c81e4f9fcf2f55967.
+Verified outputs/river-amp-slot-wifi-4e298f3.img SHA
+5941317f6e5e9f66fbec8153238b246a3c80ec00f84d2a20bc9e4809f6e13afd,
+26994688B/cmdline577; kernelpayload/allunrelatedRiverFiles/helpers preserved.
+Manifest amp-slot-wifi-build-manifest.json, kernel source4e298f3f79fe42e83ba1e3e5545ddb951052e2f8.
+Actualcode route/clock/tone sanitizer tests pass; hardwarevalidationpending.
+NochangeWiFi,quietgain,samples85ms,watchdog750ms. Newslot0selected/readback
+beforeRX1enable; snapshotrecordsoriginal4820 andrestoresfullregister, tone
+rejectswrongslot/receiverdisabled. Previousinit3 is slot3, not enablemask.
+PrimarysourceURLs/hashes recordedpreviousentry; causalphysicalsilence not
+asserted withoutheardresult/hardwaretest. No furthernativebuildrequired.
+Freshrunners work/amp-slot/{passive-baseline,prepare-device,run-tone,capture-boot}.py;
+usepreciselistencueafterprepare, neverrunfullrunnerafterprepare. No fastboot
+request0324yet becausependingWiFi capture. ContinuousrealPCMbackend/capture
+pending. All activework canonicalDeveloperlocalstorage.
+
 ## Active handoff:0323 quiet DSP/EOS PASS;0324 amplifier slot fix tested (2026-11-14)
 
 User confirmed home responsive/readytolisten. prepare-device ranonce and

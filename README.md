@@ -17,7 +17,9 @@ shared PCM mapping, ASM/AFE/ADM routing, SLIMbus codec routing and active
 muted PCM completion are verified. The first quiet-output attempt completed
 four silent plus eight tone buffers before its independent mute cutoff;
 cleanup passed. Audible result is unknown because the user wasn't listening.
-A shorter0323 quiet-tone candidate is built, pending a fresh temporary boot.
+0323 subsequently passed the shorter DSP/EOS sequence with full cleanup;
+audible feedback is pending.0324 corrects amplifier receive-slot selection
+and is built for the next temporary boot.
 Continuous iOS playback still discards samples; microphone input is synthetic.
 See [AUDIO-BRINGUP.md](AUDIO-BRINGUP.md).
 
