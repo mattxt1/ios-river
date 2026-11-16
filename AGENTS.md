@@ -43,7 +43,9 @@
 - USB SSH recovered on0327 after the0326 stall; large-copy timeouts occurred
   while both transports remained usable. The prior USB root cause is unknown.
   Trusted Wi-Fi SSH is the fallback; retain existing host-key verification.
-- Patch0328 is built/verified but not booted. Its5.12sec mode uses pre-uiomove
+- Patch0328 booted; host GO window expired while muted and full cleanup passed.
+  All328controls are consumed. Patch0329 is built/verified, not booted; it
+  extends only muted coordination(90sec kernel/60sec host). Its5.12sec mode uses pre-uiomove
   capacity reservation, a renewable750ms health lease and independent6sec cap.
   It waits muted for a cued GO. Native framework retry and long playback remain
   unverified. Follow the newest NOTES.md and never reuse327's consumed route.

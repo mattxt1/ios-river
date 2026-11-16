@@ -5,6 +5,38 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0329 corrected muted-window image verified (2026-11-16)
+
+0329 nativebuildPASSED exit0/source3000f424e90d407d736fcea08ee5e8960fdf5142,
+exactlocalKDK/samebuildtree. KernelSHA
+f671239d25a4a7265e189051a0f447cc79d4a3c5e45d0c54de46099b3f7b6691.
+Verified outputs/river-listening-window-wifi-3000f42.img SHA
+8635fca1ed9aa50f4edb01922f692846105aeec3d4a073135773d82c2e8bf26e,
+27013120bytes/cmdline577. Base0328payload/unrelatedRiverFiles/WiFi preserved.
+ADSPhelper unchangedSHAf85c45af... . Separateapphelper newSHA
+364270cb8a11d4c5bed82946e117ec8a13078d80a4d7671fcc0ed2102fbfcf93;
+installandbyteverifyafterfreshboot. Manifest outputs/listening-window-wifi-
+build-manifest.json. Kernelgate90sec,hostGOwait60sec, appupTo120sec viaoptional
+--listening-window; audible5.12sec/health750ms/hard6sec unchanged. Actualgate
+regressioncoversGO/stop/90sectimeout/fullmutedcleanup. No329devicecontrolsyet.
+
+CURRENT PHONE328alloneshotsconsumed,ampmuted,allroutes/mapsclosed,neverunmuted.
+Userfastbootreadinessrequested after329imageverification; replypending. Temp
+bootONLY,neverflash. Freshresponsivehome+readytolistenreply BEFOREcontrols.
+work/listening-window scripts defaultUSB(verifiedon328); WiFiIPwasunreachable
+on328 beforecontrols. verify-installed.py passiveexacthelpers/unarmed. Then
+prepare-device.py ONCEmuted,stage-inputs.py installsnewapphelper/byteverifies and
+checksoriginal30secWAV SHA ondevice; armsreadinessONLY. run-long.py TTYstarts
+appwith--listening-window, nonsilentgate/longarm/prefill/routeonce. Polluntil
+LISTENING_GATE_READY; giveimmediatelisteningcue; writeEXACTGO newline tosamePTY
+within60sec. Keepkernel90secgate. Do NOTautowriteGO beforecue. Aftertrial wait
+natural120secappexit(max130sec inhostfinally), communicatewhilewaiting.
+
+Previous328failurewasHOST10secGOwaittiming, NOT PCM/leasefailure. No329acoustic
+orlongruntimeclaimyet. Both328/329tests usepre-uioEWOULDBLOCK capacity; framework
+retry stillneeds240completions/EOS/renewals/zero-underrun proof. Preserveallraw
+logsprivatelocal. Micstill synthetic; automaticplayback/restartpending.
+
 ## Active handoff:0328 listening gate cancelled while muted;0329 prepared (2026-11-16)
 
 User confirmed freshhome/listening ready. USBverifiedexacthelpers/unarmedstate;
