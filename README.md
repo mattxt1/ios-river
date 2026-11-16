@@ -36,9 +36,11 @@ playback milestone; automatic playback/session lifecycle, restart/recovery,
 longer endurance and physical microphone capture remain pending.
 See `NOTES.md` for exact evidence and current consumed device state.
 
-Patch0330 is built and verified for testing automatic native-write start,
-idle/close drain and guarded restart, initially limited to three sessions.
-Its device lifecycle validation remains pending; microphone work follows it.
+Patch0330 passed automatic native-write start, sustained-silence drain and
+guarded restart across two sessions, with zero queue underruns/overflows and
+full cleanup. The user missed listening; audibility is unobserved. The backend
+remains supervised and bounded to three sessions. Physical microphone work
+is now next; capture still synthesizes samples until that path is validated.
 
 ## Status and evidence
 

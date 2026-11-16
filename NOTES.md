@@ -5,6 +5,39 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0330 automatic start/drain/restart transport PASS (2026-11-16)
+
+Afterfreshresponsive/listeningconfirmation, exactinstalledhelpers/autodisabled/
+freshstateverified. MutedprepareONCE passed; pairedapphelperbytes+WAVSHAverified.
+Explicitlistencue;--auto-enableONCE thenordinaryAVAudioPlayerTWO4secbursts/6secidle.
+NativewritesAUTOMATICALLYstarted/drained/restartedroute:2sessions,1guardedrestart,
+all65536acceptedframescompleted,32live+4prerollbufferseachsession,4maxownedDMA,
+ZEROqueueunderrun/overflow/rejected/dropped/padding/cancelled/discardedframes.
+First/secondsession output712027/714145us, muteverified795842/806084us inside6sec
+hardcap,14healthrenewalseach/maxcheck14169/14878us, nooutputcutoff, exactEOSand
+fullASM/ADM/AFE/map/codec/AIF/amp/channelcleanup. SamepermanentPA0x20868000reused;
+NGDlastTID0x77->0x7d andAPR0x52420053->0x52420086 advanceacrosssessionlifetimes.
+Paired4secappburstslargelyspentrouteinitializationmuted; doNOTclaiminstantstart
+orfull4secofaudiblePCM. Serviceopens1(HALpersistedFD), endreason2(sustainedsilence)
+validatedautomaticdrain; actuallastclose/150msidle notseparatelyhardwareisolated.
+
+USERwasNOTLISTENING, so0330audibilityUNOBSERVED, notanegativeresult; post-testUI
+notconfirmedbythatreply.0329audible5sec/responsiveproofremainsvalid. Current
+PHONE330allstartup/routeone-shotsconsumed; supervisedbackendexplicitlydisabled,
+workerexited, blocked0/error0/atlimit0,ampmuted,allmaps/routesclosed. DO NOTretry.
+Appfinishednaturally,hostrun-auto.pyexit0, work/lifecycle/auto-result.jsonpassed.
+Manifest outputs/lifecycle-wifi-build-manifest.jsonupdated. Evidenceper-session
+queue/codec/channelandfinal-audio/autostatus; currentWiFiwasnotqueriedyet.
+
+UserorderedautomaticlifecycleTHENmiccapture. Transportlifecyclepassed; moving
+tophysicalmicimplementation, keepingautomaticvalidatedpathpreserved. Research
+sourcesinwork/microphone undercanonicalevidenceworkspace. Oldpcm-transport
+kernel-tree.json isTRUNCATED/invalidJSON; notauthoritativefornewlookup. Fetching
+smallpinnedGitHubtrees/blobs fromknownroot2dba45b8... withGitblobSHAverification.
+PythonTLSCAfailed; usingmacOScurlverifiedTLS (nobypass) afterapprovednetwork
+escalation. NOcapturecontrols/noadditionaldevicecontrols since330testcleanup.
+PhysicalmicstillSYNTHETIC pendingactualcaptureimplementationandfreshboot.
+
 ## Active handoff:0330 temporarily booted; fresh home/listening pending (2026-11-16)
 
 Userconfirmedfastbootready. ReverifiedimageSHAfc67a8ac.../bothhelperhashes and
