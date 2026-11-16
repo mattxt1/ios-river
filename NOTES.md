@@ -5,6 +5,31 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0331 microphone image verified; fastboot requested (2026-11-16)
+
+Native build dd3144cbe7523b3dcee97a2c1998a12425d2ed43 passed exact local KDK.
+KernelSHA5ab16acb3fb04ceb354876997edd4cf331ad381196a4f556e934761e266a4bef.
+Image outputs/river-microphone-wifi-dd3144c.img under canonical evidence root,
+SHA2bf87cfa61cca07b68e572ee763bfb56d9eb33dde9f5ba694d578fb389f25866,
+27049984bytes/cmdline577. Kernelpayload/unchanged RiverFiles/WiFihelpers verified.
+ADSPhelperSHA0fa62e06994ab124661fd444dec9d96092f46546333b37f8bfebe4801d0c756b.
+ExporthelperSHA38f48c2d2662cc5123807e4ffad7600228253a834762fd461d5c7b7616a43def.
+Manifest outputs/microphone-wifi-build-manifest.json. Physical hardware capture
+PENDING. This is explicit bounded physical snapshot, not continuous input.
+
+CURRENT PHONE330 consumed/muted/backend disabled; no0331controls. Fastboot
+requested only after image verified. Verify productriver/serialZY226HM8QB,
+temporary fastboot boot only. Logger work/microphone/capture-boot.py, then fresh
+home-responsive confirmation. verify-installed.py is read-only, requires fresh
+unrequested DSP/queue/auto/mic and exact helpers. prepare-device.py ONCE muted
+through NGDenumeration, NOchannel/codec/playback commands. stage-exporter.py
+installs exact exporter in /private/var/tmp. Cue user to speak/tap during muted
+capture; run-capture.py requests once, polls, retains all evidence/failure.
+Export only after full ownership/codec/FLL/pin cleanup passes. export-capture.py
+requires physical flag and no synthetic bit; records actual frames without
+--plumbing and downloads private WAV. Acoustic response still needs validation.
+Read scripts before execution; preserve O_EXCL evidence, no active retries.
+
 ## Active handoff:0331 bounded physical microphone batch prepared (2026-11-16)
 
 Patch0331 adds explicit one-shot IN1AL/IN1L ->48k mono S16 ->SLIMTX1/channel128,
