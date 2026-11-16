@@ -5,6 +5,16 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0330 temporarily booted; fresh home/listening pending (2026-11-16)
+
+Userconfirmedfastbootready. ReverifiedimageSHAfc67a8ac.../bothhelperhashes and
+productriver/serialZY226HM8QB. Temporarybootaccepted0.843s; NOflash. CURRENT
+PHONE330; automaticbackendDISABLED/unrequested, NOactiveaudiocontrolssent.
+USBUDPloggerstartedbeforeboot. Evidence work/lifecycle/fastboot-preflight.json,
+fastboot-boot-a51374b.txt,verified-boot.json; manifestupdated. FreshhomeRESPONSIVE
+andreadyfortwoshortbursts questionpending. MUSTwaitreply andpassiveexacthelper/
+unarmedverification beforepreparecontrols. Exactprocedurebelow. Micafterpass.
+
 ## Active handoff:0330 lifecycle image built/verified; boot requested (2026-11-16)
 
 Native0330 sourcea51374b5f8f5ea0e15f0bfdbcfd85c8e46f9a47d buildPASSED exit0
