@@ -307,7 +307,7 @@ int main(void)
   int rc=ri_stream_execute(&ri_live_stream,5);assert(output_stops==1 && !output_live && !ri_audio_queue.waiting_output && !ri_live_stream.mapped);
   if(scenario==63)assert(!rc && output_starts==1 && ri_live_stream.complete && ri_live_stream.completed==244 && ri_live_stream.eos_rendered);
   if(scenario==64)assert(rc==ECANCELED && !output_starts && !ri_live_stream.complete);
-  if(scenario==65)assert(rc==ETIMEDOUT && !output_starts && !ri_live_stream.complete && host_gate_now==15000000000ULL);
+  if(scenario==65)assert(rc==ETIMEDOUT && !output_starts && !ri_live_stream.complete && host_gate_now==(RIVER_LISTENING_WINDOW?90000000000ULL:15000000000ULL));
  }
  puts("PASS actual listening gate: no output until GO, long EOS, explicit stop and timeout clean the still-muted route");
 #endif

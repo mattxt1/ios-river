@@ -1,3 +1,4 @@
+#include <string.h>
 #import <Foundation/Foundation.h>
 #import <AVFoundation/AVFoundation.h>
 #import <AudioToolbox/AudioToolbox.h>
@@ -24,13 +25,14 @@ int main(int argc, char **argv) {
         }
 
         player.volume = 0.1f;
+        if (argc > 2 && strcmp(argv[2], "--listening-window") == 0) player.numberOfLoops = 3;
         NSLog(@"Playing sound (duration %.2f s)...", player.duration);
         BOOL ok = [player play];
         NSLog(@"play returned: %d; physical sound must be checked acoustically", ok);
         if (!ok) { [session setActive:NO error:NULL]; return 1; }
 
         // Sleep while playing
-        NSTimeInterval dur = player.duration > 0 ? player.duration + 0.5 : 2.0;
+        NSTimeInterval dur = player.duration > 0 ? player.duration * (player.numberOfLoops + 1) + 0.5 : 2.0;
         [NSThread sleepForTimeInterval:dur];
         NSLog(@"Done.");
         [session setActive:NO error:NULL];

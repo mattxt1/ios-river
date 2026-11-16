@@ -5,6 +5,34 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0328 listening gate cancelled while muted;0329 prepared (2026-11-16)
+
+User confirmed freshhome/listening ready. USBverifiedexacthelpers/unarmedstate;
+WiFiSSH192.168.1.232 timedout beforecommand. MutedprepareONCE passed stockDSP,
+map/ASM/AFEconfig/ADM/zeroPCM/SLIM/NGD. Existing30secWAV on-deviceSHA andappbytes
+verified. Native readiness nonzero4096frames/peak4758, unclaimed. Longqueue arm
+androuteworker ranONCE, reaching waiting_output1 withamplifierSTILLmuted.
+
+Host10sec stdinGO window expired duringchat/toolroundtrip beforeGOwasdelivered.
+HostsentSTOP; no --queue-go executed. Cue waspremature; NOtoneplayed. Thisis
+coordinationfailure, NOTlongPCM/healthfailure. Runtime longtrial remainsUNTESTED.
+Read-onlycleanup: queuedone1,error89(ECANCELED),go0,consumed0,liveDSPsubmitted0,
+4silentpreroll completed; output_enabled0, mapped0,in_flight0, allASM/ADM/AFE/
+codec/AIF/amp/channelrestored, uncertain0, cleanup_error0, ampmute0x10. Appended
+GOtoalready-stoppedhostrunner didnotreachdevice. Appexitednaturally. Evidence
+work/runtime/gate-timeout-result.json, queue/codec/channel/route/audio-after-gate-
+timeout-11c08bb.txt, app-long andqueue-stop-without-go. Manifest updated.
+
+CURRENT PHONE0328: ALLstartup/route/native/queueoneshotsCONSUMED. QMI/NGDpower
+retained, ampquiet, allmaps/routesclosed. NOactive retry thisboot. Do notreplay.
+
+0329 extends ONLYmutedkernelgate15->90sec, plushostwait10->60sec andexplicit
+apphelperlistening-windowoption (4loops/120sec) atsamevolume0.1. Audible5.12sec
+PCMtarget,750msrenewablehealthlease,6secondhardcap,ownership/mutechecksUNCHANGED.
+Thisavoidsburningrouteonchat/toolcoordinationlatency. Source+hostgatetests pass,
+newapphelpercompiled/signed. Nativebuild/packagepending; work/listening-window
+inputs inexistingcanonicalworkspace. Nextboot freshhome/listen gate asusual.
+
 ## Active handoff:0328 temporary boot accepted; fresh home/listening gate pending (2026-11-16)
 
 User confirmed ready in fastboot. Reverified serialZY226HM8QB/productriver,

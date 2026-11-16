@@ -1,0 +1,12 @@
+diff --git a/bsd/dev/river_audio_gate.h b/bsd/dev/river_audio_gate.h
+--- a/bsd/dev/river_audio_gate.h
++++ b/bsd/dev/river_audio_gate.h
+@@ -9,7 +9,7 @@
+  if(gated)ri_audio_queue.waiting_output=true;
+  lck_mtx_unlock(&ri_audio_queue_lock);
+  if(!gated)return 0;
+- int error=ETIMEDOUT;uint64_t until=ri_pipeline_now()+15000000000ULL;
++ int error=ETIMEDOUT;uint64_t until=ri_pipeline_now()+90000000000ULL;
+  while(ri_pipeline_now()<until) {
+   lck_mtx_lock(&ri_audio_queue_lock);
+   bool stop=ri_audio_queue.stop,go=ri_audio_queue.go;
