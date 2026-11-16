@@ -1,21 +1,18 @@
 # Shared PCM and physical routing continuation
 
-## Current result through patch 0327
+## Current result through patch0329
 
-Physical speaker playback and a bounded replay of actual iOS app PCM are
-acoustically confirmed. Shared mapping, ASM/AFE/ADM routing, exact WRITE_DONE
-completions, rendered EOS, protective mute and complete teardown passed.
-The latest test staged 4,096 stereo S16 frames from the real device-write
-path, then replayed them after four zero buffers. Mute was verified 525 ms
-from arming, within the unchanged 750 ms deadline.
+User heard a5.12second live AVAudioPlayer/device-write PCM stream and confirmed
+responsive iOS.240livebuffers through4DMA slots, zero queue underruns/overflows,
+108fresh full health-cycle lease renewals, exactEOS and full cleanup passed.
+Outputwindow5.15sec; muteverified5.24sec within6second hardlimit. Pre-uiomove
+queue reservations reject pressure without consuming uio data; the framework
+kept writing and the queue sustained all240buffers. Bitexact framework handling
+of retries is not established. Readiness snapshot stayed unclaimed.
 
-Continuous app playback and physical microphone capture remain pending.
-0327 now has a dedicated DSP worker and four-slot queued completion pipeline.
-Its bounded12block live trial passed ongoing refill, EOS/mute and full cleanup;
-the user missed listening; audibility is unobserved. Runtime lifecycle and producer backpressure
-remain next;
-ordinary device status still truthfully reports discarded output and synthetic
-input. Read `AUDIO-BRINGUP.md` and the latest `NOTES.md` before controls.
+Current329one-shots consumed; protective mute retained. Automatic playback
+lifecycle, explicitstop/idle/restart/recovery, longer endurance and physical
+microphone remain pending. Use newest NOTES.md before controls.
 
 ## Historical prerequisite design
 

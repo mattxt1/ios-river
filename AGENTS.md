@@ -43,11 +43,13 @@
 - USB SSH recovered on0327 after the0326 stall; large-copy timeouts occurred
   while both transports remained usable. The prior USB root cause is unknown.
   Trusted Wi-Fi SSH is the fallback; retain existing host-key verification.
-- Patch0328 booted; host GO window expired while muted and full cleanup passed.
-  All328controls are consumed. Patch0329 is built/verified, not booted; it
-  extends only muted coordination(90sec kernel/60sec host). Its5.12sec mode uses pre-uiomove
-  capacity reservation, a renewable750ms health lease and independent6sec cap.
-  It waits muted for a cued GO. Native framework retry and long playback remain
-  unverified. Follow the newest NOTES.md and never reuse327's consumed route.
+- Patch0329 audible5.12second live PCM PASSED:240buffers/4slots, zero queue
+  underruns/overflows,108health renewals, EOS/full cleanup and responsive iOS.
+  Muteverified5.24sec within6sec hardcap. ALL329one-shots are consumed; no retry.
+  Current amp is muted, maps/routes closed. Automatic lifecycle/restart/recovery,
+  endurance and physicalmic remain pending. See newest NOTES.md.
+- Future host audio runners must redirect app SSH stdin to DEVNULL so the
+  child cannot consume the parent's cued GO. A single verified directGO was
+  used on329 after confirming go0/waiting1; never resend without exact state.
 - Battery, display, touch and backlight status is documented in `README.md` and
   subsystem docs. Do not infer charging or other subsystem success from audio.

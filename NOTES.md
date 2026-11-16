@@ -5,6 +5,55 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0329 audible5second live PCM PASS (2026-11-16)
+
+USER HEARDfive-secondtone andconfirmed iOSRESPONSIVE. Longdevice-writePCM
+queue/DSPworker trialPASSED240livebuffers through4ownedDMAslots, ongoingnative
+producerrefill, ZEROqueueunderruns/overflows/droppedframes/rejectedwrites,
+exactrenderedEOS andcompleteASM/ADM/AFE/map/codec/AIF/amp/channelcleanup.
+4silentpreroll+240live=244submitted/completed,245760liveframes/5.12secPCM.
+Queueaccepted253952/consumed245760, trailing8192intentionallydiscardedatstop,
+reserved0,backpressure3273(countincludeslongmutedcoordination). Thisvalidates
+frameworkcontinuedwritingunderpre-uiomoveEWOULDBLOCK pressure; doesNOTprove
+bitexactlosslessend-to-endrendering orfutureHALrestart/idlebehavior.
+
+326dynamicchecks/108completehealthleaserenewals, maxcheck15531us. Outputwindow
+5150398us; muteverified5239872us fromarming, insideindependent6secondhardcap,
+no750mslease/hardwatchdogcutoff. Native readiness4096frames/peak4758 remained
+claimed0; NEVERsnapshotreplayed. Livequeuepeak6568. Normalautomaticunrestricted
+playbackandphysicalmicrophone remainpending. Exactsource3000f42/image8635fca1...
+provenancebelow. Allrawprivatelocal, work/listening-window/long-result.json and
+outputs/listening-window-wifi-build-manifest.json updatedwithuserconfirmation.
+
+CURRENT PHONE329: ALLstartup/route/native/queueone-shotsCONSUMED. QMI/NGDpower
+retained; ampMUTED; maps/ASM/ADM/AFE/channelCLOSED; noownershipuncertainty.
+DO NOTREPEATactivecontrols. Appfinishednaturally120sec; logapp-long endsDone.
+
+GOcoordination: PTYinputGOechoed butdevicego0/waiting1 remained. AppSSHchild
+inheritedstdin andcompetedwithparent, leavingparentblockedinline33readline.
+ConfirmedNOqueue-goevidence/control, thenREADONLYdirect-go-preflightverified
+waiting1/go0/stop0/done0; freshimmediateLISTENNOWcue; sentONEdirect--queue-go.
+All240/EOS/cleanupresultscapturedREADONLYindirect-progress-0,codec/channel/
+route/native/audio-after-direct-3000f42.txt. NoGOrepeat. Originalhostrunner
+preservedasrun-long-as-executed.py; futurehostrunnerredirectsappSSHstdinDEVNULL.
+AfterappDone, Ctrl-Creleasedonlyblockedparent; noSTOPorotherroutetestresent.
+Hostwrapperexit1fromintentionalKeyboardInterrupt isNOTkernel/runtimefailure;
+actualsuccessassertionsanduserfeedbackrecordedinlong-result.json.
+
+USBSSH/helperbytes/freshstatespassed; userconfirmedfreshresponsivehome before
+prepareONCE. StockDSP/map/config/zeroPCM/SLIM/NGDpassed; WAVon-devicehash/appbytes
+matched. WiFiwasNOTjoinedon329: post-long-wifi showsstate0/mediaactive0/DHCP
+INACTIVE/noNWI/defaultresolver, DNScheckfailsaccordingly. DoNOTclaimWiFiregression
+fromunassociatedinterface.0322mediafixpreserved; priorjoinedDHCP/DNSpassesvalid.
+Automaticassociationremainspending. USBcarriedall329controls/captures.
+
+NEXTaudio: extendthisverifiedsustainedpath toautomaticroute/sessionlifecycle,
+explicitstop/idle/restart andsafeunderrunrecovery, accurateHALflags andeventual
+longerendurance. Keepvalidatedhealthlease/hardcap policyuntilconcretenexttests;
+noDPSwaitonHALwriter,nohardwareI/Ounderqueue mutex, preserveexactownership.
+Physicalmicnextrouting/captureworkstillpending. Batchcoherentchangesperbuild.
+No329replayneeded; nextactiveexperimentrequiresverifiedfreshRAMboot.
+
 ## Active handoff:0329 temporary boot accepted; fresh readiness pending (2026-11-16)
 
 Userconfirmedfastbootready; exactimageSHA8635fca1.../helpersandproductriver

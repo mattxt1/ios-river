@@ -9,6 +9,26 @@ and replayed through the DSP route; the user heard the sound and iOS stayed
 responsive. Continuous app playback and physical microphone capture remain
 pending. The normal driver still discards output and synthesizes input.
 
+##0329 audible sustained live app PCM verified (2026-11-16)
+
+The user heard the5.12second native-app live PCM trial and confirmed responsive
+iOS.240buffers completed across4ownedDMA slots, with continued producer refill,
+zero queue underruns/overflows/rejectedwrites and no drop-newest sample loss.
+The pre-uiomove reservation path counted3273backpressure returns, predominantly
+while the route waited muted; the framework continued supplying data afterward.
+This does not establish bitexact rendering across framework backpressure.
+
+326dynamic checks and108complete health cycles renewed the750ms lease; maximum
+check15531us. Outputwindow5150398us, verifiedmute5239872us, no cutoff, exact
+renderedEOS, full route/map/codec/amp teardown. The separate6sec hard cap stayed
+in force. Native readiness snapshot was never claimed/replayed. Host PTY stdin
+conflict required a single checked directGO after a fresh listeningcue; future
+runner redirects appSSH stdin toDEVNULL. See newest NOTES.md for evidence.
+
+Current329route one-shots are consumed; amplifier is muted. Automatic session
+lifecycle, explicitstop/idle/restart/recovery, longer endurance and physical
+microphone capture remain pending. Never repeat controls on this boot.
+
 ##0327 live queue and four-slot DSP pipeline transport pass (2026-11-15)
 
 An opt-in queue now receives actual device-write PCM while a dedicated kernel
