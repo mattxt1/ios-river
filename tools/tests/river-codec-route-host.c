@@ -278,7 +278,12 @@ int clock_baseline_main(void) {
  }
  reset(25); assert(ri_clock_run(true) == EIO); check_pins();
  assert(strstr(ri_clock_note, "clock_restored=0"));
- assert(!ri_clock_write_allowed(0x200) && !ri_clock_write_allowed(0x400));
+ assert(!ri_clock_write_allowed(0x400));
+#ifdef RIVER_MIC_TEST
+ assert(ri_clock_write_allowed(0x200));
+#else
+ assert(!ri_clock_write_allowed(0x200));
+#endif
  reset(0); assert(!ri_clock_run_impl(true,true,false)); check_restore();
  assert(pmic_mode == 0 && pmic_pull == 4 && pmic_writes == 4);
  assert(strstr(ri_clock_note,"route_restored=1"));
@@ -370,7 +375,12 @@ int main(void)
  path_reset(54);assert(ri_codec_path_run_mode(true)==EREMOTE && live_calls==1 && !ri_channel.uncertain && !ri_channel.active && ri_codec_path.restored);check_restore();
  path_reset(0);assert(!ri_codec_path_run_mode(2) && ri_codec_path.complete && ri_tone.enabled && ri_tone.stopped);check_restore();assert(!ri_stream_output_start && !ri_stream_output_stop);
  assert(!ri_clock_write_allowed(0x5f7) && ri_clock_read_allowed(0x5f7) && !ri_clock_write_allowed(0x5d2));
- assert(!ri_clock_write_allowed(0x400) && !ri_clock_write_allowed(0x5f6));
+ assert(!ri_clock_write_allowed(0x400));
+#ifdef RIVER_MIC_TEST
+ assert(ri_clock_write_allowed(0x5f6) && ri_clock_write_allowed(0x219) && ri_clock_write_allowed(0x21e));
+#else
+ assert(!ri_clock_write_allowed(0x5f6));
+#endif
  puts("actual-code muted SLIMRX/AIF route, FLL/AMP clock locks, GPIO SPI framing and rollback tests passed");
  return 0;
 }

@@ -5,6 +5,38 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0331 bounded physical microphone batch prepared (2026-11-16)
+
+Patch0331 adds explicit one-shot IN1AL/IN1L ->48k mono S16 ->SLIMTX1/channel128,
+AFE4001/ADM TX/session6 ASM READ_V2 capture. Stock vendor_b mixer identifies
+handset IN1L sourceA and MICBIAS2A; pinned board overlay confirms wiring.
+Capture bypasses stock96k ISRC/AOV chain with documented synchronous48k.
+98304-frame maximum physical stash,48 exact READ completions; metadata-only
+status, no samples in sysctl. No speaker output enable. Physical samples are
+readable only after acknowledged teardown and verified codec/FLL/pin restore.
+Malformed completion retains DMA ownership without cache/sample access; pending
+or failed capture never substitutes synthetic data. Default mic remains tagged
+synthetic until successful explicit capture. This is a bounded snapshot, not a
+continuous microphone backend. Helper --mic-capture/--mic-status added.
+
+Actual-code sanitizer tests pass completion identity/range/flags/sequence,
+DMA ownership/cache ordering, timeouts, cleanup, channel ACK uncertainty,
+codec/bias/supply failed-write rollback, physical cdev reads and EOF, and
+pending/error no-fallback. Existing clock/I2S/playback route regressions pass
+with0331 whitelist and callback applied. Native build/hardware test PENDING.
+Sources/hash manifests, read-only stock ext4 mixer recovery and private scratch
+are in canonical evidence workspace work/microphone. Stock mixer SHA256
+57be3e0b4497864859361a8af25a0d4edf74bdf6b74094424ca1b5f57efe8623.
+Pinned Git root2dba45b8e247958d5a1b15b33c6064c15af4983e; small blobs verified
+against Git object SHA. No firmware/raw vendor data committed.
+
+CURRENT PHONE330 remains consumed/backend disabled/amp muted; no new audio
+controls. User missed both bursts; audibility unobserved. Build0331 only after
+committing patch. Once concrete image verified, request temporary fastboot;
+fresh home responsiveness required before muted preparation and explicit mic
+capture. Cue user to speak/tap during capture. Export actual /dev/hakios-mic
+without --plumbing, verify physical flag, ownership/cleanup and acoustic response.
+
 ## Active handoff:0330 automatic start/drain/restart transport PASS (2026-11-16)
 
 Afterfreshresponsive/listeningconfirmation, exactinstalledhelpers/autodisabled/

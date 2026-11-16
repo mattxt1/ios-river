@@ -22,6 +22,9 @@ struct hakios_audio_volume {
 #define HAKIOS_AUDIO_STATUS_VERSION 1
 #define HAKIOS_AUDIO_PLAYBACK_DISCARD (1u << 0)
 #define HAKIOS_AUDIO_CAPTURE_SYNTHETIC (1u << 1)
+#define HAKIOS_AUDIO_PLAYBACK_QUEUED (1u << 2)
+#define HAKIOS_AUDIO_PLAYBACK_BOUNDED (1u << 3)
+#define HAKIOS_AUDIO_CAPTURE_PHYSICAL_SNAPSHOT (1u << 4)
 struct hakios_audio_status {
  uint32_t version;
  uint32_t flags;

@@ -3,7 +3,7 @@
 from pathlib import Path
 import subprocess,tempfile,os,argparse
 repo=Path(__file__).resolve().parent.parent
-parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--kernel-source',type=Path);parser.add_argument('--runtime',action='store_true');parser.add_argument('--lifecycle',action='store_true');args=parser.parse_args()
+parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--kernel-source',type=Path);parser.add_argument('--runtime',action='store_true');parser.add_argument('--lifecycle',action='store_true');parser.add_argument('--microphone',action='store_true');args=parser.parse_args()
 with tempfile.TemporaryDirectory(prefix='river-codec-path-') as d:
  root=Path(d);source=root/'source';(source/'bsd/dev').mkdir(parents=True)
  def apply_sections(p,allowed):
@@ -33,8 +33,9 @@ with tempfile.TemporaryDirectory(prefix='river-codec-path-') as d:
  apply_sections(repo/'xnu/patches/0327-river-live-pcm-queue-and-dsp-pipeline.patch',{'bsd/dev/river_adsp_codec_route.h'})
  if args.runtime:apply_sections(next((repo/'xnu/patches').glob('0328-*.patch')),{'bsd/dev/river_adsp_codec_route.h'})
  if args.lifecycle:apply_sections(next((repo/'xnu/patches').glob('0330-*.patch')),{'bsd/dev/river_adsp_codec_route.h'})
+ if args.microphone:apply_sections(next((repo/'xnu/patches').glob('0331-*.patch')),{'bsd/dev/river_codec_clock.h'})
  probe=(source/'bsd/dev/river_codec_probe.h').read_text().split('static int\nriver_codec_probe_sysctl',1)[0]
  clock=(source/'bsd/dev/river_codec_clock.h').read_text().split('static int\nriver_codec_clock_sysctl',1)[0]
  route=(source/'bsd/dev/river_adsp_codec_route.h').read_text().split('static int\nriver_adsp_codec_path_sysctl',1)[0]
  for name,s in [('codec-probe-added.h',probe),('codec-clock-added.h',clock),('codec-route-added.h',route),('river_codec_i2s.h',(source/'bsd/dev/river_codec_i2s.h').read_text())]:(root/name).write_text(s)
- p=root/'test';subprocess.run([os.environ.get('CC','cc'),'-O1','-g','-Wall','-Wextra','-Werror','-Wno-unused-function','-fsanitize=address,undefined','-I',d,str(repo/'tools/tests/river-codec-route-host.c'),'-o',str(p)],check=True);subprocess.run([str(p)],check=True)
+ p=root/'test';subprocess.run([os.environ.get('CC','cc'),*(['-DRIVER_MIC_TEST'] if args.microphone else []),'-O1','-g','-Wall','-Wextra','-Werror','-Wno-unused-function','-fsanitize=address,undefined','-I',d,str(repo/'tools/tests/river-codec-route-host.c'),'-o',str(p)],check=True);subprocess.run([str(p)],check=True)
