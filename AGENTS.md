@@ -48,6 +48,11 @@
   Muteverified5.24sec within6sec hardcap. ALL329one-shots are consumed; no retry.
   Current amp is muted, maps/routes closed. Automatic lifecycle/restart/recovery,
   endurance and physicalmic remain pending. See newest NOTES.md.
+- Patch0330 automatic lifecycle candidate is built/verified, not booted. After
+  supervised backend enable, native writes drive starts and idle/close/silence
+  drains. Only verified cleanup permits rearm/restart; uncertainty is sticky.
+  First test capped3sessions/240blocks each/6sec cap. Validate before physical
+  microphone capture. Current329route is consumed; follow newest NOTES.md.
 - Future host audio runners must redirect app SSH stdin to DEVNULL so the
   child cannot consume the parent's cued GO. A single verified directGO was
   used on329 after confirming go0/waiting1; never resend without exact state.

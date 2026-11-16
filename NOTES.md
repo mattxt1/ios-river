@@ -5,6 +5,41 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0330 lifecycle image built/verified; boot requested (2026-11-16)
+
+Native0330 sourcea51374b5f8f5ea0e15f0bfdbcfd85c8e46f9a47d buildPASSED exit0
+sameexactlocalKDK/buildtree. KernelSHA
+6c73c1f6cf12ea31e877f17054a3597e93d37f44300562908e1c057d4c95f8af.
+Verifiedimage outputs/river-lifecycle-wifi-a51374b.img SHA
+fc67a8ac2c93cfde324b9814f18c14e2b39749c2f24f822f65360eee2f931e09,
+27015168bytes/cmdline577. Kernelpayload/unrelatedRiverFiles/WiFihelpersverified.
+ADSPhelperSHA9dc9d00b90b842e4871b9f125f8953ae433be7360e8ae7347fbc983dbe06e51f;
+newpairedAVAudioPlayerhelperSHAb3739ec919091f1168accf1215349f91acbc5accc20bf4254bbace10c1f63b31.
+Manifest outputs/lifecycle-wifi-build-manifest.json. Hostactual-code lifecycle,
+transport,writer,streamreuse/route,lease/snapshot/APRchecks pass. Fastbootready
+requested ONLYafterconcreteimageverification; replypending. NO330controls yet.
+
+CURRENT PHONE329alloneshotsconsumed,ampmuted,allroutesclosed. Preserveituntil
+newverifiedtemporaryboot. NoSubagents. Allsource/scratch/buildcanonicalDeveloper.
+Micphysicalrouting/captureimplementation followsautomaticlifecyclevalidation.
+
+work/lifecycle scripts prepared/parsed, readbeforeexecution; defaulttrustedUSB
+SSH(192.168.7.2/knownHostKeyAlias), optionalknownWiFi192.168.1.232. Startlogger,
+verifyimage/productriver/tempbootONLY. AskfreshhomeRESPONSIVE+readytolisten.
+verify-installed.py checksfreshauto/queue/route state andexactinstalledhelper.
+Thenprepare-device.py ONCE muted. stage-inputs.py installs/byteverifiespaired
+apphelper andverifiespersistent5760044byteWAV ondevice; NOSNAPSHOT/QUEUEarms.
+Immediatelisteningcue,run-auto.py ONCE: supervised--auto-enable,ordinaryappplays
+TWO4sec nativebursts separatedby6secidle. Nativewrites mustautomaticallystart,
+idle/close/silencedrain,andrestartusingguardedreuse. Noqueue-run/GO controls.
+SSHappstdinDEVNULL. Runnercapturesper-sessionqueue/EOS/cleanup anddisablesbackend
+oncewhenappfinishes,requires2sessions/1restart/zerofaults/zeroqueueunderruns/
+overflows/fullcleanup/workerexit. Askuserheardaudio+UIresponsiveaftertest.
+
+NOTEvalidationlimits:3sessions/240blocksper-session,6secindependenthardcap;
+backendnotproduction/unbounded/bootautostart. Error/poisonblocksrestart. DoNOT
+resetone-shotsmanually. Read latesthandoffifnewer; neveroverwriteevidence.
+
 ## Active handoff:0330 automatic lifecycle implementation prepared (2026-11-16)
 
 Userrequested automaticplayback lifecycle THENphysicalmicrophone, batching each
