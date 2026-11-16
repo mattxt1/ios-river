@@ -5,6 +5,16 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0329 temporary boot accepted; fresh readiness pending (2026-11-16)
+
+Userconfirmedfastbootready; exactimageSHA8635fca1.../helpersandproductriver
+serialZY226HM8QB reverified. Temporarybootaccepted0.840s, noflash. CURRENT
+PHONE329, NOactiveaudio controls yet. USBUDPloggerstartedbeforeboot; evidence
+work/listening-window/fastboot-preflight.json,fastboot-boot-3000f42.txt,
+verified-boot.json. Manifestupdated. Freshhome-responsive+readytolistenquestion
+pending. MUSTwaitreply beforecontrols; passiveinstalled-helperverificationnext.
+Then mutedprepare/stageinputs/longPTY/cueGO perexactprocedurebelow. No328retries.
+
 ## Active handoff:0329 corrected muted-window image verified (2026-11-16)
 
 0329 nativebuildPASSED exit0/source3000f424e90d407d736fcea08ee5e8960fdf5142,
