@@ -5,6 +5,18 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0328 temporary boot accepted; fresh home/listening gate pending (2026-11-16)
+
+User confirmed ready in fastboot. Reverified serialZY226HM8QB/productriver,
+image SHA3b4a606c... and helper SHAf85c45af... . Temporary boot accepted0.841s;
+NO flash. Current phone0328; NO active audio controls sent. USB UDP bootlogger
+started before boot. Evidence work/runtime/fastboot-preflight.json,
+fastboot-boot-11c08bb.txt and verified-boot.json; image manifest updated.
+Initial passive SSH: USB connectionrefused, WiFi192.168.1.232 timeout during
+startup. No remote controls executed. Fresh home RESPONSIVE+ready-to-listen
+question pending. Do not run prerequisites until reply and installed-helper/
+fresh-state verification. Read scripts before executing; next procedure below.
+
 ## Active handoff:0328 final image verified; fastboot readiness pending (2026-11-15)
 
 Final0328 native build11c08bbae5bd10139140936b25f8c18d20c15515 PASSED exit0,
