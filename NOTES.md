@@ -5,6 +5,18 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0331 temporarily booted; home confirmation pending (2026-11-16)
+
+User confirmed fastboot ready. Reverified image2bf87cfa... and both helper hashes,
+productriver/serialZY226HM8QB. Temporary fastboot boot accepted0.854s; NOflash.
+CURRENT PHONE331, NOactive audio controls sent; mic/auto should be unrequested.
+USBboot logger running with private O_EXCL evidence. work/microphone contains
+fastboot-preflight.json, fastboot-boot-dd3144c.txt and verified-boot.json;
+manifestupdated phone_current_patch331. User asked to confirm fresh home is
+responsive and ready for mic test; WAIT for reply before any active controls.
+Then follow verified procedure below, muted prepare once, cue speech/taps,
+request capture once. Hardware capture and acoustic response remain pending.
+
 ## Active handoff:0331 microphone image verified; fastboot requested (2026-11-16)
 
 Native build dd3144cbe7523b3dcee97a2c1998a12425d2ed43 passed exact local KDK.
