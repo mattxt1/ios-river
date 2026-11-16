@@ -280,3 +280,21 @@ stop cleans up without enabling output. Short mode retains0327's original cap.
 Actual cdev, queue, pipeline, lease and gate tests pass. Hardware validation is
 pending. Current0327 controls are consumed; a new verified temporary boot is
 required. Normal automatic playback and physical microphone remain pending.
+
+## Automatic session lifecycle candidate0330
+
+After muted DSP prerequisites, `--auto-enable` activates a supervised backend.
+Native writes start the queue/worker automatically; no per-play route command.
+Last writer close,500ms sustained silence or150ms inactivity drains accepted
+buffers, renderedEOS, mute and full teardown. Later writes may restart only
+following verified complete restoration and returned user-copy reservations.
+The permanent mapped page is reused only after acknowledged unmap, and APR
+sequence/NGD channel IDs remain monotonic. Ownership/fault/restoration failure
+is sticky until reboot. `--auto-disable` drains and disables the worker.
+
+The first hardware test limits the backend to3sessions and each session to
+240blocks plus the verified6second hard cap. End-of-file may pad a partial
+transport block, reported separately. HAL status advertises bounded queued
+playback while enabled; mic continues to advertise synthetic capture. This
+candidate has passed actual-code lifecycle/transport/lease/cleanup tests but
+has not booted. Playback lifecycle hardware validation precedes physical mic.

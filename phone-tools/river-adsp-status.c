@@ -104,6 +104,10 @@ int main(int argc,char **argv) {
  if(argc==3 && !strcmp(argv[1],"--file-sha256"))return file_sha256(argv[2]);
  int rc=0,request=1;
  const char *status="debug.river_adsp_status";
+ if(argc==2 && (!strcmp(argv[1],"--auto-enable") || !strcmp(argv[1],"--auto-disable") || !strcmp(argv[1],"--auto-status"))) {
+  status="debug.river_audio_auto_status";request=strcmp(argv[1],"--auto-disable")?1:0;
+  if(strcmp(argv[1],"--auto-status") && sysctlbyname("debug.river_audio_auto",NULL,NULL,&request,sizeof(request))) {perror("Native audio lifecycle");rc=1;}
+ } else
  if(argc==2 && (!strcmp(argv[1],"--queue-arm") || !strcmp(argv[1],"--queue-run") || !strcmp(argv[1],"--queue-stop") || !strcmp(argv[1],"--queue-status") || !strcmp(argv[1],"--queue-arm-long") || !strcmp(argv[1],"--queue-run-long") || !strcmp(argv[1],"--queue-go"))) {
   status="debug.river_audio_queue_status";
   if(!strcmp(argv[1],"--queue-arm-long"))request=5;
@@ -179,7 +183,7 @@ int main(int argc,char **argv) {
  } else if(argc==3&&!strcmp(argv[1],"--metadata")) rc=metadata_test(argv[2]);
  else if(argc==3&&!strcmp(argv[1],"--stage-image")) rc=stage_image(argv[2]);
  else if(argc!=1) {
-  fprintf(stderr,"Usage: %s [--probe|--handshake-init|--metadata PATH|--stage-image PATH|--start|--start-status|--apr|--apr-status|--pcm-map|--asm-test|--afe-probe|--pcm-status|--afe-config|--adm-route|--afe-route|--route-status|--pcm-silence|--stream-status|--slim-discover|--slim-power|--slim-ngd|--slim-status|--ngd-enumerate|--ngd-status|--channel-test|--channel-status|--codec-route|--codec-route-status|--codec-pcm|--codec-tone|--codec-native-pcm|--native-stage-arm|--native-stage-status|--queue-arm|--queue-run|--queue-stop|--queue-status|--queue-arm-long|--queue-run-long|--queue-go|--file-sha256 PATH]\n",argv[0]);return 2;
+  fprintf(stderr,"Usage: %s [--probe|--handshake-init|--metadata PATH|--stage-image PATH|--start|--start-status|--apr|--apr-status|--pcm-map|--asm-test|--afe-probe|--pcm-status|--afe-config|--adm-route|--afe-route|--route-status|--pcm-silence|--stream-status|--slim-discover|--slim-power|--slim-ngd|--slim-status|--ngd-enumerate|--ngd-status|--channel-test|--channel-status|--codec-route|--codec-route-status|--codec-pcm|--codec-tone|--codec-native-pcm|--native-stage-arm|--native-stage-status|--queue-arm|--queue-run|--queue-stop|--queue-status|--queue-arm-long|--queue-run-long|--queue-go|--file-sha256 PATH|--auto-enable|--auto-disable|--auto-status]\n",argv[0]);return 2;
  }
  char note[8192]={0};size_t n=sizeof(note)-1;
  if(sysctlbyname(status,note,&n,NULL,0)) {perror("ADSP status");return 1;}

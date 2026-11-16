@@ -136,6 +136,9 @@ static int quiet_printf(const char *format,...) {(void)format;return 0;}
 #undef printf
 #define printf quiet_printf
 static struct {bool stop,armed,long_mode,waiting_output,go;unsigned used,discarded_at_stop;} ri_audio_queue;
+#if RIVER_LIFECYCLE
+static struct {bool active;} ri_audio_auto;
+#endif
 #if RIVER_LONG_RUNTIME
 static uint64_t host_gate_now;
 static uint64_t ri_pipeline_now(void){return host_gate_now;}
@@ -310,6 +313,15 @@ int main(void)
   if(scenario==65)assert(rc==ETIMEDOUT && !output_starts && !ri_live_stream.complete && host_gate_now==(RIVER_LISTENING_WINDOW?90000000000ULL:15000000000ULL));
  }
  puts("PASS actual listening gate: no output until GO, long EOS, explicit stop and timeout clean the still-muted route");
+#endif
+#if RIVER_LIFECYCLE
+ stream_reset(2);assert(!ri_stream_test());commands=write_count=0;expected_stream=0x05010000;
+ assert(!ri_stream_execute(&ri_live_stream,5));vm_offset_t reused=ri_live_stream.page;assert(allocations==2);
+ /* Lifecycle guard is tested separately; exercise stream allocation after
+  * acknowledged teardown using the same permanent physical page. */
+ ri_live_stream.attempted=ri_live_stream.complete=false;commands=write_count=0;
+ assert(!ri_stream_execute(&ri_live_stream,5) && ri_live_stream.page==reused && allocations==2 && ri_live_stream.completed==8 && !ri_live_stream.mapped);
+ puts("PASS acknowledged DMA page reuse across stream lifetimes without additional permanent allocations");
 #endif
  puts("actual-code zero-PCM map/RUN/WRITE ownership, completion and failure teardown tests passed");
  return 0;

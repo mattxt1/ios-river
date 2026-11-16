@@ -5,6 +5,41 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0330 automatic lifecycle implementation prepared (2026-11-16)
+
+Userrequested automaticplayback lifecycle THENphysicalmicrophone, batching each
+build/boot.0330 adds explicitonce-per-boot supervised --auto-enable after muted
+DSPprerequisites. Thereafter nativewrites automatically arm/prefill/start an
+independentrouteworker; no per-playqueue-run/GO/snapshot replay. Lastclose,
+500ms sustainedsilence, or150ms inactivewriter drainsacceptedbuffers/EOS and
+mutes/restoresroute. Newwrites restartonlyafter full acknowledgedcleanup and
+pendingusercopiesreturn. Initialhardwarevalidation capped3sessions, each240
+blocks/5.12secPCM withsame750msrenewablehealthlease/6secindependenthardcap.
+Thisis lifecyclevalidation, notunboundedautomaticproductionaudio yet.
+
+PermanentliveDMApage reusedonlyafterunmap/returnedbuffers; APRsequence andNGD
+channelTIDmonotonic(across3sessions). Guard verifiesallDSP/channelownership,
+EOS, codec/AIF/amp restoration, protective mute andexactidleampsnapshot; live
+I2Squietpredicate wouldincorrectlyrejectrestoredidlebits. Anyfailure/uncertainty
+blocksrestartuntilreboot. LastpartialEOFblock explicitlyzeropadsandcountsEOF
+padding; no fabricatedunderrun/capture. HALflags advertiseboundedqueuedbackend
+onlywhileenabled, preserve synthetictag formic. Olderdiagnosticcontrolsremain
+oneshotandrefuseroute/channel/queuecontrolswhileautomaticworkerownsservice.
+
+Actualcode sanitizerchecks pass native-first-write/silence/idle/close/drain,
+240buffertransport, partialEOF, reservations/concurrency/cancellation, exact
+teardown/rearm/restart, monotonicIDs/page reuse, stickyfault/poison/restoration
+failures, limits, lease and stream/codec regressions. Apphelper --lifecycle-pair
+willplaytwo4secAVAudioPlayerbursts separatedby6secidle. Automaticstart+teardown+
+restart mustpassonhardware BEFOREmiccaptureimplementation/hardwarework.
+Build/package pending. Sourceinputs work/lifecycle inexistingcanonicalworkspace.
+
+CURRENT PHONE329remainsalloneshotsCONSUMED,ampmuted,allmaps/routesclosed.
+NOnewdevicecontrols. Preservetheverifiedlocalbuild/exactKDK;commitpatchbefore
+build. Once0330imageverified,askfastboot;temporarybootONLY. Freshhome/listening
+replyrequired; cueimmediatelybeforeapp startsafterbackend supervised-enable.
+HostappSSHmuststdinDEVNULL; noPTYGOcoordinationforthisautomatic test.
+
 ## Active handoff:0329 audible5second live PCM PASS (2026-11-16)
 
 USER HEARDfive-secondtone andconfirmed iOSRESPONSIVE. Longdevice-writePCM

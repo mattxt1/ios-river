@@ -16,6 +16,8 @@ static pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
 static unsigned held,uiomoves,io_fault,hw_writes;
 static void lck_mtx_lock(int *p){assert(p);assert(!pthread_mutex_lock(&mutex));held=1;}
 static void lck_mtx_unlock(int *p){assert(p && held);held=0;assert(!pthread_mutex_unlock(&mutex));}
+static void clock_get_uptime(uint64_t *out){*out=1;}
+static void absolutetime_to_nanoseconds(uint64_t t,uint64_t *out){*out=t;}
 #include "queue-actual.h"
 #define HAKIOS_AUDIO_CHANNELS 2
 #define HAKIOS_AUDIO_FRAME 4

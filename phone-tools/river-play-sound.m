@@ -31,9 +31,25 @@ int main(int argc, char **argv) {
         NSLog(@"play returned: %d; physical sound must be checked acoustically", ok);
         if (!ok) { [session setActive:NO error:NULL]; return 1; }
 
-        // Sleep while playing
-        NSTimeInterval dur = player.duration > 0 ? player.duration * (player.numberOfLoops + 1) + 0.5 : 2.0;
-        [NSThread sleepForTimeInterval:dur];
+        if (argc > 2 && strcmp(argv[2], "--lifecycle-pair") == 0) {
+            /* Two actual native app bursts separated by enough idle time
+             * for fully acknowledged route teardown. No direct device PCM. */
+            NSLog(@"Lifecycle burst 1 started");
+            [NSThread sleepForTimeInterval:4.0];
+            [player stop];
+            NSLog(@"Lifecycle burst 1 stopped; waiting for automatic idle teardown");
+            [NSThread sleepForTimeInterval:6.0];
+            player.currentTime = 0;
+            if (![player play]) { NSLog(@"Lifecycle burst 2 failed"); return 1; }
+            NSLog(@"Lifecycle burst 2 started");
+            [NSThread sleepForTimeInterval:4.0];
+            [player stop];
+            NSLog(@"Lifecycle burst 2 stopped; waiting for automatic idle teardown");
+            [NSThread sleepForTimeInterval:6.0];
+        } else {
+            NSTimeInterval dur = player.duration > 0 ? player.duration * (player.numberOfLoops + 1) + 0.5 : 2.0;
+            [NSThread sleepForTimeInterval:dur];
+        }
         NSLog(@"Done.");
         [session setActive:NO error:NULL];
     }
