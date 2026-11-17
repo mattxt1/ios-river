@@ -5,6 +5,27 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0334 cued speech capture transport PASS; clip recognition pending (2026-11-17)
+
+UserconfirmedALREADYCOUNTING beforecapture request. WiFi192.168.1.232 used
+throughout, noUSBfallback. CaptureONCE passed48exactREADcompletions/98304mono
+S16frames48k/2.048sec, peak544. FullDSPmap/ASM/ADM/AFE/sourcechannelcleanup,
+codec/FLL/pinrestore and ampmuteverified. USERconfirms iOSstillresponsive.
+Initialexport reusedpersistentpreviousphoneWAVname andO_EXCLcorrectlyrefused;
+checkedphysicalstashposition0/reads0/complete1 before uniqueexport, nohardware
+retry. Actualphysicalflag0x11/noSYNTHETIC2 verified; all98304samples exported,
+192reads/position98304. BotholdWAVandfailedfileexists evidence preserved.
+Original speech WAV work/microphone-speech/physical-speech-capture-75d189b.wav,
+SHA6aea9c05812326a8a79099ade5e904108b053c114b68ce8e7d6ad67706bd5e56.
+RMS100ms showsquiet~3, bursts47-168 vspeak14onmissedcuebaseline. Supports
+acoustic response duringcounting, butrecognizablevoice notyetuserconfirmed.
+Private48xreviewcopyphysical-speech-review-48x-75d189b.wav createdwithout
+clipping/originalchange andrenderedinaudio player; useraskedrecognizecounting.
+WAITrecognitionreply. speech-review.json/evidence manifest andbuildmanifest
+updated. Current334alloneshotsconsumed/stashexhausted/mapsroutesclosed/ampmuted.
+Noactivecontrolretry. Thisremainsboundedphysicalsnapshot, notcontinuousmic.
+Future exports must useuniqueper-run remoteWAVnames asfilespersistacrossboot.
+
 ## Active handoff:0334 speech capture prepared; counting confirmation pending (2026-11-17)
 
 UserreconnectedUSB/joinedWiFi/confirmedresponsive. MacUSB en6 recoveredUP/
