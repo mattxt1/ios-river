@@ -5,6 +5,33 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0334 microphone transport PASS; speech cue missed (2026-11-17)
+
+Fresh userresponsive/ready, exact helper/freshstate verification and muted
+prepareONCE passed. Speech cue thencaptureONCE:48submitted/48exactREAD_DONE,
+98304monoS16frames48k/2.048sec, no poison/error/uncertainty. Fullcleanup:
+map/inflight/ASM/ADM/AFE/source/channeldefined+active all0, codec restored1,
+FLLoff1/clock_restored1/pins_restored1, cleanup_error0; ampstillmute0x10.
+Physicalflag0x11 (capturebit16/noSYNTHETICbit2) verified; /dev/hakios-mic
+export98304samples/192reads/EOFposition98304. WAV SHA
+c29095de892c1d0220c91ebfeebde7a65ade1dfda97189dcd8c676e77cbb722d,
+peak14/RMS~3/nonzeroquietdata. USERmissed speechcue, confirmsiOSresponsive.
+Thus transport+cleanup+cdev PASS, acoustic response UNVERIFIED; don't call
+quietdata speechfailure or proventransduction. Defaultsynthetic remains until
+explicitcapturecomplete; this is bounded snapshot, notcontinuous mic.
+Evidence work/microphone-copp/capture-{transport,signal}-result.json, final
+status/surveys and privatephysical-capture-75d189b.wav; buildmanifest updated.
+
+CURRENT PHONE334 alloneshots consumed/stash exhausted, maps/routesclosed,
+ampmuted. NOactive retry. Repeat acoustic validation needsfresh SAMEverified
+0334image, no sourcechange/newbuild needed. New isolatedrunner/evidence path
+work/microphone-speech prepared; sameimagea326c63f.../source75d189b. Request
+fastboot afterverifiedimage; temporaryboot only. Freshhome thenverifyinstalled/
+mutedprepare/stageexporter. AFTERprepare askuser to STARTcountingnearbottommic
+and keepcounting while clicking 'Already counting'. Onreply immediately
+run-captureONCE; avoid speech cue during asynchronous tools whereuser maymiss.
+Fullcleanup beforeexport, preserveprivateaudio. No furthercontrols yet.
+
 ## Active handoff:0334 temporarily booted; home reply pending (2026-11-17)
 
 User confirmed fastboot ready. Reverified imagea326c63f... and both helper

@@ -58,3 +58,11 @@
   used on329 after confirming go0/waiting1; never resend without exact state.
 - Battery, display, touch and backlight status is documented in `README.md` and
   subsystem docs. Do not infer charging or other subsystem success from audio.
+
+- Patch0334 bounded microphone TRANSPORT passed48exactREADcompletions/98304mono
+  S16samples48k/fullDSP+codec+clock+pincleanup and physicalstash cdev export.
+  User missed speech cue; acoustic response UNVERIFIED (peak14), iOS responsive.
+  Current334 one-shot consumed, stash exhausted; no active retry on this boot.
+  Repeat speech validation on fresh SAMEverified0334 image; start counting
+  BEFORE user confirms so capture catches speech. Default remains synthetic,
+  explicit bounded physical snapshot is not continuous microphone input.

@@ -39,8 +39,15 @@ See `NOTES.md` for exact evidence and current consumed device state.
 Patch0330 passed automatic native-write start, sustained-silence drain and
 guarded restart across two sessions, with zero queue underruns/overflows and
 full cleanup. The user missed listening; audibility is unobserved. The backend
-remains supervised and bounded to three sessions. Physical microphone work
-is now next; capture still synthesizes samples until that path is validated.
+remains supervised and bounded to three sessions.
+
+Patch0334 passed explicit bounded microphone transport: 48 exact DSP READ
+completions returned 98,304 mono S16 samples at48kHz (2.048seconds), followed
+by full map/ASM/ADM/AFE/channel/codec/clock/pin cleanup and a verified physical
+snapshot read through `/dev/hakios-mic`. The user missed the speech cue; the
+quiet recording does not establish acoustic response. iOS remained responsive.
+Speech validation and continuous microphone input remain pending. The default
+mic endpoint remains tagged synthetic until explicit snapshot capture succeeds.
 
 ## Status and evidence
 
