@@ -54,7 +54,8 @@ int main(void){
  int16_t block[2048]={0};block[0]=32767;block[1]=-32768;
  for(unsigned n=0;n<8;n++)assert(!ri_mic_live_push(block,2048,2));
  assert(ri_mic_live_push(block,2048,2)==EOVERFLOW && ri_mic_live.overruns==1 && ri_mic_live.used==16384 && ri_mic_live.levels[2].clipped==16 && ri_mic_live.levels[2].peak==32768);
- ri_mic_live_read_fault(512);assert(ri_mic_live.stop && ri_mic_live.discarded==512 && ri_mic_live.read_faults==1);
+ assert(ri_mic_live_read(samples,512,true)==512);ri_mic_live_read_fault(512);assert(ri_mic_live.stop && ri_mic_live.discarded==2560 && ri_mic_live.read_faults==1);
+ assert(ri_mic_live.produced==ri_mic_live.consumed+ri_mic_live.discarded+ri_mic_live.used);
  reset();ri_mic_live.enabled=true;ri_mic_live.last_read=ri_audio_queue_now()-251000000ULL;assert(ri_mic_live_stop() && ri_mic_live.reason==3);
  puts("PASS actual continuous mic ring: concurrent 409600-frame delivery beyond snapshot capacity, ordering/no loss, gain/clipping stats, close/reopen, nonblocking/interruptible waits, sticky errors, overrun and read-fault cancellation");
  return 0;

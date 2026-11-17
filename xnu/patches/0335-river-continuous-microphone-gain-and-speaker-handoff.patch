@@ -251,7 +251,7 @@ diff --git a/bsd/dev/river_mic_lifecycle.h b/bsd/dev/river_mic_lifecycle.h
 diff --git a/bsd/dev/river_mic_live.h b/bsd/dev/river_mic_live.h
 --- /dev/null
 +++ b/bsd/dev/river_mic_live.h
-@@ -0,0 +1,143 @@
+@@ -0,0 +1,145 @@
 +/* Explicit supervised physical input. The stash mutex owns only CPU ring and
 + * lifecycle metadata. Device readers sleep interruptibly; hardware stays on
 + * the dedicated worker. No DSP ownership waits or SPI under this mutex. */
@@ -295,11 +295,12 @@ diff --git a/bsd/dev/river_mic_live.h b/bsd/dev/river_mic_live.h
 +static int ri_mic_live_push(const int16_t *samples,unsigned frames,unsigned gain) {
 + if(!samples || frames>2048 || gain>2)return EINVAL;
 + lck_mtx_lock(&ri_mic_buffer_lock);
++ ri_mic_live.produced+=frames;
 + if(ri_mic_live.stop || !ri_mic_live.enabled) {
 +  ri_mic_live.discarded+=frames;lck_mtx_unlock(&ri_mic_buffer_lock);return 0;
 + }
 + if(frames>RI_MIC_RING_FRAMES-ri_mic_live.used) {
-+  ri_mic_live.overruns++;ri_mic_live.error=EOVERFLOW;
++  ri_mic_live.overruns++;ri_mic_live.error=EOVERFLOW;ri_mic_live.discarded+=frames;
 +  lck_mtx_unlock(&ri_mic_buffer_lock);return EOVERFLOW;
 + }
 + for(unsigned n=0;n<frames;n++) {
@@ -311,7 +312,7 @@ diff --git a/bsd/dev/river_mic_live.h b/bsd/dev/river_mic_live.h
 +  if(peak>ri_mic_live.levels[gain].peak)ri_mic_live.levels[gain].peak=peak;
 +  if(peak>=32760)ri_mic_live.levels[gain].clipped++;
 + }
-+ ri_mic_live.used+=frames;ri_mic_live.produced+=frames;
++ ri_mic_live.used+=frames;
 + if(ri_mic_live.used>ri_mic_live.high_water)ri_mic_live.high_water=ri_mic_live.used;
 + wakeup(&ri_mic_live);lck_mtx_unlock(&ri_mic_buffer_lock);return 0;
 +}
@@ -356,6 +357,7 @@ diff --git a/bsd/dev/river_mic_live.h b/bsd/dev/river_mic_live.h
 + lck_mtx_lock(&ri_mic_buffer_lock);
 + if(ri_mic_live.attempted) {
 +  ri_mic_live.read_faults++;ri_mic_live.discarded+=frames;
++  if(ri_mic_live.consumed>=frames)ri_mic_live.consumed-=frames;
 +  ri_mic_live.stop=true;ri_mic_live.reason=4;
 + }
 + lck_mtx_unlock(&ri_mic_buffer_lock);
