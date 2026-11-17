@@ -1,0 +1,92 @@
+diff --git a/bsd/dev/river_adsp_capture.h b/bsd/dev/river_adsp_capture.h
+--- a/bsd/dev/river_adsp_capture.h
++++ b/bsd/dev/river_adsp_capture.h
+@@ -8,6 +8,8 @@
+  uint32_t handle,copp;
+  unsigned submitted,completed,frames,peak,tid,bad_reg;
+  unsigned afe_words;uint32_t afe_reply[10];
++ unsigned adm_words;uint32_t adm_reply[2],failed_opcode,failed_status;
++ uint32_t failure_rx_header,failure_rx_source,failure_rx_destination,failure_rx_token,failure_rx_opcode;
+  int error,cleanup_error;
+  const char *phase;
+ } ri_mic;
+@@ -16,7 +18,14 @@
+  const uint32_t *payload,unsigned words,struct ri_apr_reply *reply)
+ {
+  struct ri_apr_request request={source,destination,0,opcode,response,payload,words};
+- return ri_pcm_transaction(&request,reply);
++ int error=ri_pcm_transaction(&request,reply);
++ if(error && !ri_mic.failed_opcode) {
++  ri_mic.failed_opcode=opcode;ri_mic.failed_status=reply->status;
++  ri_mic.failure_rx_header=ri_pcm.rx_header;ri_mic.failure_rx_source=ri_pcm.rx_source;
++  ri_mic.failure_rx_destination=ri_pcm.rx_destination;ri_mic.failure_rx_token=ri_pcm.rx_token;
++  ri_mic.failure_rx_opcode=ri_pcm.rx_opcode;
++ }
++ return error;
+ }
+ /* Validate ALL returned DMA metadata before invalidation or CPU access. A
+  * foreign address/handle, range or metadata layout retains mapping ownership. */
+@@ -118,9 +127,19 @@
+  ri_mic.phase="adm_tx_open";
+  uint32_t device[]={2u<<16,0xffff4001,0x10312,(16u<<16)|1,48000,3,0};
+  error=ri_mic_command(0x40010508,0x40010408,0x10326,0x10329,device,7,&reply);if(error)return error;
+- if(reply.words!=2 || reply.data[0] || (reply.data[1]>>16) || reply.data[1]>=0xff) {
++ ri_mic.adm_words=reply.words;
++ if(reply.words)ri_mic.adm_reply[0]=reply.data[0];
++ if(reply.words>1)ri_mic.adm_reply[1]=reply.data[1];
++ if(reply.words!=2 || (!reply.data[0] && ((reply.data[1]>>16) || reply.data[1]>=0xff))) {
++  ri_mic.failed_opcode=0x10326;ri_mic.failed_status=reply.data[0];
++  ri_mic.failure_rx_header=ri_pcm.rx_header;ri_mic.failure_rx_source=ri_pcm.rx_source;
++  ri_mic.failure_rx_destination=ri_pcm.rx_destination;ri_mic.failure_rx_token=ri_pcm.rx_token;
++  ri_mic.failure_rx_opcode=ri_pcm.rx_opcode;
+   ri_pcm.poisoned=true;return EIO;
+  }
++ /* Exact typed nonzero status is a completed rejection, not unknown COPP
++  * ownership. Preserve status and close ASM/AFE/map/channel normally. */
++ if(reply.data[0]) {ri_mic.failed_opcode=0x10326;ri_mic.failed_status=reply.data[0];return EREMOTE;}
+  ri_mic.copp=reply.data[1];ri_mic.adm_open=true;
+  uint32_t matrix[]={1,1,0x10000|6,ri_mic.copp};ri_mic.phase="tx_matrix";
+  error=ri_mic_command(0x508,0x408,0x10325,0,matrix,4,&reply);if(error)return error;
+diff --git a/bsd/dev/river_mic_buffer.h b/bsd/dev/river_mic_buffer.h
+--- a/bsd/dev/river_mic_buffer.h
++++ b/bsd/dev/river_mic_buffer.h
+@@ -6,7 +6,7 @@
+  int error;
+  unsigned frames,position,peak,reads;
+  int16_t samples[98304];
+- char note[1536];
++ char note[2048];
+ } ri_mic_capture;
+ 
+ static LCK_GRP_DECLARE(ri_mic_buffer_group,"river-physical-mic");
+@@ -42,7 +42,7 @@
+ static int
+ river_mic_capture_status_sysctl SYSCTL_HANDLER_ARGS
+ {
+- char note[2048];lck_mtx_lock(&ri_mic_buffer_lock);
++ char note[2560];lck_mtx_lock(&ri_mic_buffer_lock);
+  snprintf(note,sizeof(note),"attempted=%u done=%u complete=%u error=%d frames=%u position=%u peak=%u reads=%u rate=48000 channels=1 bits=16 capacity_frames=98304 source=physical_codec_in1al transport=adsp_read_v2 scope=explicit_bounded_snapshot capture_backend=%s %s",
+  ri_mic_capture.attempted,ri_mic_capture.done,ri_mic_capture.complete,ri_mic_capture.error,
+  ri_mic_capture.frames,ri_mic_capture.position,ri_mic_capture.peak,ri_mic_capture.reads,
+diff --git a/bsd/dev/river_mic_route.h b/bsd/dev/river_mic_route.h
+--- a/bsd/dev/river_mic_route.h
++++ b/bsd/dev/river_mic_route.h
+@@ -154,13 +154,16 @@
+  lck_mtx_lock(&ri_mic_buffer_lock);
+  ri_mic_capture.done=true;ri_mic_capture.complete=ri_mic.complete;ri_mic_capture.error=error;
+  ri_mic_capture.frames=ri_mic.complete?ri_mic.frames:0;ri_mic_capture.peak=ri_mic.peak;
+- snprintf(ri_mic_capture.note,sizeof(ri_mic_capture.note),"phase=%s poisoned=%u mapped=%u in_flight=%u submitted=%u completed=%u asm_open=%u adm_open=%u afe_started=%u source_connected=%u channel_defined=%u channel_active=%u uncertain=%u codec_restored=%u cleanup_error=%d bad_reg=%#x hardware_frames=%u afe_words=%u afe_reply=%#x,%#x,%#x,%#x,%#x,%#x,%#x,%#x,%#x,%#x amp_output_enable_requested=0 codec_clock={%s}",
++ snprintf(ri_mic_capture.note,sizeof(ri_mic_capture.note),"phase=%s poisoned=%u mapped=%u in_flight=%u submitted=%u completed=%u asm_open=%u adm_open=%u afe_started=%u source_connected=%u channel_defined=%u channel_active=%u uncertain=%u codec_restored=%u cleanup_error=%d bad_reg=%#x hardware_frames=%u afe_words=%u afe_reply=%#x,%#x,%#x,%#x,%#x,%#x,%#x,%#x,%#x,%#x adm_words=%u adm_reply=%#x,%#x failed_opcode=%#x failed_status=%#x failure_rx_header=%#x failure_rx_source=%#x failure_rx_destination=%#x failure_rx_token=%#x failure_rx_opcode=%#x amp_output_enable_requested=0 codec_clock={%s}",
+  ri_mic.phase?ri_mic.phase:"clock_prerequisite",ri_pcm.poisoned,ri_mic.mapped,ri_mic.in_flight,
+  ri_mic.submitted,ri_mic.completed,ri_mic.asm_open,ri_mic.adm_open,ri_mic.afe_started,
+  ri_mic.connected,ri_mic.defined,ri_mic.active,ri_mic.uncertain,ri_mic.codec_restored,
+  ri_mic.cleanup_error,ri_mic.bad_reg,ri_mic.frames,ri_mic.afe_words,
+  ri_mic.afe_reply[0],ri_mic.afe_reply[1],ri_mic.afe_reply[2],ri_mic.afe_reply[3],ri_mic.afe_reply[4],
+- ri_mic.afe_reply[5],ri_mic.afe_reply[6],ri_mic.afe_reply[7],ri_mic.afe_reply[8],ri_mic.afe_reply[9],ri_clock_note);
++ ri_mic.afe_reply[5],ri_mic.afe_reply[6],ri_mic.afe_reply[7],ri_mic.afe_reply[8],ri_mic.afe_reply[9],
++ ri_mic.adm_words,ri_mic.adm_reply[0],ri_mic.adm_reply[1],ri_mic.failed_opcode,ri_mic.failed_status,
++ ri_mic.failure_rx_header,ri_mic.failure_rx_source,ri_mic.failure_rx_destination,
++ ri_mic.failure_rx_token,ri_mic.failure_rx_opcode,ri_clock_note);
+  lck_mtx_unlock(&ri_mic_buffer_lock);lck_mtx_unlock(&ri_adsp_lock);
+  (void)thread_terminate(current_thread());thread_block(THREAD_CONTINUE_NULL);
+ }

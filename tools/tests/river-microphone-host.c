@@ -22,7 +22,7 @@ static void lck_mtx_unlock(int *p){assert(p && held);held=0;}
 #include "mic-buffer-actual.h"
 struct ri_apr_request {uint32_t source,destination,token,opcode,response;const uint32_t *payload;unsigned words;};
 struct ri_apr_reply {uint32_t status,data[32];unsigned words;bool sent,complete;};
-static struct {bool poisoned;} ri_pcm;
+static struct {bool poisoned;uint32_t rx_header,rx_source,rx_destination,rx_token,rx_opcode;} ri_pcm;
 static struct {unsigned ack_tid,ack_status;bool acked,ack_waiting;} ri_ngd;
 static uint64_t now;
 static unsigned mode,reads,invalidations,commands,fail_opcode,transport_calls,codec_writes,fail_write;
@@ -55,7 +55,12 @@ static int ri_pcm_transaction(struct ri_apr_request *r,struct ri_apr_reply *repl
  }
  case 0x10db4:{uint32_t expected[]={0,0,0x10c68,0x10da5,16};assert(r->source==(stream|0x507) && r->destination==(stream|0x407) && r->words==5 && !memcmp(expected,r->payload,sizeof(expected)));break;}
  case 0x10c10:{uint32_t expected[]={0x10da3,28,0,20,(16u<<16)|1,48000,1,3,0};assert(r->words==9 && !memcmp(expected,r->payload,sizeof(expected)));break;}
- case 0x10326:assert(r->source==0x40010508 && r->destination==0x40010408 && r->words==7 && r->payload[0]==(2u<<16) && r->payload[1]==0xffff4001 && r->payload[5]==3);reply->words=2;reply->data[1]=7;break;
+ case 0x10326:assert(r->source==0x40010508 && r->destination==0x40010408 && r->words==7 && r->payload[0]==(2u<<16) && r->payload[1]==0xffff4001 && r->payload[5]==3);reply->words=2;reply->data[1]=7;
+ if(mode==60){reply->data[0]=2;reply->data[1]=0xffff;}
+ if(mode==61)reply->words=1;
+ if(mode==62)reply->data[1]=0x10007;
+ if(mode==63)reply->data[1]=0xff;
+ break;
  case 0x10325:assert(r->words==4 && r->payload[0]==1 && r->payload[1]==1 && r->payload[2]==0x10006 && r->payload[3]==7);break;
  case 0x10daa:assert(r->words==3);break;
  case 0x10dac:{
@@ -103,6 +108,10 @@ int main(void){
  ri_mic_capture.attempted=ri_mic_capture.done=ri_mic_capture.complete=true;ri_mic_capture.frames=ri_mic.frames;assert(ri_mic_buffer_flags()==16);
  for(unsigned i=0;i<192;i++){assert(ri_mic_buffer_read(samples,512)==512);assert(samples[0]==4321 && samples[1]==-1234);}assert(!ri_mic_buffer_read(samples,512));
  ri_mic_dsp_cleanup();assert(!ri_mic.mapped && !ri_mic.asm_open && !ri_mic.adm_open && !ri_mic.afe_started && !ri_mic.running && !ri_mic.cleanup_error);
+ reset();mode=60;ri_mic.mapped=ri_mic.afe_started=true;assert(ri_mic_dsp_run()==EREMOTE && !ri_pcm.poisoned && !ri_mic.adm_open && ri_mic.failed_opcode==0x10326 && ri_mic.failed_status==2 && ri_mic.adm_words==2 && ri_mic.adm_reply[1]==0xffff);
+ ri_mic_dsp_cleanup();assert(!ri_mic.mapped && !ri_mic.asm_open && !ri_mic.afe_started && !ri_mic.cleanup_error);
+ for(unsigned n=61;n<=63;n++){reset();mode=n;ri_mic.mapped=ri_mic.afe_started=true;assert(ri_mic_dsp_run()==EIO && ri_pcm.poisoned && !reads && ri_mic.failed_opcode==0x10326);unsigned before=commands;ri_mic_dsp_cleanup();assert(commands==before && ri_mic.mapped);}
+ puts("PASS actual ADM TX typed rejection preserves exact status and permits cleanup; truncated/reserved/out-of-range success replies retain ownership");
  for(unsigned n=1;n<=12;n++){reset();mode=n;ri_mic.mapped=ri_mic.afe_started=true;assert(ri_mic_dsp_run()==EIO && ri_pcm.poisoned && ri_mic.in_flight && !invalidations && !ri_mic.frames);unsigned before=commands;ri_mic_dsp_cleanup();assert(commands==before && ri_mic.mapped);}
  reset();mode=13;assert(ri_mic_dsp_run()==ETIMEDOUT && reads==1 && !ri_pcm.poisoned && !ri_mic.in_flight);
  for(unsigned op=0;op<5;op++){reset();uint32_t ops[]={0x10db4,0x10c10,0x10326,0x10325,0x10daa};fail_opcode=ops[op];ri_mic.mapped=ri_mic.afe_started=true;assert(ri_mic_dsp_run()==EREMOTE);fail_opcode=0;ri_mic_dsp_cleanup();assert(!ri_mic.mapped && !ri_mic.asm_open && !ri_mic.adm_open && !ri_mic.afe_started);}

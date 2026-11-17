@@ -5,6 +5,29 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0332 AFE pass; ADM TX stop;0333 diagnostic correction (2026-11-17)
+
+Fresh home responsive/user ready. Exact helper/fresh state verified; muted
+prepareONCE passed; speech cue thencaptureONCE. AFE TX configuration/readback
+PASSED exact10words:0,1020c,10212,18,1,100000,10000,80,0,bb80.
+Capture progressed throughAFEstart/sourcechannel/ASMopen+encoderconfig, stopped
+phaseadm_tx_open/error5 withpoisoned1, submitted/completed0. NOphysical samples.
+Codec restored1/FLLoff1/clock_restored1/pins_restored1, amp stillmute0x10;
+DSPmap/ASM/AFE/sourcechannel remain retained/uncertain. DO NOTrepeat controls.
+USER confirms iOS responsive. Read-only kernel capture preserved, no extraaudio
+controls. Evidence work/microphone-readback. This is NOT fullDSPcleanup PASS.
+
+Found validation grouped typed ADM failure with malformedsuccess and poisoned
+both, hiding reason and preventing cleanup after a completed DSP rejection.
+0333 separates exact2word nonzero rejection (EREMOTE, noCOPPowned, cleanup
+allowed) from malformed/truncated/reserved/out-of-range success (retain/poison).
+Adds exact bounded ADM status/COPP and failure APRheader/source/dest/token/opcode
+metadata, expands status capacity, noaudio samples. Actual-code tests cover
+rejected open cleanup and all malformed-success retention cases; existingAFE,
+READownership/cache/cdev/codecrollback pass. Rootcauseofactual0332ADM response
+is not yet proven because response metadata was absent;0333 will expose it.
+Nativebuild/package pending; commit first. Current332 consumed; no active retry.
+
 ## Active handoff:0332 temporarily booted; home reply pending (2026-11-17)
 
 User confirmed fastboot ready. Reverified image d34f7972... and both helper

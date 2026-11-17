@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """Actual physical-capture completion/stash/cleanup and codec rollback tests."""
 from pathlib import Path
-import subprocess,tempfile,os,difflib
+import subprocess,tempfile,os
 repo=Path(__file__).resolve().parent.parent
 patch=next((repo/'xnu/patches').glob('0331-*.patch')).read_text()
 def added(name):
  s=patch.split('diff --git a/bsd/dev/'+name,1)[1].split('diff --git ',1)[0]
  text='\n'.join(x[1:] for x in s.splitlines() if x.startswith('+') and not x.startswith('+++'))+'\n'
- p=next((repo/'xnu/patches').glob('0332-*.patch'),None)
- if p and 'diff --git a/bsd/dev/'+name in p.read_text():
-  with tempfile.TemporaryDirectory(prefix='river-mic-patch-',dir=repo.parents[1]/'work') as d:
-   root=Path(d);(root/'bsd/dev').mkdir(parents=True);(root/'bsd/dev'/name).write_text(text)
-   section='diff --git '+next(x for x in p.read_text().split('diff --git ')[1:] if x.startswith('a/bsd/dev/'+name+' '))
-   subprocess.run(['patch','--batch','--silent','--fuzz=0','-p1','-d',d],input=section.encode(),check=True)
-   text=(root/'bsd/dev'/name).read_text()
+ for pattern in ['0332-*.patch','0333-*.patch']:
+  p=next((repo/'xnu/patches').glob(pattern),None)
+  if p and 'diff --git a/bsd/dev/'+name in p.read_text():
+   with tempfile.TemporaryDirectory(prefix='river-mic-patch-',dir=repo.parents[1]/'work') as d:
+    root=Path(d);(root/'bsd/dev').mkdir(parents=True);(root/'bsd/dev'/name).write_text(text)
+    section='diff --git '+next(x for x in p.read_text().split('diff --git ')[1:] if x.startswith('a/bsd/dev/'+name+' '))
+    subprocess.run(['patch','--batch','--silent','--fuzz=0','-p1','-d',d],input=section.encode(),check=True)
+    text=(root/'bsd/dev'/name).read_text()
  return text
 with tempfile.TemporaryDirectory(prefix='river-mic-',dir=repo.parents[1]/'work') as d:
  root=Path(d)
