@@ -5,6 +5,29 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0334 speech run waiting USB reconnect; no audio controls (2026-11-17)
+
+Userconfirmedhome responsive onfresh334 speech-validation boot. Initial
+verify-installed.py failed firstREADONLYstartstatus atUSBSSHconnecttimeout,
+beforeauth/anycontrols. KnowntrustedWiFi192.168.1.232 also timedout. USB device
+stillenumerated asRiver, bootUDPlogreceived; Mac en6 MAC02:00:5e:77:ee:01 has
+no liveIPv4/statusinactive. networksetup savedManual192.168.7.1/24/routerNULL
+is intact. Existingreceiver helper usesifconfigalias; verifiedMAC/addressnot
+elsewhere then attempted sudo-n aliasrestore, passwordrequired/nochange.
+Noauto-reviewrejection, justmacOSsudoauthentication. Userasked unplug/replugUSB,
+leaveiOSathome andconfirmresponsive. WAITreply thencheckhostinterface/READONLY
+SSH. DoNOTrebootorconsumeaudio. Ifaddressstillmissing mayneedlocalterminal
+sudo /sbin/ifconfig en6 inet 192.168.7.1 netmask 255.255.255.0 alias up
+ONLYafterrevalidatingMAC/interface; don'taskforpasswordinchat.
+
+Active evidence work/microphone-speech. Failedbaseline-start movedto
+connection-failures/baseline-start-usb-timeout-75d189b.txt withmanifest to
+preservefailureandallowfreshREADONLYverification aftertransportrecovery.
+No installed-helper-verification.json/noactiveprepare/capture sent. Rerun
+verify-installed onlyafterrecovery, mutedprepareONCE, stageexporter. Thenask
+user STARTcountingbeforeclickAlreadycounting, immediatelycaptureONCE. Previous
+work/microphone-copp transport/fullcleanup PASS; acousticresponsepending.
+
 ## Active handoff:0334 speech-validation fresh boot; home pending (2026-11-17)
 
 Userconfirmedfastbootready. Reverified SAMEimagea326c63f.../bothhelpers and
