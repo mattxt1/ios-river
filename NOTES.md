@@ -5,6 +5,34 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0334 PHYSICAL MICROPHONE SPEECH PASS (2026-11-17)
+
+USERreports "clear crisp audio of my voice counting" in cuedphysicalcapture,
+afterconfirming iOSresponsive. This verifies acoustically recognizable physical
+microphone input, beyond transport-onlyproof. 48exactREADcompletions/98304mono
+S16samples48k/2.048sec; fullDSPmap/ASM/ADM/AFE/sourcechannel teardown andcodec/
+FLL/pinrestore verified; ampremainedmuted. Physicalflag16/noSYNTHETIC2 and
+/dev/hakios-mic exportall98304samples/192reads verified. Rawpeak544/32768;
+reviewcopy48xgain/no clipping, originalpreserved. Gaincalibration remains.
+Source75d189b/imagea326c63f unchangedfromfirsttransportpass; no newbuild.
+
+Evidence work/microphone-speech; originalphysical-speech-capture-75d189b.wav
+SHA6aea9c05812326a8a79099ade5e904108b053c114b68ce8e7d6ad67706bd5e56.
+Transport/signal/reviewJSON andoutputs/microphone-copp-wifi-build-manifest.json
+updatedwithuserconfirmation. CurrentPHONE334oneshotsCONSUMED/stashEXHAUSTED,
+allmaps/routesclosed/ampmuted. DoNOTrepeatactivecontrols onthisboot.
+USBSSHstilltimedoutafterreconnectdespitehostaddressrestored; trustedWiFiSSH
+192.168.1.232 handledallsetup/capture/export. Preserve thisknownstate.
+
+Userorderedautomaticplayback lifecycle THENmicrophonecapture:0330automatic
+start/drain/restarttransportpass(user missedlistening),0329audiblelivePCMproof,
+now0334physicalmic speechPASS. Stillbounded diagnostics: playbacksupervised/
+3sessions/6seccap, microphoneexplicitonce-per-boot2.048secsnapshot. Continuous
+physicalmic/request-drivenread/stop/restart, normalappcapture integration,
+gaincalibration/endurance/full-duplex arefuturework, notclaimedvalidated.
+Batchcoherentchangesinfuturebuilds/boots asuserrequested; nofreshbuildneeded
+justtoacknowledgethiscompletedphysicalcapturemilestone.
+
 ## Active handoff:0334 cued speech capture transport PASS; clip recognition pending (2026-11-17)
 
 UserconfirmedALREADYCOUNTING beforecapture request. WiFi192.168.1.232 used

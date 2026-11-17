@@ -66,3 +66,10 @@
   Repeat speech validation on fresh SAMEverified0334 image; start counting
   BEFORE user confirms so capture catches speech. Default remains synthetic,
   explicit bounded physical snapshot is not continuous microphone input.
+
+- Cued0334 speech capture PASSED: user recognized clear crisp voice/counting
+  in 2.048sec physical snapshot;48exactREADcompletions, fullcleanup and iOS
+  responsive. Evidence work/microphone-speech; originalpeak544, review48x/no
+  clipping. Current334consumed/stashexhausted/routesclosed/ampmuted. Noactive
+  retry. Continuousphysicalmic/gaincalibration remainpending; do not conflate
+  this explicit snapshot with continuous input. Useuniqueper-run exportWAVname.
