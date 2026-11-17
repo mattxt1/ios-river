@@ -7,7 +7,7 @@ patch=next((repo/'xnu/patches').glob('0331-*.patch')).read_text()
 def added(name):
  s=patch.split('diff --git a/bsd/dev/'+name,1)[1].split('diff --git ',1)[0]
  text='\n'.join(x[1:] for x in s.splitlines() if x.startswith('+') and not x.startswith('+++'))+'\n'
- for pattern in ['0332-*.patch','0333-*.patch']:
+ for pattern in ['0332-*.patch','0333-*.patch','0334-*.patch']:
   p=next((repo/'xnu/patches').glob(pattern),None)
   if p and 'diff --git a/bsd/dev/'+name in p.read_text():
    with tempfile.TemporaryDirectory(prefix='river-mic-patch-',dir=repo.parents[1]/'work') as d:

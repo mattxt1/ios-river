@@ -5,6 +5,26 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0333 identifies reserved ADM halfword;0334 correction prepared (2026-11-17)
+
+Fresh userresponsive/ready, exact helper/freshstate passed, mutedprepareONCE,
+speech cue/captureONCE. AFE TX exactreadback passed. ADM TX exact reply header
+0x280181/source40010408/dest40010508/token52420027/opcode10329,2words:
+status0 andword1f0b70009. DSPacceptedopen; our reserved-upper16 validation
+rejected success. Low16COPPid9, high16reservedf0b7. Pinned q6adm.c casts to
+struct with u16copp_id and never consumes reservedhalfword.0334 masks tolow16
+forvalidation/matrix/close while retainingrawdiagnostics; exact APRidentities,
+two-word/status checks and lowID<ff retained. Hardwarecapturestillpending.
+Actual-code sanitizer test reproduces exact observedword and verifies masked
+ID9 used inmatrix/close/fullcapturecleanup; nonzerootherreserved patterns,
+invalid lowID/truncation retention, typed rejectioncleanup, allAFE/READ/cdev/
+codecrollback regressions pass. Build/package pending; commit first.
+
+CURRENT PHONE333 consumed: submitted/completed0/no physicalsamples, DSPmap/
+ASM/AFE/sourcechannel retained/uncertain, no active retry. Codec/FLL/pins
+restored1, ampmute0x10; USERconfirmed iOSresponsive. Evidence work/microphone-adm.
+Must reboot fresh verifiedimage before further audio controls. Noexportperformed.
+
 ## Active handoff:0333 temporarily booted; home reply pending (2026-11-17)
 
 User confirmed fastboot ready. Reverified image7b635177... and both helper

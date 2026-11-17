@@ -60,8 +60,9 @@ static int ri_pcm_transaction(struct ri_apr_request *r,struct ri_apr_reply *repl
  if(mode==61)reply->words=1;
  if(mode==62)reply->data[1]=0x10007;
  if(mode==63)reply->data[1]=0xff;
+ if(mode==64)reply->data[1]=0xf0b70009;
  break;
- case 0x10325:assert(r->words==4 && r->payload[0]==1 && r->payload[1]==1 && r->payload[2]==0x10006 && r->payload[3]==7);break;
+ case 0x10325:assert(r->words==4 && r->payload[0]==1 && r->payload[1]==1 && r->payload[2]==0x10006 && r->payload[3]==(mode==64?9u:7u));break;
  case 0x10daa:assert(r->words==3);break;
  case 0x10dac:{
   assert(r->source==(stream|0x507) && r->destination==(stream|0x407) && r->response==0x10d9a && r->words==5 && r->payload[0]==0x60000000+(reads&3)*4096 && !r->payload[1] && r->payload[2]==0xabcd && r->payload[3]==4096 && r->payload[4]==reads);
@@ -72,7 +73,7 @@ static int ri_pcm_transaction(struct ri_apr_request *r,struct ri_apr_reply *repl
   break;
  }
  case 0x10bd3:case 0x10bcd:assert(r->source==(stream|0x507) && r->destination==(stream|0x407));break;
- case 0x10327:assert(r->source==0x40010508 && r->destination==0x00070408);break;
+ case 0x10327:assert(r->source==0x40010508 && r->destination==(mode==64?0x00090408u:0x00070408u));break;
  case 0x100e6:assert(r->source==0x504 && r->destination==0x404 && r->words==1 && r->payload[0]==0x4001);break;
  case 0x10d94:assert(!ri_mic.in_flight && !ri_mic.asm_open && !ri_mic.adm_open && !ri_mic.afe_started && r->payload[0]==0xabcd);break;
  default:assert(0);
@@ -110,8 +111,10 @@ int main(void){
  ri_mic_dsp_cleanup();assert(!ri_mic.mapped && !ri_mic.asm_open && !ri_mic.adm_open && !ri_mic.afe_started && !ri_mic.running && !ri_mic.cleanup_error);
  reset();mode=60;ri_mic.mapped=ri_mic.afe_started=true;assert(ri_mic_dsp_run()==EREMOTE && !ri_pcm.poisoned && !ri_mic.adm_open && ri_mic.failed_opcode==0x10326 && ri_mic.failed_status==2 && ri_mic.adm_words==2 && ri_mic.adm_reply[1]==0xffff);
  ri_mic_dsp_cleanup();assert(!ri_mic.mapped && !ri_mic.asm_open && !ri_mic.afe_started && !ri_mic.cleanup_error);
- for(unsigned n=61;n<=63;n++){reset();mode=n;ri_mic.mapped=ri_mic.afe_started=true;assert(ri_mic_dsp_run()==EIO && ri_pcm.poisoned && !reads && ri_mic.failed_opcode==0x10326);unsigned before=commands;ri_mic_dsp_cleanup();assert(commands==before && ri_mic.mapped);}
- puts("PASS actual ADM TX typed rejection preserves exact status and permits cleanup; truncated/reserved/out-of-range success replies retain ownership");
+ reset();mode=64;ri_mic.mapped=ri_mic.afe_started=true;assert(!ri_mic_dsp_run() && ri_mic.copp==9 && ri_mic.adm_reply[1]==0xf0b70009 && reads==48);ri_mic_dsp_cleanup();assert(!ri_mic.mapped && !ri_mic.asm_open && !ri_mic.adm_open && !ri_mic.afe_started && !ri_mic.cleanup_error);
+ reset();mode=62;assert(!ri_mic_dsp_run() && ri_mic.copp==7 && ri_mic.adm_reply[1]==0x10007);ri_mic_dsp_cleanup();
+ for(unsigned n=61;n<=63;n++){if(n==62)continue;reset();mode=n;ri_mic.mapped=ri_mic.afe_started=true;assert(ri_mic_dsp_run()==EIO && ri_pcm.poisoned && !reads && ri_mic.failed_opcode==0x10326);unsigned before=commands;ri_mic_dsp_cleanup();assert(commands==before && ri_mic.mapped);}
+ puts("PASS actual ADM TX typed rejection preserves exact status and permits cleanup; 16-bit ID ignores reserved upper bits and routes/closes only masked ID; truncated/out-of-range success replies retain ownership");
  for(unsigned n=1;n<=12;n++){reset();mode=n;ri_mic.mapped=ri_mic.afe_started=true;assert(ri_mic_dsp_run()==EIO && ri_pcm.poisoned && ri_mic.in_flight && !invalidations && !ri_mic.frames);unsigned before=commands;ri_mic_dsp_cleanup();assert(commands==before && ri_mic.mapped);}
  reset();mode=13;assert(ri_mic_dsp_run()==ETIMEDOUT && reads==1 && !ri_pcm.poisoned && !ri_mic.in_flight);
  for(unsigned op=0;op<5;op++){reset();uint32_t ops[]={0x10db4,0x10c10,0x10326,0x10325,0x10daa};fail_opcode=ops[op];ri_mic.mapped=ri_mic.afe_started=true;assert(ri_mic_dsp_run()==EREMOTE);fail_opcode=0;ri_mic_dsp_cleanup();assert(!ri_mic.mapped && !ri_mic.asm_open && !ri_mic.adm_open && !ri_mic.afe_started);}

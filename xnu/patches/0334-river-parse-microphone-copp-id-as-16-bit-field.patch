@@ -1,0 +1,24 @@
+diff --git a/bsd/dev/river_adsp_capture.h b/bsd/dev/river_adsp_capture.h
+--- a/bsd/dev/river_adsp_capture.h
++++ b/bsd/dev/river_adsp_capture.h
+@@ -130,7 +130,7 @@
+  ri_mic.adm_words=reply.words;
+  if(reply.words)ri_mic.adm_reply[0]=reply.data[0];
+  if(reply.words>1)ri_mic.adm_reply[1]=reply.data[1];
+- if(reply.words!=2 || (!reply.data[0] && ((reply.data[1]>>16) || reply.data[1]>=0xff))) {
++ if(reply.words!=2 || (!reply.data[0] && (reply.data[1]&0xffff)>=0xff)) {
+   ri_mic.failed_opcode=0x10326;ri_mic.failed_status=reply.data[0];
+   ri_mic.failure_rx_header=ri_pcm.rx_header;ri_mic.failure_rx_source=ri_pcm.rx_source;
+   ri_mic.failure_rx_destination=ri_pcm.rx_destination;ri_mic.failure_rx_token=ri_pcm.rx_token;
+@@ -140,7 +140,10 @@
+  /* Exact typed nonzero status is a completed rejection, not unknown COPP
+   * ownership. Preserve status and close ASM/AFE/map/channel normally. */
+  if(reply.data[0]) {ri_mic.failed_opcode=0x10326;ri_mic.failed_status=reply.data[0];return EREMOTE;}
+- ri_mic.copp=reply.data[1];ri_mic.adm_open=true;
++ /* River DSP returned success with word1=0xf0b70009: copp_id is the
++  * low16-bit field, upper16 is reserved and not consumed by pinned q6adm.
++  * Preserve the raw word in diagnostics; never route reserved bits. */
++ ri_mic.copp=reply.data[1]&0xffff;ri_mic.adm_open=true;
+  uint32_t matrix[]={1,1,0x10000|6,ri_mic.copp};ri_mic.phase="tx_matrix";
+  error=ri_mic_command(0x508,0x408,0x10325,0,matrix,4,&reply);if(error)return error;
+  uint32_t run[]={0,0,0};ri_mic.phase="run";
