@@ -5,6 +5,26 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0332 corrected microphone image verified; fastboot requested (2026-11-17)
+
+Native sourceb1416008003baa642ae65a4661d30efecb2ad069 built successfully on exact local KDK.
+Kernel SHA237113d61df4b782b63d62f639e246d3f71d48ee8124f65118e7834a56e960e3.
+Image river-microphone-readback-wifi-b141600.img,
+SHAd34f79728f30c15e2764d58c14e73f8bf2a81d73773574f1b137b6cf2e9d8fab, 27049984bytes/cmdline577.
+Kernel payload, unchanged helpers/WiFi and helper hashes verified; manifest
+outputs/microphone-readback-wifi-build-manifest.json. Fresh temporary fastboot
+boot requested after concrete image verification. CURRENT PHONE331 consumed,
+amp muted/allcapturemaps/routes closed; USER confirmed iOS responsive.
+No further active controls on331. No physical samples captured or exported.
+
+Active next-run directory work/microphone-readback, tagb141600. Scripts adapted
+and parsed, read before execution. Temporaryboot ONLY, verify River/serial and
+image; fresh home-responsive reply before active controls. Verify exact helpers
+and fresh unrequested state, muted prepare throughNGD ONCE, stage exporter,
+immediate speech cue then capture ONCE. Full cleanup required before export.
+0332 AFE GET advertises24byte capacity and retains bounded response diagnostics.
+Still explicit bounded snapshot; continuous capture remains unimplemented.
+
 ## Active handoff:0331 capture stopped safely;0332 correction prepared (2026-11-17)
 
 User confirmed fresh home responsive and ready; exact installed helpers and
