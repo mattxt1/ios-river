@@ -5,6 +5,29 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0331 capture stopped safely;0332 correction prepared (2026-11-17)
+
+User confirmed fresh home responsive and ready; exact installed helpers and
+unrequested state passed. Muted prerequisites throughNGD passed once. Speech
+cue followed by --mic-capture ONCE. It stopped phase=afe_tx_readback/error5,
+submitted/completed0, no physical samples. Full cleanup passed: poisoned0,
+mapped0/in_flight0/ASM0/ADM0/AFE0/channel0/uncertain0, codec_restored1,
+FLLoff1/clock_restored1/pins_restored1/cleanup_error0 and amp mute0x10.
+USER confirmed iOS remains responsive. No active retry; current331 consumed.
+Evidence work/microphone-20261117/capture-transport-result.json passed=false,
+status/surveys preserved. No sample export or synthetic substitute.
+
+Found concrete source bug: capture AFE GET payload_size was0; pinned ABI and
+working playback require24-byte parameter capacity.0332 sets24, preserves
+strict status/module/param/size/all6configword checks and parses declared
+record with bounded opaque transport tail as verified playback. Adds bounded
+AFE response metadata to capture status so next failure is diagnosable.
+Actual source SET/GET tests now check exact wire payload, valid10word and
+12word-tail responses, truncation/everyfield mismatch/SET andGET rejection
+stop beforeAFEstart; existing mic DMA/cdev/rollback regressions all pass.
+0332 native build/package pending; commit patch before build. Once concrete
+image verified, request fresh temporary boot; no controls repeated on331.
+
 ## Active handoff:0331 fresh temporary boot; home reply pending (2026-11-17)
 
 User returned and reported phone back in fastboot, present for testing.

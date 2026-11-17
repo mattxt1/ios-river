@@ -1,0 +1,72 @@
+diff --git a/bsd/dev/river_adsp_capture.h b/bsd/dev/river_adsp_capture.h
+--- a/bsd/dev/river_adsp_capture.h
++++ b/bsd/dev/river_adsp_capture.h
+@@ -7,6 +7,7 @@
+  vm_offset_t page;uint64_t physical;
+  uint32_t handle,copp;
+  unsigned submitted,completed,frames,peak,tid,bad_reg;
++ unsigned afe_words;uint32_t afe_reply[10];
+  int error,cleanup_error;
+  const char *phase;
+ } ri_mic;
+@@ -84,6 +85,26 @@
+   if(error)ri_mic.cleanup_error=error;else ri_mic.mapped=false;
+  }
+ }
++/* GET payload_size is parameter capacity, excluding its12-byte record header.
++ * Parse the self-declared24-byte config; bounded trailing transport words are
++ * opaque, as on the verified playback GET path. Keep every readback strict. */
++static int
++ri_mic_afe_config(void)
++{
++ struct ri_apr_reply reply;
++ const uint32_t expected[]={0,0x1020c,0x10212,24,1,16u<<16,1u<<16,128,0,48000};
++ uint32_t config[13]={(36u<<16)|0x4001,0,0,0,0x1020c,0x10212,24};
++ memcpy(config+7,expected+4,24);ri_mic.phase="afe_tx_config";
++ int error=ri_mic_command(0x504,0x404,0x100ef,0,config,13,&reply);if(error)return error;
++ uint32_t get[]={(24u<<16)|0x4001,0,0,0,0x1020c,0x10212};ri_mic.phase="afe_tx_readback";
++ error=ri_mic_command(0x504,0x404,0x100f0,0x10106,get,6,&reply);
++ ri_mic.afe_words=reply.words;
++ unsigned words=reply.words<10?reply.words:10;
++ memcpy(ri_mic.afe_reply,reply.data,words*4);
++ if(error)return error;
++ if(reply.words<10 || memcmp(reply.data,expected,sizeof(expected)))return EIO;
++ return 0;
++}
+ static int
+ ri_mic_dsp_run(void)
+ {
+diff --git a/bsd/dev/river_mic_route.h b/bsd/dev/river_mic_route.h
+--- a/bsd/dev/river_mic_route.h
++++ b/bsd/dev/river_mic_route.h
+@@ -34,13 +34,7 @@
+  ri_mic.handle=reply.data[0];ri_mic.mapped=true;
+  /* Separate AFE TX port4001/device1/channel128/mono16/48k. No playback
+   * global route state is repurposed or cleared by this capture path. */
+- ri_mic.phase="afe_tx_config";
+- uint32_t config[]={(36u<<16)|0x4001,0,0,0,0x1020c,0x10212,24,1,16u<<16,1u<<16,128,0,48000};
+- error=ri_mic_command(0x504,0x404,0x100ef,0,config,13,&reply);if(error)goto done;
+- uint32_t get[]={0x4001,0,0,0,0x1020c,0x10212};ri_mic.phase="afe_tx_readback";
+- error=ri_mic_command(0x504,0x404,0x100f0,0x10106,get,6,&reply);if(error)goto done;
+- uint32_t expected[]={0,0x1020c,0x10212,24,1,16u<<16,1u<<16,128,0,48000};
+- if(reply.words!=10 || memcmp(reply.data,expected,sizeof(expected))) {error=EIO;goto done;}
++ error=ri_mic_afe_config();if(error)goto done;
+  uint32_t port=0x4001;ri_mic.phase="afe_tx_start";
+  error=ri_mic_command(0x504,0x404,0x100e5,0,&port,1,&reply);if(error)goto done;
+  ri_mic.afe_started=true;
+@@ -160,11 +154,13 @@
+  lck_mtx_lock(&ri_mic_buffer_lock);
+  ri_mic_capture.done=true;ri_mic_capture.complete=ri_mic.complete;ri_mic_capture.error=error;
+  ri_mic_capture.frames=ri_mic.complete?ri_mic.frames:0;ri_mic_capture.peak=ri_mic.peak;
+- snprintf(ri_mic_capture.note,sizeof(ri_mic_capture.note),"phase=%s poisoned=%u mapped=%u in_flight=%u submitted=%u completed=%u asm_open=%u adm_open=%u afe_started=%u source_connected=%u channel_defined=%u channel_active=%u uncertain=%u codec_restored=%u cleanup_error=%d bad_reg=%#x hardware_frames=%u amp_output_enable_requested=0 codec_clock={%s}",
++ snprintf(ri_mic_capture.note,sizeof(ri_mic_capture.note),"phase=%s poisoned=%u mapped=%u in_flight=%u submitted=%u completed=%u asm_open=%u adm_open=%u afe_started=%u source_connected=%u channel_defined=%u channel_active=%u uncertain=%u codec_restored=%u cleanup_error=%d bad_reg=%#x hardware_frames=%u afe_words=%u afe_reply=%#x,%#x,%#x,%#x,%#x,%#x,%#x,%#x,%#x,%#x amp_output_enable_requested=0 codec_clock={%s}",
+  ri_mic.phase?ri_mic.phase:"clock_prerequisite",ri_pcm.poisoned,ri_mic.mapped,ri_mic.in_flight,
+  ri_mic.submitted,ri_mic.completed,ri_mic.asm_open,ri_mic.adm_open,ri_mic.afe_started,
+  ri_mic.connected,ri_mic.defined,ri_mic.active,ri_mic.uncertain,ri_mic.codec_restored,
+- ri_mic.cleanup_error,ri_mic.bad_reg,ri_mic.frames,ri_clock_note);
++ ri_mic.cleanup_error,ri_mic.bad_reg,ri_mic.frames,ri_mic.afe_words,
++ ri_mic.afe_reply[0],ri_mic.afe_reply[1],ri_mic.afe_reply[2],ri_mic.afe_reply[3],ri_mic.afe_reply[4],
++ ri_mic.afe_reply[5],ri_mic.afe_reply[6],ri_mic.afe_reply[7],ri_mic.afe_reply[8],ri_mic.afe_reply[9],ri_clock_note);
+  lck_mtx_unlock(&ri_mic_buffer_lock);lck_mtx_unlock(&ri_adsp_lock);
+  (void)thread_terminate(current_thread());thread_block(THREAD_CONTINUE_NULL);
+ }

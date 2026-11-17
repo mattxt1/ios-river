@@ -45,6 +45,14 @@ static int ri_pcm_transaction(struct ri_apr_request *r,struct ri_apr_reply *repl
  if(r->opcode==fail_opcode)return EREMOTE;
  const uint32_t stream=0x06010000;
  switch(r->opcode){
+ case 0x100ef:{uint32_t expected[]={(36u<<16)|0x4001,0,0,0,0x1020c,0x10212,24,1,16u<<16,1u<<16,128,0,48000};assert(r->source==0x504 && r->destination==0x404 && r->words==13 && !memcmp(expected,r->payload,sizeof(expected)));break;}
+ case 0x100f0:{uint32_t expected[]={(24u<<16)|0x4001,0,0,0,0x1020c,0x10212};assert(r->source==0x504 && r->destination==0x404 && r->response==0x10106 && r->words==6 && !memcmp(expected,r->payload,sizeof(expected)));
+  uint32_t response[]={0,0x1020c,0x10212,24,1,16u<<16,1u<<16,128,0,48000};reply->words=10;memcpy(reply->data,response,sizeof(response));
+  if(mode==40){reply->words=12;reply->data[10]=0xdead;reply->data[11]=0xbeef;}
+  if(mode==41)reply->words=9;
+  if(mode>=42 && mode<=51)reply->data[mode-42]^=1;
+  break;
+ }
  case 0x10db4:{uint32_t expected[]={0,0,0x10c68,0x10da5,16};assert(r->source==(stream|0x507) && r->destination==(stream|0x407) && r->words==5 && !memcmp(expected,r->payload,sizeof(expected)));break;}
  case 0x10c10:{uint32_t expected[]={0x10da3,28,0,20,(16u<<16)|1,48000,1,3,0};assert(r->words==9 && !memcmp(expected,r->payload,sizeof(expected)));break;}
  case 0x10326:assert(r->source==0x40010508 && r->destination==0x40010408 && r->words==7 && r->payload[0]==(2u<<16) && r->payload[1]==0xffff4001 && r->payload[5]==3);reply->words=2;reply->data[1]=7;break;
@@ -84,6 +92,12 @@ static int uiomove(char *from,int bytes,struct uio *u){assert(!held);memcpy(u->d
 int river_mic_hw_read(int16_t *samples,unsigned frames){return ri_mic_buffer_read(samples,frames);}
 #include "mic-reader-actual.h"
 int main(void){
+ reset();assert(!ri_mic_afe_config() && ri_mic.afe_words==10 && ri_mic.afe_reply[7]==128);
+ reset();mode=40;assert(!ri_mic_afe_config() && ri_mic.afe_words==12);
+ for(unsigned n=41;n<=51;n++){reset();mode=n;assert(ri_mic_afe_config()==EIO && commands==2 && !reads && !invalidations && !ri_mic.afe_started);}
+ reset();fail_opcode=0x100ef;assert(ri_mic_afe_config()==EREMOTE && commands==1);
+ reset();fail_opcode=0x100f0;assert(ri_mic_afe_config()==EREMOTE && commands==2);
+ puts("PASS actual AFE TX SET/GET: nonzero24-byte capacity, exact self-declared record, bounded opaque tail, mismatch/rejection stops before start");
  int16_t samples[512];reset();assert(ri_mic_buffer_read(samples,512)==-ENXIO && ri_mic_buffer_flags()==2);ri_mic_capture.attempted=true;assert(ri_mic_buffer_read(samples,512)==-EWOULDBLOCK);ri_mic_capture.done=true;assert(ri_mic_buffer_read(samples,512)==-EIO);
  reset();ri_mic.mapped=ri_mic.afe_started=true;assert(!ri_mic_dsp_run() && reads==48 && ri_mic.frames==98304 && ri_mic.peak==4321 && invalidations==48 && !ri_mic.in_flight);
  ri_mic_capture.attempted=ri_mic_capture.done=ri_mic_capture.complete=true;ri_mic_capture.frames=ri_mic.frames;assert(ri_mic_buffer_flags()==16);
