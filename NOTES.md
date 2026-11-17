@@ -5,6 +5,37 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0335 continuous mic/gain/speaker batch prepared (2026-11-17)
+
+Userrequestedcontinuousmicrophone/gaincalibration andspeakersincoherentbuilds.
+0335 adds explicit supervisedliveinput enable, dedicated worker and16384mono
+frameCPUring; /dev/hakios-mic firstread requests route, readsconsume physical
+samples DURING DSPREADloop, interruptibleemptywait/nonblockEWOULDBLOCK. No
+synthetic fallback afterlivearm/failure. Close/disable/250msreaderidle stop;
+ringpressure errors instead ofunreportedoverwrite. No fixedsnapshot/session
+lengthcap; continuingreader drives continuingDSPREADs. Stop/restart onlyafter
+exactmap/ASM/ADM/AFE/channel/codec/FLL/pincleanup. PermanentDMApagereuse,
+monotonicAPR/NGD IDs, IDbudgetguard; poison/restorefault stickyuntilreboot.
+Halfduplex mic/speakerhandoff sharesADSP/codec, never overlapping hardware.
+Speakers canre-enable aftercleandisable/rearm, retaining3sessionlimit/6seccap.
+
+Gain usespinnedmadera digitalTLV(-64dB+0.5dB/step): ADCcode128/152/176 gives
+0/+12/+24dB, analogfixedstock12dB. Worker applies/readback verifies changes
+betweenexactREADcompletions; perlevel frames/squares/peak/clipping metadata,
+no samplesinsysctl. EnablescalibrationfromactualPCM acrosssamecapture.
+App speakerhelper adds6sec calibrationburst atnativeplayer levels0.05/0.1,
+verifiedhardwareampgainunchanged. Plan speakers BEFOREandAFTER live mic in
+sameboot, gainsteps/close/restart and acousticreview. Normalapp input path
+canusecdevliveendpointwhileenabled; appconsent notbypassed.
+
+Actual-code sanitizerchecks pass concurrent409600-frame ringdelivery/order,
+blocking/nonblocking/signal/cancellation/overrun/clippingstats, continuousDSP
+200READs beyondsnapshotcap/gainupdates/teardown, micworkerrestart/pageIDreuse/
+allownershipguards, playbackdisable/re-enable andmicexclusion, priorprotocol/
+AFE/cdev/codecrollback regressions. Nativebuild/package pending; commit first.
+CURRENT PHONE334consumed/stashexhausted/routesclosed/ampmuted; noactivecontrols.
+Source/scratchwork/audio-live undercanonical apr-communication evidence root.
+
 ## Active handoff:0334 PHYSICAL MICROPHONE SPEECH PASS (2026-11-17)
 
 USERreports "clear crisp audio of my voice counting" in cuedphysicalcapture,

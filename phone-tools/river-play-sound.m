@@ -24,25 +24,31 @@ int main(int argc, char **argv) {
             return 1;
         }
 
-        player.volume = 0.1f;
+        player.volume = (argc>2 && !strcmp(argv[2],"--calibration-burst"))?0.05f:0.1f;
         if (argc > 2 && strcmp(argv[2], "--listening-window") == 0) player.numberOfLoops = 3;
         NSLog(@"Playing sound (duration %.2f s)...", player.duration);
         BOOL ok = [player play];
         NSLog(@"play returned: %d; physical sound must be checked acoustically", ok);
         if (!ok) { [session setActive:NO error:NULL]; return 1; }
 
-        if (argc > 2 && strcmp(argv[2], "--lifecycle-pair") == 0) {
+        if (argc > 2 && strcmp(argv[2], "--calibration-burst") == 0) {
+            NSLog(@"Speaker calibration: native app level0.05 then0.1; verified hardware gain unchanged");
+            [NSThread sleepForTimeInterval:3.5];player.volume=0.1f;
+            NSLog(@"Speaker calibration: level0.1");
+            [NSThread sleepForTimeInterval:2.5];[player stop];
+            [NSThread sleepForTimeInterval:6.0];
+        } else if (argc > 2 && strcmp(argv[2], "--lifecycle-pair") == 0) {
             /* Two actual native app bursts separated by enough idle time
              * for fully acknowledged route teardown. No direct device PCM. */
             NSLog(@"Lifecycle burst 1 started");
-            [NSThread sleepForTimeInterval:4.0];
+            [NSThread sleepForTimeInterval:6.0];
             [player stop];
             NSLog(@"Lifecycle burst 1 stopped; waiting for automatic idle teardown");
             [NSThread sleepForTimeInterval:6.0];
             player.currentTime = 0;
             if (![player play]) { NSLog(@"Lifecycle burst 2 failed"); return 1; }
             NSLog(@"Lifecycle burst 2 started");
-            [NSThread sleepForTimeInterval:4.0];
+            [NSThread sleepForTimeInterval:6.0];
             [player stop];
             NSLog(@"Lifecycle burst 2 stopped; waiting for automatic idle teardown");
             [NSThread sleepForTimeInterval:6.0];

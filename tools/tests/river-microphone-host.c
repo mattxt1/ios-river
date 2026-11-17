@@ -33,11 +33,17 @@ static unsigned char dma[PAGE_SIZE] __attribute__((aligned(PAGE_SIZE)));
 static uint64_t ri_pipeline_now(void){return now;}
 static void ri_wait(unsigned ms){assert(held!=1);now+=ms*1000000ULL;}
 static uint16_t ri_clock_read(uint16_t reg){assert(held!=1 && reg<0x2000);return regs[reg];}
-static bool ri_clock_write(uint16_t reg,uint16_t value){assert(held==2 && reg<0x2000);codec_writes++;if(codec_writes==fail_write)return false;regs[reg]=value;if(reg==0x300)regs[0x301]=value;return true;}
+static bool ri_clock_write(uint16_t reg,uint16_t value){assert((held==2 || reg==0x311) && reg<0x2000);codec_writes++;if(codec_writes==fail_write)return false;regs[reg]=value;if(reg==0x300)regs[0x301]=value;return true;}
 static bool ri_cs35l41_rd(unsigned reg,uint32_t *out){assert(held==2 && reg==0x2024);*out=mute;return true;}
 static int ri_pcm_transaction(struct ri_apr_request *r,struct ri_apr_reply *reply);
 static int ri_ngd_send(vm_offset_t base,uint32_t *packet,unsigned bytes){assert(base==0x1000 && !held && bytes<=19);assert(((uint8_t*)packet)[1]==0x2c && ((uint8_t*)packet)[3]==0x8a && ((uint8_t*)packet)[4]==8 && ((uint8_t*)packet)[5]==128);if(mode==20)return ETIMEDOUT;ri_ngd.acked=true;return 0;}
 static int ri_ngd_poll(vm_offset_t base,bool *sent){assert(base==0x1000 && !held);*sent=false;return 0;}
+#ifdef RIVER_MIC_LIVE_TEST
+static struct {bool attempted;unsigned gain,applied_gain;} ri_mic_live;
+static unsigned live_frames,live_limit,live_pushes;
+static bool ri_mic_live_stop(void){return reads>=live_limit;}
+static int ri_mic_live_push(const int16_t *samples,unsigned frames,unsigned gain){assert(!held && samples && frames==2048 && gain==ri_mic_live.gain);live_frames+=frames;live_pushes++;if(reads==50)ri_mic_live.gain=1;if(reads==100)ri_mic_live.gain=2;return 0;}
+#endif
 #include "mic-protocol-actual.h"
 static void ri_mic_invalidate(vm_offset_t page){assert(!held && page==(uintptr_t)dma && !ri_mic.in_flight);invalidations++;}
 static int ri_pcm_transaction(struct ri_apr_request *r,struct ri_apr_reply *reply){
@@ -95,7 +101,13 @@ static uint64_t mic_frames_read;
 static unsigned mic_phase;
 static int64_t uio_resid(struct uio *u){return u->resid;}
 static int uiomove(char *from,int bytes,struct uio *u){assert(!held);memcpy(u->data,from,bytes);u->data+=bytes;u->resid-=bytes;user_moves++;return 0;}
+#ifdef RIVER_MIC_LIVE_TEST
+#define IO_NDELAY 4
+int river_mic_hw_read(int16_t *samples,unsigned frames,int nonblock){(void)nonblock;return ri_mic_buffer_read(samples,frames);}
+void river_mic_hw_read_fault(unsigned frames){assert(frames);}
+#else
 int river_mic_hw_read(int16_t *samples,unsigned frames){return ri_mic_buffer_read(samples,frames);}
+#endif
 #include "mic-reader-actual.h"
 int main(void){
  reset();assert(!ri_mic_afe_config() && ri_mic.afe_words==10 && ri_mic.afe_reply[7]==128);
@@ -104,6 +116,12 @@ int main(void){
  reset();fail_opcode=0x100ef;assert(ri_mic_afe_config()==EREMOTE && commands==1);
  reset();fail_opcode=0x100f0;assert(ri_mic_afe_config()==EREMOTE && commands==2);
  puts("PASS actual AFE TX SET/GET: nonzero24-byte capacity, exact self-declared record, bounded opaque tail, mismatch/rejection stops before start");
+#ifdef RIVER_MIC_LIVE_TEST
+ reset();ri_mic.live=true;ri_mic_live.gain=0;live_frames=live_pushes=0;live_limit=200;ri_mic.mapped=ri_mic.afe_started=true;
+ assert(!ri_mic_dsp_run() && reads==200 && live_frames==409600 && live_pushes==200 && ri_mic.gain_level==2 && (regs[0x311]&255)==176 && ri_mic_live.applied_gain==2);
+ ri_mic_dsp_cleanup();assert(!ri_mic.mapped && !ri_mic.asm_open && !ri_mic.adm_open && !ri_mic.afe_started);
+ puts("PASS actual continuous DSP READ loop: 200 buffers/409600 frames beyond snapshot limit, live gain0/12/24dB verified, close and unmap");
+#endif
  int16_t samples[512];reset();assert(ri_mic_buffer_read(samples,512)==-ENXIO && ri_mic_buffer_flags()==2);ri_mic_capture.attempted=true;assert(ri_mic_buffer_read(samples,512)==-EWOULDBLOCK);ri_mic_capture.done=true;assert(ri_mic_buffer_read(samples,512)==-EIO);
  reset();ri_mic.mapped=ri_mic.afe_started=true;assert(!ri_mic_dsp_run() && reads==48 && ri_mic.frames==98304 && ri_mic.peak==4321 && invalidations==48 && !ri_mic.in_flight);
  ri_mic_capture.attempted=ri_mic_capture.done=ri_mic_capture.complete=true;ri_mic_capture.frames=ri_mic.frames;assert(ri_mic_buffer_flags()==16);

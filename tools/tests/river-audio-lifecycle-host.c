@@ -77,6 +77,10 @@ static int ri_codec_path_run_mode(unsigned mode){
  if(scenario==4)ri_audio_queue.reserved=1024;
  return 0;
 }
+#ifdef RIVER_MIC_HANDOFF_TEST
+static bool microphone_busy;
+static int ri_mic_live_release(void){assert(adsp_held);return microphone_busy?EBUSY:0;}
+#endif
 #include "lifecycle-actual.h"
 static void reset(void){
  assert(!queue_held && !adsp_held && !speaker_held);
@@ -84,9 +88,15 @@ static void reset(void){
  ri_stream.complete=ri_route.muted=ri_afe_mute_hold=ri_ngd.address_valid=ri_ngd.enabled=ri_i2s_codec_restored=ri_i2s_amp_restored=ri_clock_data_restored=quiet=muted=true;ri_ngd.uncertain=thread_fail=false;ri_clock_attempted=ri_live_health_index=cancels=calls=scenario=waits=0;clock_ns=0;ri_tone_timer=NULL;ri_i2s_amp_saved[0]=0x21;ri_i2s_amp_saved[1]=0x10;ri_i2s_amp_saved[4]=0x20200233;for(unsigned i=0;i<2048;i++)input[i]=1234;
 }
 int main(void){
+#ifdef RIVER_MIC_HANDOFF_TEST
+ reset();microphone_busy=true;assert(ri_audio_auto_enable()==EBUSY && !ri_audio_auto.enabled);microphone_busy=false;
+#endif
  reset();assert(!ri_audio_auto_enable() && ri_audio_auto.enabled && ri_audio_auto.worker && worker_fn);assert(ri_audio_auto_enable()==EBUSY);
  if(!setjmp(exited))worker_fn(NULL,0);
  assert(calls==2 && ri_audio_auto.sessions==2 && ri_audio_auto.restarts==1 && ri_audio_auto.completed_total==4096 && !ri_audio_auto.worker && !ri_audio_auto.enabled && !ri_audio_auto.blocked && cancels==1 && ri_channel.tid==0x7d);
+#ifdef RIVER_MIC_HANDOFF_TEST
+ assert(!ri_audio_auto_enable() && ri_audio_auto.sessions==2 && ri_audio_auto.worker && !ri_audio_queue.launched);
+#endif
  for(unsigned mode=1;mode<=4;mode++){
   reset();scenario=mode;assert(!ri_audio_auto_enable());if(!setjmp(exited))worker_fn(NULL,0);
   if(mode==1)assert(calls==1 && ri_audio_auto.blocked && ri_pcm.poisoned && ri_live_stream.mapped && ri_live_stream.in_flight && ri_audio_auto.error==ETIMEDOUT && ri_audio_auto_enable()==EBUSY);

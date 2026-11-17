@@ -1,0 +1,487 @@
+diff --git a/bsd/dev/river_adsp_capture.h b/bsd/dev/river_adsp_capture.h
+--- a/bsd/dev/river_adsp_capture.h
++++ b/bsd/dev/river_adsp_capture.h
+@@ -3,7 +3,8 @@
+  * Exact service/port/token/opcode match remains in ri_pcm_transaction. */
+ static struct {
+  bool attempted,mapped,asm_open,adm_open,afe_started,running,in_flight;
+- bool connected,defined,active,uncertain,codec_restored,complete;
++ bool connected,defined,active,uncertain,codec_restored,complete,live;
++ unsigned gain_level;
+  vm_offset_t page;uint64_t physical;
+  uint32_t handle,copp;
+  unsigned submitted,completed,frames,peak,tid,bad_reg;
+@@ -148,9 +149,24 @@
+  error=ri_mic_command(0x508,0x408,0x10325,0,matrix,4,&reply);if(error)return error;
+  uint32_t run[]={0,0,0};ri_mic.phase="run";
+  error=ri_mic_command(stream|0x507,stream|0x407,0x10daa,0,run,3,&reply);if(error)return error;
+- ri_mic.running=true;uint64_t start=ri_pipeline_now();
+- for(unsigned index=0;index<48;index++) {
+-  if(ri_pipeline_now()-start>3500000000ULL)return ETIMEDOUT;
++ ri_mic.running=true;
++ if(ri_mic.live) {lck_mtx_lock(&ri_mic_buffer_lock);ri_mic_live.applied_gain=ri_mic.gain_level;lck_mtx_unlock(&ri_mic_buffer_lock);}
++ uint64_t start=ri_pipeline_now();
++ for(unsigned index=0;;index++) {
++  if(ri_mic.live) {
++   if(ri_mic_live_stop())break;
++   if(index==~0u)return EOVERFLOW;
++   lck_mtx_lock(&ri_mic_buffer_lock);unsigned gain=ri_mic_live.gain;lck_mtx_unlock(&ri_mic_buffer_lock);
++   if(gain!=ri_mic.gain_level) {
++    uint16_t value=ri_clock_read(0x311);
++    if(value==0xffff || (value&0x100) || !ri_clock_write(0x311,(value&~255u)|0x200|(128+gain*24)))return EIO;
++    ri_mic.gain_level=gain;
++    lck_mtx_lock(&ri_mic_buffer_lock);ri_mic_live.applied_gain=gain;lck_mtx_unlock(&ri_mic_buffer_lock);
++   }
++  } else {
++   if(index==48)break;
++   if(ri_pipeline_now()-start>3500000000ULL)return ETIMEDOUT;
++  }
+   uint64_t address=ri_mic.physical+(index&3)*4096;
+   uint32_t read[]={(uint32_t)address,(uint32_t)(address>>32),ri_mic.handle,4096,index};
+   ri_mic.phase="read_done";ri_mic.in_flight=true;
+@@ -159,19 +175,23 @@
+   if(error)return error;
+   unsigned offset=0,bytes=0;
+   if(!ri_mic_read_done(&reply,address,ri_mic.handle,index,&offset,&bytes) ||
+-     bytes/2>98304-ri_mic.frames) {ri_pcm.poisoned=true;return EIO;}
++     (!ri_mic.live && bytes/2>98304-ri_mic.frames)) {ri_pcm.poisoned=true;return EIO;}
+   ri_mic.in_flight=false;ri_mic.completed++;
+   ri_mic_invalidate(ri_mic.page);
+   const int16_t *samples=(const int16_t *)(ri_mic.page+(index&3)*4096+offset);
+   /* No sample reads until exact completion and cache invalidation. */
+-  lck_mtx_lock(&ri_mic_buffer_lock);
+-  memcpy(ri_mic_capture.samples+ri_mic.frames,samples,bytes);
+-  lck_mtx_unlock(&ri_mic_buffer_lock);
++  if(ri_mic.live) {
++   error=ri_mic_live_push(samples,bytes/2,ri_mic.gain_level);if(error)return error;
++  } else {
++   lck_mtx_lock(&ri_mic_buffer_lock);
++   memcpy(ri_mic_capture.samples+ri_mic.frames,samples,bytes);
++   lck_mtx_unlock(&ri_mic_buffer_lock);
++  }
+   for(unsigned n=0;n<bytes/2;n++) {
+    int value=samples[n];unsigned peak=value<0?(unsigned)-value:(unsigned)value;
+    if(peak>ri_mic.peak)ri_mic.peak=peak;
+   }
+-  ri_mic.frames+=bytes/2;
++  if(ri_mic.frames<=~0u-bytes/2)ri_mic.frames+=bytes/2;else ri_mic.frames=~0u;
+   uint16_t lock=ri_clock_read(0x1881);
+   if(lock==0xffff || !(lock&0x100))return EIO;
+  }
+diff --git a/bsd/dev/river_adsp_probe.h b/bsd/dev/river_adsp_probe.h
+--- a/bsd/dev/river_adsp_probe.h
++++ b/bsd/dev/river_adsp_probe.h
+@@ -115,6 +115,7 @@
+ #include "river_adsp_codec_route.h"
+ #include "river_adsp_capture.h"
+ #include "river_mic_route.h"
++#include "river_mic_lifecycle.h"
+ 
+ static int
+ river_adsp_probe_sysctl SYSCTL_HANDLER_ARGS
+diff --git a/bsd/dev/river_audio.c b/bsd/dev/river_audio.c
+--- a/bsd/dev/river_audio.c
++++ b/bsd/dev/river_audio.c
+@@ -15,6 +15,7 @@
+ #include <sys/hakios.audio.h>
+ #include <sys/systm.h>
+ #include <sys/uio.h>
++#include <sys/vnode.h>
+ #include <sys/sysctl.h>
+ 
+ #define AUDIO_CHUNK_FRAMES 1024
+@@ -217,6 +218,7 @@
+ 	mic_frames_read = 0;
+ 	mic_phase = 0;
+ 	lck_mtx_unlock(&river_audio_lock);
++	extern void river_mic_hw_open(void);river_mic_hw_open();
+ 	printf("RIVER MIC: recording started (/dev/hakios-mic open)\n");
+ 	return 0;
+ }
+@@ -224,6 +226,7 @@
+ static int
+ river_mic_close(__unused dev_t dev, __unused int flags, __unused int devtype, __unused struct proc *p)
+ {
++	extern void river_mic_hw_close(void);river_mic_hw_close();
+ 	uint64_t mic_total;
+ 
+ 	lck_mtx_lock(&river_audio_lock);
+@@ -251,13 +254,13 @@
+ 		}
+ 		bytes -= bytes % 2;
+ 		count = (uint32_t)(bytes / 2);
+-        extern int river_mic_hw_read(int16_t *pcm,unsigned frames);
+-        int physical=river_mic_hw_read(mic_buf,count);
++        extern int river_mic_hw_read(int16_t *pcm,unsigned frames,int nonblock);
++        int physical=river_mic_hw_read(mic_buf,count,(ioflag&IO_NDELAY)!=0);
+         if(physical!=-ENXIO) {
+             if(physical<0) {error=-physical;break;}
+             if(!physical)break;
+             error=uiomove((caddr_t)mic_buf,physical*2,uio);
+-            if(error)break;
++            if(error) {extern void river_mic_hw_read_fault(unsigned frames);river_mic_hw_read_fault((unsigned)physical);break;}
+             lck_mtx_lock(&river_audio_lock);mic_frames_read+=(unsigned)physical;lck_mtx_unlock(&river_audio_lock);
+             continue;
+         }
+diff --git a/bsd/dev/river_audio_lifecycle.h b/bsd/dev/river_audio_lifecycle.h
+--- a/bsd/dev/river_audio_lifecycle.h
++++ b/bsd/dev/river_audio_lifecycle.h
+@@ -107,15 +107,19 @@
+  /* Explicit once-per-boot supervised enable; writes/open/idle/close drive
+   * all following starts/stops. Old diagnostic controls stay one-shot. */
+  lck_mtx_lock(&ri_adsp_lock);
++ int release=ri_mic_live_release();
++ if(!release)release=ri_audio_auto_rearm();
++ if(release) {lck_mtx_unlock(&ri_adsp_lock);return release;}
+  bool ready=ri_stream.complete && ri_route_ready() && ri_route.muted && ri_afe_mute_hold &&
+   ri_ngd.address_valid && ri_ngd.enabled && !ri_ngd.uncertain &&
+   !ri_codec_path.attempted && !ri_live_stream.attempted && !ri_channel.attempted;
+  if(!ready) {lck_mtx_unlock(&ri_adsp_lock);return EBUSY;}
+  lck_mtx_lock(&ri_audio_queue_lock);
+- if(ri_audio_auto.worker || ri_audio_auto.blocked || ri_audio_auto.sessions ||
+-    ri_audio_queue.armed || ri_audio_queue.reserved || ri_audio_queue.launched) {
++ if(ri_audio_auto.worker || ri_audio_auto.blocked || ri_audio_auto.at_limit || ri_audio_auto.sessions>=3 ||
++    ri_audio_queue.armed || ri_audio_queue.reserved || (ri_audio_queue.launched && !ri_audio_queue.done)) {
+   lck_mtx_unlock(&ri_audio_queue_lock);lck_mtx_unlock(&ri_adsp_lock);return EBUSY;
+  }
++ if(ri_audio_auto.sessions)memset(&ri_audio_queue,0,sizeof(ri_audio_queue));
+  ri_audio_auto.enabled=ri_audio_auto.worker=true;
+  lck_mtx_unlock(&ri_audio_queue_lock);lck_mtx_unlock(&ri_adsp_lock);
+  thread_t thread=THREAD_NULL;
+diff --git a/bsd/dev/river_mic_lifecycle.h b/bsd/dev/river_mic_lifecycle.h
+--- /dev/null
++++ b/bsd/dev/river_mic_lifecycle.h
+@@ -0,0 +1,96 @@
++/* Serialized microphone/speaker handoff. Only exact cleanup and restored
++ * clocks allow reuse; DMA page and monotonic APR/channel identities persist. */
++static bool ri_mic_owned_clean(void) {
++ return !ri_pcm.poisoned && !ri_mic.mapped && !ri_mic.in_flight && !ri_mic.running &&
++  !ri_mic.asm_open && !ri_mic.adm_open && !ri_mic.afe_started && !ri_mic.connected &&
++  !ri_mic.defined && !ri_mic.active && !ri_mic.uncertain && !ri_mic.cleanup_error &&
++  (!ri_mic.attempted || (ri_mic.complete && ri_mic.codec_restored));
++}
++static int ri_mic_live_release(void) {
++ lck_mtx_assert(&ri_adsp_lock,LCK_MTX_ASSERT_OWNED);
++ lck_mtx_lock(&ri_mic_buffer_lock);
++ bool busy=ri_mic_live.enabled || ri_mic_live.worker || ri_mic_live.active ||
++  ri_mic_live.requested || ri_mic_live.reader_busy || ri_mic_live.blocked;
++ lck_mtx_unlock(&ri_mic_buffer_lock);
++ if(busy || !ri_mic_owned_clean())return EBUSY;
++ if(ri_mic.live && ri_mic.complete)ri_clock_attempted=0;
++ return 0;
++}
++static int ri_mic_live_rearm(void) {
++ if(!ri_mic_owned_clean())return EBUSY;
++ if(ri_mic.tid>0xef-6)return EOVERFLOW;
++ lck_mtx_lock(&ri_speaker_lock);uint32_t mute=0;
++ bool quiet=ri_cs35l41_rd(0x2024,&mute) && (mute&0x10);
++ lck_mtx_unlock(&ri_speaker_lock);if(!quiet)return EIO;
++ vm_offset_t page=ri_mic.page;uint64_t physical=ri_mic.physical;unsigned tid=ri_mic.tid;
++ if(ri_mic.attempted)ri_clock_attempted=0;
++ if(ri_clock_attempted)return EBUSY;
++ memset(&ri_mic,0,sizeof(ri_mic));ri_mic.page=page;ri_mic.physical=physical;ri_mic.tid=tid;
++ ri_mic.live=ri_mic.attempted=true;
++ lck_mtx_lock(&ri_mic_buffer_lock);ri_mic.gain_level=ri_mic_live.gain;lck_mtx_unlock(&ri_mic_buffer_lock);
++ return 0;
++}
++static void ri_mic_live_worker(void *arg,wait_result_t wait) {
++ (void)arg;(void)wait;
++ for(;;) {
++  lck_mtx_lock(&ri_mic_buffer_lock);
++  bool quit=!ri_mic_live.enabled && !ri_mic_live.active;
++  bool run=ri_mic_live.enabled && ri_mic_live.requested && !ri_mic_live.active;
++  if(run) {ri_mic_live.active=true;ri_mic_live.requested=false;}
++  lck_mtx_unlock(&ri_mic_buffer_lock);
++  if(quit)break;
++  if(!run) {ri_wait(5);continue;}
++  lck_mtx_lock(&ri_adsp_lock);
++  int error=ri_mic_live_rearm();
++  if(!error) {
++   lck_mtx_lock(&ri_codec_lock);lck_mtx_lock(&ri_speaker_lock);
++   ri_clock_capture_test=ri_mic_codec;
++   error=ri_clock_run_impl(true,true,false);ri_clock_capture_test=NULL;
++   lck_mtx_unlock(&ri_speaker_lock);lck_mtx_unlock(&ri_codec_lock);
++   ri_mic.complete=!error && !ri_pcm.poisoned && ri_mic.codec_restored &&
++    !ri_mic.mapped && !ri_mic.in_flight && !ri_mic.running && !ri_mic.asm_open &&
++    !ri_mic.adm_open && !ri_mic.afe_started && !ri_mic.connected && !ri_mic.defined &&
++    !ri_mic.active && !ri_mic.uncertain && !ri_mic.cleanup_error;
++  }
++  bool clean=ri_mic_owned_clean();
++  if(!error && !clean)error=EIO;
++  ri_mic.error=error;
++  lck_mtx_lock(&ri_mic_buffer_lock);
++  ri_mic_live.sessions++;ri_mic_live.active=false;ri_mic_live.stop=true;
++  ri_mic_live.error=error;
++  if(error) {ri_mic_live.blocked=true;ri_mic_live.enabled=false;}
++  snprintf(ri_mic_live.note,sizeof(ri_mic_live.note),"cleanup_verified=%u phase=%s poisoned=%u mapped=%u in_flight=%u submitted=%u completed=%u asm_open=%u adm_open=%u afe_started=%u source_connected=%u channel_defined=%u channel_active=%u uncertain=%u codec_restored=%u cleanup_error=%d tid=%u physical=%#llx failed_opcode=%#x failed_status=%#x adm_reply=%#x,%#x clock={%s}",
++   clean,ri_mic.phase?ri_mic.phase:"prerequisite",ri_pcm.poisoned,ri_mic.mapped,ri_mic.in_flight,
++   ri_mic.submitted,ri_mic.completed,ri_mic.asm_open,ri_mic.adm_open,ri_mic.afe_started,
++   ri_mic.connected,ri_mic.defined,ri_mic.active,ri_mic.uncertain,ri_mic.codec_restored,
++   ri_mic.cleanup_error,ri_mic.tid,(unsigned long long)ri_mic.physical,ri_mic.failed_opcode,
++   ri_mic.failed_status,ri_mic.adm_reply[0],ri_mic.adm_reply[1],ri_clock_note);
++  wakeup(&ri_mic_live);lck_mtx_unlock(&ri_mic_buffer_lock);lck_mtx_unlock(&ri_adsp_lock);
++ }
++ lck_mtx_lock(&ri_mic_buffer_lock);ri_mic_live.worker=false;wakeup(&ri_mic_live);
++ lck_mtx_unlock(&ri_mic_buffer_lock);
++ (void)thread_terminate(current_thread());thread_block(THREAD_CONTINUE_NULL);
++}
++static int ri_mic_live_enable(void) {
++ lck_mtx_lock(&ri_adsp_lock);lck_mtx_lock(&ri_audio_queue_lock);
++ bool output_busy=ri_audio_auto.enabled || ri_audio_auto.worker || ri_audio_auto.active;
++ lck_mtx_unlock(&ri_audio_queue_lock);
++ if(output_busy || ri_mic_capture.attempted || !ri_stream.complete || !ri_route_ready() ||
++    !ri_route.muted || !ri_afe_mute_hold || !ri_ngd.address_valid || !ri_ngd.enabled ||
++    ri_ngd.uncertain || !ri_mic_owned_clean()) {lck_mtx_unlock(&ri_adsp_lock);return EBUSY;}
++ int error=ri_audio_auto_rearm();
++ if(error) {lck_mtx_unlock(&ri_adsp_lock);return error;}
++ lck_mtx_lock(&ri_mic_buffer_lock);
++ if(ri_mic_live.attempted || ri_mic_live.worker) {
++  lck_mtx_unlock(&ri_mic_buffer_lock);lck_mtx_unlock(&ri_adsp_lock);return EALREADY;
++ }
++ ri_mic_live.attempted=ri_mic_live.enabled=ri_mic_live.worker=true;
++ lck_mtx_unlock(&ri_mic_buffer_lock);lck_mtx_unlock(&ri_adsp_lock);
++ thread_t thread=THREAD_NULL;
++ if(kernel_thread_start(ri_mic_live_worker,NULL,&thread)!=KERN_SUCCESS) {
++  lck_mtx_lock(&ri_mic_buffer_lock);ri_mic_live.enabled=ri_mic_live.worker=false;
++  ri_mic_live.blocked=true;ri_mic_live.error=ENOMEM;wakeup(&ri_mic_live);
++  lck_mtx_unlock(&ri_mic_buffer_lock);return ENOMEM;
++ }
++ thread_deallocate(thread);return 0;
++}
+diff --git a/bsd/dev/river_mic_live.h b/bsd/dev/river_mic_live.h
+--- /dev/null
++++ b/bsd/dev/river_mic_live.h
+@@ -0,0 +1,143 @@
++/* Explicit supervised physical input. The stash mutex owns only CPU ring and
++ * lifecycle metadata. Device readers sleep interruptibly; hardware stays on
++ * the dedicated worker. No DSP ownership waits or SPI under this mutex. */
++#define RI_MIC_RING_FRAMES 16384u
++static struct {
++ bool attempted,enabled,worker,active,requested,stop,blocked,reader_busy;
++ unsigned opens,sessions,epoch,head,used,high_water,gain,applied_gain,reason;
++ unsigned overruns,waits,read_faults;
++ uint64_t last_read,produced,consumed,discarded;
++ struct {uint64_t frames,squares,clipped;unsigned peak;} levels[3];
++ int error;
++ int16_t samples[RI_MIC_RING_FRAMES];
++ char note[2048];
++} ri_mic_live;
++static int ri_mic_live_enable(void);
++static int ri_mic_live_release(void);
++static void ri_mic_live_open(void) {
++ lck_mtx_lock(&ri_mic_buffer_lock);ri_mic_live.opens++;
++ if(ri_mic_live.enabled && !ri_mic_live.active && !ri_mic_live.requested && ri_mic_live.sessions) {
++  ri_mic_live.discarded+=ri_mic_live.used;ri_mic_live.head=ri_mic_live.used=0;ri_mic_live.stop=false;
++ }lck_mtx_unlock(&ri_mic_buffer_lock);
++}
++static void ri_mic_live_close(void) {
++ lck_mtx_lock(&ri_mic_buffer_lock);
++ if(ri_mic_live.opens)ri_mic_live.opens--;
++ if(ri_mic_live.active || ri_mic_live.requested) {
++  ri_mic_live.stop=true;ri_mic_live.reason=1;
++  ri_mic_live.discarded+=ri_mic_live.used;ri_mic_live.used=ri_mic_live.head=0;
++  if(!ri_mic_live.active)ri_mic_live.requested=false;
++ }
++ wakeup(&ri_mic_live);lck_mtx_unlock(&ri_mic_buffer_lock);
++}
++static bool ri_mic_live_stop(void) {
++ lck_mtx_lock(&ri_mic_buffer_lock);
++ bool stop=ri_mic_live.stop || !ri_mic_live.enabled;
++ if(!stop && ri_audio_queue_now()-ri_mic_live.last_read>250000000ULL) {
++  stop=ri_mic_live.stop=true;ri_mic_live.reason=3;
++ }
++ lck_mtx_unlock(&ri_mic_buffer_lock);return stop;
++}
++static int ri_mic_live_push(const int16_t *samples,unsigned frames,unsigned gain) {
++ if(!samples || frames>2048 || gain>2)return EINVAL;
++ lck_mtx_lock(&ri_mic_buffer_lock);
++ if(ri_mic_live.stop || !ri_mic_live.enabled) {
++  ri_mic_live.discarded+=frames;lck_mtx_unlock(&ri_mic_buffer_lock);return 0;
++ }
++ if(frames>RI_MIC_RING_FRAMES-ri_mic_live.used) {
++  ri_mic_live.overruns++;ri_mic_live.error=EOVERFLOW;
++  lck_mtx_unlock(&ri_mic_buffer_lock);return EOVERFLOW;
++ }
++ for(unsigned n=0;n<frames;n++) {
++  int value=samples[n];unsigned peak=value<0?(unsigned)-value:(unsigned)value;
++  ri_mic_live.samples[(ri_mic_live.head+ri_mic_live.used+n)%RI_MIC_RING_FRAMES]=samples[n];
++  ri_mic_live.levels[gain].frames++;
++  uint64_t square=(uint64_t)((int64_t)value*value);
++  if(ri_mic_live.levels[gain].squares<=~0ULL-square)ri_mic_live.levels[gain].squares+=square;
++  if(peak>ri_mic_live.levels[gain].peak)ri_mic_live.levels[gain].peak=peak;
++  if(peak>=32760)ri_mic_live.levels[gain].clipped++;
++ }
++ ri_mic_live.used+=frames;ri_mic_live.produced+=frames;
++ if(ri_mic_live.used>ri_mic_live.high_water)ri_mic_live.high_water=ri_mic_live.used;
++ wakeup(&ri_mic_live);lck_mtx_unlock(&ri_mic_buffer_lock);return 0;
++}
++static int ri_mic_live_read(int16_t *out,unsigned frames,bool nonblock) {
++ if(!out || !frames || frames>512)return -EINVAL;
++ lck_mtx_lock(&ri_mic_buffer_lock);int result=-ENXIO;
++ if(!ri_mic_live.attempted)goto done;
++ if(ri_mic_live.reader_busy) {result=-EBUSY;goto done;}
++ ri_mic_live.reader_busy=true;
++ uint64_t begin=ri_audio_queue_now();
++ for(;;) {
++  if(ri_mic_live.blocked) {result=-EIO;break;}
++  if(ri_mic_live.used) {
++   if(frames>ri_mic_live.used)frames=ri_mic_live.used;
++   for(unsigned n=0;n<frames;n++)out[n]=ri_mic_live.samples[(ri_mic_live.head+n)%RI_MIC_RING_FRAMES];
++   ri_mic_live.head=(ri_mic_live.head+frames)%RI_MIC_RING_FRAMES;
++   ri_mic_live.used-=frames;ri_mic_live.consumed+=frames;
++   ri_mic_live.last_read=ri_audio_queue_now();result=(int)frames;break;
++  }
++  if(!ri_mic_live.enabled || ri_mic_live.stop) {result=0;break;}
++  if(!ri_mic_live.opens) {result=-EBADF;break;}
++  if(!ri_mic_live.active && !ri_mic_live.requested) {
++   ri_mic_live.stop=false;ri_mic_live.requested=true;ri_mic_live.epoch++;
++   ri_mic_live.last_read=ri_audio_queue_now();
++  }
++  ri_mic_live.last_read=ri_audio_queue_now();
++  if(nonblock) {result=-EWOULDBLOCK;break;}
++  if(ri_audio_queue_now()-begin>10000000000ULL) {
++   ri_mic_live.stop=true;ri_mic_live.reason=4;result=-ETIMEDOUT;break;
++  }
++  ri_mic_live.waits++;
++  struct timespec timeout={0,100000000};
++  int error=msleep(&ri_mic_live,&ri_mic_buffer_lock,PCATCH,"rivermic",&timeout);
++  if(error && error!=EWOULDBLOCK) {
++   ri_mic_live.stop=true;ri_mic_live.reason=4;result=-error;break;
++  }
++ }
++ ri_mic_live.reader_busy=false;
++ done:lck_mtx_unlock(&ri_mic_buffer_lock);return result;
++}
++static void ri_mic_live_read_fault(unsigned frames) {
++ lck_mtx_lock(&ri_mic_buffer_lock);
++ if(ri_mic_live.attempted) {
++  ri_mic_live.read_faults++;ri_mic_live.discarded+=frames;
++  ri_mic_live.stop=true;ri_mic_live.reason=4;
++ }
++ lck_mtx_unlock(&ri_mic_buffer_lock);
++}
++static uint32_t ri_mic_live_flags(void) {
++ lck_mtx_lock(&ri_mic_buffer_lock);
++ uint32_t flags=ri_mic_live.attempted?HAKIOS_AUDIO_CAPTURE_PHYSICAL_LIVE:0;
++ lck_mtx_unlock(&ri_mic_buffer_lock);return flags;
++}
++static int river_mic_live_sysctl SYSCTL_HANDLER_ARGS {
++ int value=0,error=sysctl_handle_int(oidp,&value,0,req);
++ if(error || !req->newptr)return error;
++ if(value==1)return ri_mic_live_enable();
++ if(value!=0)return EINVAL;
++ lck_mtx_lock(&ri_mic_buffer_lock);ri_mic_live.enabled=false;ri_mic_live.stop=true;
++ ri_mic_live.reason=2;wakeup(&ri_mic_live);lck_mtx_unlock(&ri_mic_buffer_lock);return 0;
++}
++static int river_mic_gain_sysctl SYSCTL_HANDLER_ARGS {
++ lck_mtx_lock(&ri_mic_buffer_lock);int value=(int)ri_mic_live.gain;lck_mtx_unlock(&ri_mic_buffer_lock);
++ int error=sysctl_handle_int(oidp,&value,0,req);if(error || !req->newptr)return error;
++ if(value<0 || value>2)return EINVAL;
++ lck_mtx_lock(&ri_mic_buffer_lock);ri_mic_live.gain=(unsigned)value;lck_mtx_unlock(&ri_mic_buffer_lock);return 0;
++}
++static int river_mic_live_status_sysctl SYSCTL_HANDLER_ARGS {
++ char note[4096];lck_mtx_lock(&ri_mic_buffer_lock);
++ snprintf(note,sizeof(note),"attempted=%u enabled=%u worker=%u active=%u requested=%u stop=%u blocked=%u opens=%u sessions=%u epoch=%u error=%d reason=%u queued_frames=%u capacity_frames=%u high_water=%u produced=%llu consumed=%llu discarded=%llu overruns=%u waits=%u read_faults=%u gain=%u applied_gain=%u gain_step_db=12 analog_gain_db=12 level0_frames=%llu level0_squares=%llu level0_peak=%u level0_clipped=%llu level1_frames=%llu level1_squares=%llu level1_peak=%u level1_clipped=%llu level2_frames=%llu level2_squares=%llu level2_peak=%u level2_clipped=%llu rate=48000 channels=1 bits=16 source=physical_codec_in1al mode=continuous_device_read %s",
++ ri_mic_live.attempted,ri_mic_live.enabled,ri_mic_live.worker,ri_mic_live.active,ri_mic_live.requested,
++ ri_mic_live.stop,ri_mic_live.blocked,ri_mic_live.opens,ri_mic_live.sessions,ri_mic_live.epoch,
++ ri_mic_live.error,ri_mic_live.reason,ri_mic_live.used,RI_MIC_RING_FRAMES,ri_mic_live.high_water,
++ (unsigned long long)ri_mic_live.produced,(unsigned long long)ri_mic_live.consumed,(unsigned long long)ri_mic_live.discarded,
++ ri_mic_live.overruns,ri_mic_live.waits,ri_mic_live.read_faults,ri_mic_live.gain,ri_mic_live.applied_gain,
++ (unsigned long long)ri_mic_live.levels[0].frames,(unsigned long long)ri_mic_live.levels[0].squares,ri_mic_live.levels[0].peak,(unsigned long long)ri_mic_live.levels[0].clipped,
++ (unsigned long long)ri_mic_live.levels[1].frames,(unsigned long long)ri_mic_live.levels[1].squares,ri_mic_live.levels[1].peak,(unsigned long long)ri_mic_live.levels[1].clipped,
++ (unsigned long long)ri_mic_live.levels[2].frames,(unsigned long long)ri_mic_live.levels[2].squares,ri_mic_live.levels[2].peak,(unsigned long long)ri_mic_live.levels[2].clipped,ri_mic_live.note);
++ lck_mtx_unlock(&ri_mic_buffer_lock);return sysctl_handle_string(oidp,note,sizeof(note),req);
++}
++SYSCTL_PROC(_debug,OID_AUTO,river_mic_live,CTLTYPE_INT|CTLFLAG_RW|CTLFLAG_LOCKED,NULL,0,river_mic_live_sysctl,"I","Explicit physical live input enable/stop");
++SYSCTL_PROC(_debug,OID_AUTO,river_mic_gain,CTLTYPE_INT|CTLFLAG_RW|CTLFLAG_LOCKED,NULL,0,river_mic_gain_sysctl,"I","ADC digital gain:0=0dB,1=12dB,2=24dB; analog12dB fixed");
++SYSCTL_PROC(_debug,OID_AUTO,river_mic_live_status,CTLTYPE_STRING|CTLFLAG_RD|CTLFLAG_LOCKED,NULL,0,river_mic_live_status_sysctl,"A","Continuous physical input ownership and gain measurements");
+diff --git a/bsd/dev/river_mic_route.h b/bsd/dev/river_mic_route.h
+--- a/bsd/dev/river_mic_route.h
++++ b/bsd/dev/river_mic_route.h
+@@ -17,7 +17,7 @@
+ {
+  struct ri_apr_reply reply;int error;vm_offset_t mmio=0,base=0;
+  ri_mic.phase="allocate";
+- if(kmem_alloc_contig(kernel_map,&ri_mic.page,PAGE_SIZE,PAGE_MASK,0,0,
++ if(!ri_mic.page && kmem_alloc_contig(kernel_map,&ri_mic.page,PAGE_SIZE,PAGE_MASK,0,0,
+     KMA_DATA|KMA_ZERO|KMA_PERMANENT,VM_KERN_MEMORY_IOKIT)!=KERN_SUCCESS)return ENOMEM;
+  ppnum_t pn=pmap_find_phys(kernel_pmap,(addr64_t)ri_mic.page);uint64_t pa=pn?ptoa_64(pn):0;
+  if(!pa || (pa&PAGE_MASK) || PAGE_SIZE<16384 || pa<0x18000000ULL || pa>0x81800000ULL-PAGE_SIZE ||
+@@ -50,7 +50,7 @@
+   ri_wait(5);
+  }
+  if(!ready) {error=EBUSY;goto done;}
+- ri_mic.tid=0x91;unsigned la=ri_ngd.codec_address;ri_mic.phase="connect_source";
++ if(!ri_mic.tid)ri_mic.tid=0x91;unsigned la=ri_ngd.codec_address;ri_mic.phase="connect_source";
+  uint8_t connect[]={la,8,128,0};error=ri_mic_channel_command(base,0x2c,connect,4,3);if(error)goto done;
+  ri_mic.connected=true;
+  uint8_t define[]={la&31,0x24,0x20,0x83,0,128};ri_mic.phase="define_tx_channel";
+@@ -106,13 +106,13 @@
+  ri_wait(20);
+  if(!ri_clock_write(0x308,saved[7]&~0x7800u) || !ri_clock_write(0x313,saved[10]&~0x7800u) ||
+     !ri_clock_write(0x310,(saved[8]&~0x86feu)|0x8098) ||
+-    !ri_clock_write(0x311,(saved[9]&~0x61ffu)|0x380) ||
++    !ri_clock_write(0x311,(saved[9]&~0x61ffu)|(0x380+ri_mic.gain_level*24)) ||
+     !ri_clock_write(0x5e9,saved[11]&~0x78u) ||
+     !ri_clock_write(0x7c1,(saved[14]&~0xfeu)|0x80) ||
+     !ri_clock_write(0x7c0,(saved[13]&~255u)|0x10) ||
+     !ri_clock_write(0x300,saved[6]|2))goto restore;
+  ri_wait(30);
+- if(!(ri_clock_read(0x301)&2) || !ri_clock_write(0x311,(saved[9]&~0x61ffu)|0x280) ||
++ if(!(ri_clock_read(0x301)&2) || !ri_clock_write(0x311,(saved[9]&~0x61ffu)|(0x280+ri_mic.gain_level*24)) ||
+     !ri_clock_write(0x5f6,saved[12]|1))goto restore;
+  /* Keep speaker/QUP2 available throughout all DSP waits; codec lock owns
+   * GPIO SPI and this callback owns its clock/bias/input snapshot. */
+@@ -173,7 +173,7 @@
+  lck_mtx_lock(&ri_adsp_lock);lck_mtx_lock(&ri_audio_queue_lock);
+  bool auto_busy=ri_audio_auto.worker || ri_audio_auto.enabled;
+  lck_mtx_unlock(&ri_audio_queue_lock);
+- if(auto_busy || !ri_stream.complete || !ri_route_ready() || !ri_route.muted ||
++ if(ri_mic_live.attempted || auto_busy || !ri_stream.complete || !ri_route_ready() || !ri_route.muted ||
+     !ri_afe_mute_hold || !ri_ngd.address_valid || !ri_ngd.enabled || ri_ngd.uncertain ||
+     ri_channel.attempted || ri_codec_path.attempted || ri_clock_attempted) {
+   lck_mtx_unlock(&ri_adsp_lock);return EBUSY;
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -76,7 +76,7 @@
+ void river_audio_hw_open(void);
+ void river_audio_hw_close(void);
+ uint32_t river_audio_hw_flags(void);
+-int river_mic_hw_read(int16_t *pcm,unsigned frames);
++int river_mic_hw_read(int16_t *pcm,unsigned frames,int nonblock);
+ uint32_t river_mic_hw_flags(void);
+ int river_audio_hw_reserve(size_t frames);
+ void river_audio_hw_cancel(size_t frames, int ticket);
+@@ -4547,11 +4547,18 @@
+ #include "river_audio_queue.h"
+ #include "river_native_pcm.h"
+ #include "river_mic_buffer.h"
++#include "river_mic_live.h"
+ 
+ int
+-river_mic_hw_read(int16_t *pcm,unsigned frames) {return ri_mic_buffer_read(pcm,frames);}
++river_mic_hw_read(int16_t *pcm,unsigned frames,int nonblock) {
++ int result=ri_mic_live_read(pcm,frames,nonblock!=0);
++ return result==-ENXIO?ri_mic_buffer_read(pcm,frames):result;
++}
++void river_mic_hw_open(void) {ri_mic_live_open();}
++void river_mic_hw_close(void) {ri_mic_live_close();}
++void river_mic_hw_read_fault(unsigned frames) {ri_mic_live_read_fault(frames);}
+ uint32_t
+-river_mic_hw_flags(void) {return ri_mic_buffer_flags();}
++river_mic_hw_flags(void) {uint32_t live=ri_mic_live_flags();return live?live:ri_mic_buffer_flags();}
+ void
+ river_audio_hw_open(void) {ri_audio_auto_open();}
+ void
+diff --git a/bsd/sys/hakios.audio.h b/bsd/sys/hakios.audio.h
+--- a/bsd/sys/hakios.audio.h
++++ b/bsd/sys/hakios.audio.h
+@@ -26,6 +26,7 @@
+ #define HAKIOS_AUDIO_PLAYBACK_QUEUED (1u << 2)
+ #define HAKIOS_AUDIO_PLAYBACK_BOUNDED (1u << 3)
+ #define HAKIOS_AUDIO_CAPTURE_PHYSICAL_SNAPSHOT (1u << 4)
++#define HAKIOS_AUDIO_CAPTURE_PHYSICAL_LIVE (1u << 5)
+ struct hakios_audio_status {
+  uint32_t version;
+  uint32_t flags;
