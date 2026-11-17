@@ -5,6 +5,16 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0332 temporarily booted; home reply pending (2026-11-17)
+
+User confirmed fastboot ready. Reverified image d34f7972... and both helper
+hashes, productriver/serialZY226HM8QB. Temporary fastboot boot accepted0.855s;
+NOflash. CURRENT PHONE332 fresh; NOactive audio controls. Requested fresh home
+responsiveness/ready confirmation; WAIT for reply before active controls.
+Evidence work/microphone-readback/fastboot-preflight.json, verified-boot.json,
+fastboot-boot-b141600.txt and boot logger. Manifest updated phone_current_patch332.
+After reply follow verified procedure below; microphone hardware still pending.
+
 ## Active handoff:0332 corrected microphone image verified; fastboot requested (2026-11-17)
 
 Native sourceb1416008003baa642ae65a4661d30efecb2ad069 built successfully on exact local KDK.
