@@ -5,6 +5,28 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0334 speech capture prepared; counting confirmation pending (2026-11-17)
+
+UserreconnectedUSB/joinedWiFi/confirmedresponsive. MacUSB en6 recoveredUP/
+active192.168.7.1, but USBSSHstillconnecttimeout. TrustedWiFi192.168.1.232
+READONLYstartstatus passedunrequested. RIVER_AUDIO_SSH_HOST=192.168.1.232 used
+for allsubsequent scripts. Exact installedhelpers/freshqueue/auto/mic verified;
+mutedprepare-device.pyONCE completedthroughNGDenumeration; stage-exporter.py
+installed/byteverified /private/var/tmp/river-mic-export-75d189b. NOmiccapture
+request yet. CURRENT334 startup prerequisitesconsumed, micattempted0, auto0,
+ampmuted. DoNOTrepeatprepare. Evidence work/microphone-speech including
+installed-helper-verification.json/capture-exporter-installed.json. Earlier
+USB/WiFitimeouts preserved separately; nochanges tokeys/trust/hostrouting.
+
+Askuser STARTcountingaloudnearbottommic BEFOREclickingAlreadycounting and
+continue20secafterclick. Onreply immediately run ONCE:
+RIVER_AUDIO_SSH_HOST=192.168.1.232 python3 work/microphone-speech/run-capture.py
+from canonical apr-communication evidence root. Then telluserstopcounting,
+iffullcleanupPASS export-capture.py SAMEWiFienv, inspectactualPCM. Request
+userpostcaptureUIresponsive. Do notcopyfromoldrunorresendcaptureifuncertain.
+Thisisspeechvalidationofsamesource75d189b/imagea326c63f afterfirsttransportPASS
+withmissedcue. No newbuildneeded; noactivecapture controls sentyet.
+
 ## Active handoff:0334 speech run waiting USB reconnect; no audio controls (2026-11-17)
 
 Userconfirmedhome responsive onfresh334 speech-validation boot. Initial
