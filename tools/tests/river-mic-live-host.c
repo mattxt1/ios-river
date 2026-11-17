@@ -46,7 +46,7 @@ int main(void){
  pthread_join(producer,NULL);assert(total==409600 && ri_mic_live.produced==total && ri_mic_live.consumed==total && !ri_mic_live.used && !ri_mic_live.overruns && ri_mic_live.waits && ri_mic_live.high_water<=RI_MIC_RING_FRAMES);
  assert(ri_mic_live.levels[0].frames+ri_mic_live.levels[1].frames+ri_mic_live.levels[2].frames==total);
  ri_mic_live.opens=2;ri_mic_live_close();assert(ri_mic_live.stop && ri_mic_live.reason==1 && !ri_mic_live.used && !ri_mic_live_read(samples,512,false));
- ri_mic_live.active=false;ri_mic_live.sessions=1;ri_mic_live_open();assert(!ri_mic_live.stop);assert(ri_mic_live_read(samples,512,true)==-EWOULDBLOCK && ri_mic_live.epoch==2);
+ ri_mic_live.active=false;ri_mic_live.sessions=1;assert(ri_mic_live_read(samples,512,true)==-EWOULDBLOCK && ri_mic_live.epoch==2);ri_mic_live_open();assert(!ri_mic_live.stop);assert(ri_mic_live_read(samples,512,true)==-EWOULDBLOCK && ri_mic_live.epoch==2);
  ri_mic_live.blocked=true;assert(ri_mic_live_read(samples,512,false)==-EIO);ri_mic_live.blocked=false;
  ri_mic_live.reader_busy=true;assert(ri_mic_live_read(samples,512,false)==-EBUSY);ri_mic_live.reader_busy=false;
  ri_mic_live.requested=false;ri_mic_live.active=true;sleep_error=EINTR;assert(ri_mic_live_read(samples,512,false)==-EINTR && ri_mic_live.stop && ri_mic_live.reason==4);sleep_error=0;

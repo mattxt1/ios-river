@@ -126,10 +126,14 @@ diff --git a/bsd/dev/river_audio.c b/bsd/dev/river_audio.c
 diff --git a/bsd/dev/river_audio_lifecycle.h b/bsd/dev/river_audio_lifecycle.h
 --- a/bsd/dev/river_audio_lifecycle.h
 +++ b/bsd/dev/river_audio_lifecycle.h
-@@ -107,15 +107,19 @@
+@@ -107,15 +107,23 @@
   /* Explicit once-per-boot supervised enable; writes/open/idle/close drive
    * all following starts/stops. Old diagnostic controls stay one-shot. */
   lck_mtx_lock(&ri_adsp_lock);
++ lck_mtx_lock(&ri_audio_queue_lock);
++ bool busy=ri_audio_auto.enabled || ri_audio_auto.worker || ri_audio_auto.active;
++ lck_mtx_unlock(&ri_audio_queue_lock);
++ if(busy) {lck_mtx_unlock(&ri_adsp_lock);return EBUSY;}
 + int release=ri_mic_live_release();
 + if(!release)release=ri_audio_auto_rearm();
 + if(release) {lck_mtx_unlock(&ri_adsp_lock);return release;}
@@ -151,7 +155,7 @@ diff --git a/bsd/dev/river_audio_lifecycle.h b/bsd/dev/river_audio_lifecycle.h
 diff --git a/bsd/dev/river_mic_lifecycle.h b/bsd/dev/river_mic_lifecycle.h
 --- /dev/null
 +++ b/bsd/dev/river_mic_lifecycle.h
-@@ -0,0 +1,96 @@
+@@ -0,0 +1,100 @@
 +/* Serialized microphone/speaker handoff. Only exact cleanup and restored
 + * clocks allow reuse; DMA page and monotonic APR/channel identities persist. */
 +static bool ri_mic_owned_clean(void) {
@@ -226,7 +230,11 @@ diff --git a/bsd/dev/river_mic_lifecycle.h b/bsd/dev/river_mic_lifecycle.h
 + (void)thread_terminate(current_thread());thread_block(THREAD_CONTINUE_NULL);
 +}
 +static int ri_mic_live_enable(void) {
-+ lck_mtx_lock(&ri_adsp_lock);lck_mtx_lock(&ri_audio_queue_lock);
++ lck_mtx_lock(&ri_adsp_lock);lck_mtx_lock(&ri_mic_buffer_lock);
++ bool duplicate=ri_mic_live.attempted || ri_mic_live.worker;
++ lck_mtx_unlock(&ri_mic_buffer_lock);
++ if(duplicate) {lck_mtx_unlock(&ri_adsp_lock);return EALREADY;}
++ lck_mtx_lock(&ri_audio_queue_lock);
 + bool output_busy=ri_audio_auto.enabled || ri_audio_auto.worker || ri_audio_auto.active;
 + lck_mtx_unlock(&ri_audio_queue_lock);
 + if(output_busy || ri_mic_capture.attempted || !ri_stream.complete || !ri_route_ready() ||
@@ -251,7 +259,7 @@ diff --git a/bsd/dev/river_mic_lifecycle.h b/bsd/dev/river_mic_lifecycle.h
 diff --git a/bsd/dev/river_mic_live.h b/bsd/dev/river_mic_live.h
 --- /dev/null
 +++ b/bsd/dev/river_mic_live.h
-@@ -0,0 +1,145 @@
+@@ -0,0 +1,153 @@
 +/* Explicit supervised physical input. The stash mutex owns only CPU ring and
 + * lifecycle metadata. Device readers sleep interruptibly; hardware stays on
 + * the dedicated worker. No DSP ownership waits or SPI under this mutex. */
@@ -321,6 +329,14 @@ diff --git a/bsd/dev/river_mic_live.h b/bsd/dev/river_mic_live.h
 + lck_mtx_lock(&ri_mic_buffer_lock);int result=-ENXIO;
 + if(!ri_mic_live.attempted)goto done;
 + if(ri_mic_live.reader_busy) {result=-EBUSY;goto done;}
++ /* HAL may retain its descriptor between recordings. A NEW read call after
++  * acknowledged close/idle teardown requests a fresh generation; a reader
++  * already waiting during stop still gets EOF. Old tail is explicitly counted. */
++ if(ri_mic_live.enabled && !ri_mic_live.active && !ri_mic_live.requested &&
++    ri_mic_live.stop && ri_mic_live.sessions &&
++    (ri_mic_live.reason==1 || ri_mic_live.reason==3)) {
++  ri_mic_live.discarded+=ri_mic_live.used;ri_mic_live.head=ri_mic_live.used=0;ri_mic_live.stop=false;
++ }
 + ri_mic_live.reader_busy=true;
 + uint64_t begin=ri_audio_queue_now();
 + for(;;) {
