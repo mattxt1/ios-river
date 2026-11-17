@@ -5,6 +5,20 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0331 fresh temporary boot; home reply pending (2026-11-17)
+
+User returned and reported phone back in fastboot, present for testing.
+Reverified existing image2bf87cfa... and both helpers, productriver and serial
+ZY226HM8QB. Reused verified0331 image; temporary boot accepted0.851s, NOflash.
+CURRENT PHONE331 fresh, NOaudio controls. Fresh home responsiveness/ready reply
+requested; WAIT before active controls. Earlier Nov16 evidence preserved.
+New private evidence and reviewed runner copies: work/microphone-20261117
+under canonical apr-communication evidence root. This directory is the active
+run; do not use old work/microphone evidence names. Scripts preserve O_EXCL.
+After reply: verify-installed.py, prepare-device.py ONCE muted throughNGD,
+stage-exporter.py, immediate speech cue then run-capture.py ONCE. Export only
+after full ownership/restore checks pass, no --plumbing. Mic still unverified.
+
 ## Active handoff:0331 temporarily booted; home confirmation pending (2026-11-16)
 
 User confirmed fastboot ready. Reverified image2bf87cfa... and both helper hashes,
