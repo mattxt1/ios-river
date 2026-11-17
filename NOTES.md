@@ -5,6 +5,25 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0333 ADM response image verified; fastboot requested (2026-11-17)
+
+Source681a9b4e343c676c82230ac18443c9bfdc9a6a62 native build passed exact local KDK.
+Kernel SHA37288d4b2e89e7ad1700543110cef3b877919c28951b8f3932e4f97e3c598040.
+Image river-microphone-adm-wifi-681a9b4.img,
+SHA7b63517752196f763d06bd47bf92dc982d69ed3ceb8e22d8af7586afd14efd56, 27049984bytes/cmdline577.
+Kernel payload/base/unrelatedhelpers/WiFi and unchanged ADSP/exporter hashes
+verified. Manifest outputs/microphone-adm-wifi-build-manifest.json. Hardware
+capture pending; no0333controls. This build diagnoses ADM response and fixes
+completed-rejection cleanup, does not claim rootcauseof0332 response solved.
+
+CURRENT PHONE332 consumed, DSPmap/ASM/AFE/channel ownership retained/uncertain;
+codec/FLL/pins restored, amp muted, USER confirms responsive. No active retry.
+Fastboot requested after concrete0333image verified; temporaryboot only.
+Next active evidence/scripts work/microphone-adm tag681a9b4. Fresh home reply
+thenverify-installed, mutedprepareONCE, stageexporter, speechcue/captureONCE.
+Ifcapturefails inspect exact ADM reply/status/firstfailed APRmetadata; never
+repeat or export synthetic samples. Require fullcleanup before physicalexport.
+
 ## Active handoff:0332 AFE pass; ADM TX stop;0333 diagnostic correction (2026-11-17)
 
 Fresh home responsive/user ready. Exact helper/fresh state verified; muted
