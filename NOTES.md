@@ -5,6 +5,18 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0335 temporarily booted; home/WiFi/listening pending (2026-11-17)
+
+Userconfirmedfastbootready. Reverified imagec685fd53.../all3helperhashes and
+productriver/serialZY226HM8QB. Temporary fastboot bootaccepted0.850s; NOflash.
+CURRENT PHONE335 fresh, NOactiveaudio controls. Freshhome responsive/WiFijoin/
+readytolisten confirmationrequested; WAITreplybeforeactivecontrols. Default
+trustedWiFiSSH192.168.1.232 (USBSSHfailedlastboot). Evidence work/audio-live/
+fastboot-preflight.json, fastboot-boot-b4764ac.txt, verified-boot.json andlogger.
+Manifestupdatedphone_current_patch335. Afterreply followcombinedprocedurebelow:
+verifyinstalled, mutedprepareONCE, stageinputs, cuefirstspeaker; thenmicgain/
+restarttests andspeakerafter inTHISboot. All335hardwarevalidationpending.
+
 ## Active handoff:0335 combined live mic/gain/speaker image VERIFIED (2026-11-17)
 
 Userrequested continuousmicrophone/gaincalibration andspeakersbatched. Final
