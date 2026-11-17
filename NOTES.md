@@ -5,6 +5,26 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0334 COPP parsing image verified; fastboot requested (2026-11-17)
+
+Source75d189b4b66d7e037616ab0f46f9c0017a89e788 native build passed exact local KDK.
+Kernel SHA9fd6a51cb73847c3b3c66d2b02d6d3d8b60e830bc3b1e489687049582100793d.
+Image river-microphone-copp-wifi-75d189b.img,
+SHAa326c63fd0b9a1c6b916114b919608738437ccc403108eb4baf1788c1afbf700, 27049984bytes/cmdline577.
+Kernel payload/base/unrelatedhelpers/WiFi/unchangedADSP+exporter hashes verified.
+Manifest outputs/microphone-copp-wifi-build-manifest.json. Actual-code tests
+reproduce hardware successwordf0b70009 and verify maskedID9 matrix/close/full
+capturecleanup, while preserving exactAPR/status/length/lowIDvalidation.
+Hardwarephysicalcapture remains pending. No0334devicecontrols.
+
+CURRENT PHONE333 consumed; DSPmap/ASM/AFE/sourcechannel retained/uncertain,
+codec/FLL/pins restored, amp muted; USERconfirms iOSresponsive. Noactiverepeat.
+Fresh fastboot requested after concreteverifiedimage. Temporaryboot ONLY;
+next active evidence/scripts work/microphone-copp tag75d189b. Freshhome reply
+thenverifyinstalled, mutedprepareONCE, stageexporter, speechcue/captureONCE.
+Fullownership/restore checks beforephysicalexport; never --plumbing. Ifnext
+stepfails inspectpreservedmetadata, do not retry sameboot or inventaudio.
+
 ## Active handoff:0333 identifies reserved ADM halfword;0334 correction prepared (2026-11-17)
 
 Fresh userresponsive/ready, exact helper/freshstate passed, mutedprepareONCE,
