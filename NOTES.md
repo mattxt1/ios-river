@@ -5,6 +5,19 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0334 speech-validation fresh boot; home pending (2026-11-17)
+
+Userconfirmedfastbootready. Reverified SAMEimagea326c63f.../bothhelpers and
+productriver/serialZY226HM8QB. Temporary boot accepted0.849s, NOflash. CURRENT
+PHONE334 fresh; NOaudio controls. Evidence now work/microphone-speech,
+separatefromtransportPASSwork/microphone-copp; do notoverwriteoldcaptures.
+Freshhome responsive reply requested. WAITbeforeactivecontrols. Then exact
+verify-installed.py, mutedprepare-device.pyONCE, stage-exporter.py. AFTERall
+preparation, askuser to STARTcountingnearbottommic BEFOREclicking'Already
+counting', keepcountingfor~15sec. Onreply immediately run-capture.py ONCE,
+fullcleanup check thenexport-capture.py. Goalacousticvalidation; priortransport
+PASS butspeechcue missed. Defaultendpointsynthetic until explicitcompletion.
+
 ## Active handoff:0334 microphone transport PASS; speech cue missed (2026-11-17)
 
 Fresh userresponsive/ready, exact helper/freshstate verification and muted
