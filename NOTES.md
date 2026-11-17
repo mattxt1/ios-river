@@ -5,6 +5,53 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0335 combined live mic/gain/speaker image VERIFIED (2026-11-17)
+
+Userrequested continuousmicrophone/gaincalibration andspeakersbatched. Final
+sourceb4764ac1f51fcf959913be7e6d6179368733238a nativebuildPASSED exactlocalKDK.
+Kernel SHA0fdd1184c5d35cc3a872240abfbde78a90e840cabfa9eb68784247d0edcf94bf.
+Image river-audio-live-wifi-b4764ac.img,
+SHAc685fd53c4e8b340910f23e609199ba38a9168025db6a20e4208f7a851a407e1, 27049984bytes/cmdline577.
+Kernelpayload/allnewinputbytes/committedhelpercontents/signatures/unrelated
+RiverFiles/WiFi preserved andverified. Manifest outputs/audio-live-wifi-build-manifest.json.
+Allactualcode ring/protocol/worker/rearm/speakerhandoff sanitizer testsPASS.
+Earlierlocalbuilds/logs/manifests preserved beforefinaldescriptorrestart and
+frameaccounting guards; finalonlyimageaboveisbootcandidate. Hardwarevalidation
+PENDING. CurrentPHONE334consumed/stashexhausted/routesclosed/ampmuted untouched.
+No0335devicecontrols. Askfastboot onlyafterthisconcreteverifiedimage.
+
+Activeevidence/scripts work/audio-live, tagb4764ac. TemporaryfastbootbootONLY,
+verifyproductriver/serialZY226HM8QB. FreshhomeRESPONSIVE confirmation; joinWiFi
+(defaulttrustedSSH192.168.1.232, hostkeyalias192.168.7.2). USBSSHtimedoutonlast
+bootdespitehostaddressrecovery; useexistingtrustedWiFi, neverbypasshostkeys.
+verify-installed.py requiresfreshDSP/queue/auto/miclive andexacthelpers;
+prepare-device.pyONCE mutedthroughNGD; stage-inputs.py installsbyteverified
+rawcapture+nativeapphelpers andchecks persistenttwo-noteWAVhash. Noextraarms.
+
+Cuedrun-speaker.py before: one6sec nativeAVAudioPlayerburst, appvolume0.05/0.1,
+verifiedhardwareampgainUNCHANGED. Automaticfirstwrite/start/idlecleanup then
+disableworker, requireEOS/mute/fullownershipcleanup. Askuserheard/UIresponsive.
+Thenask STARTCOUNTINGnearbottommicBEFOREclickingconfirmation, continue~30sec.
+Onreply run-live-mic.py ONCE: explicitenable, ordinarycdevreader18sec, hardware
+ADCgain0/+12/+24dB at6/12sec consumedframe thresholds; perlevelstats. Select
+highesttestedzero-clipping gainwith>=6dBobservedheadroom, close/reopen3sec at
+candidatelevel, requirepermanentPAreuse/advancingIDs/fullcleanup/framebalance,
+disableworker. Neverrepeatcontrolsafteruncertainty. Physicalflag32/nosynthetic;
+nostash replay. fetch-recordings.py downloadscloseduniqueWAVsinboundedchunks,
+remoteSHAverifies, calculatesPCM/gainsegments. Userreviewactualcapturelevel.
+Aftercuedlistening,run-speaker.py after: explicitcleanre-enable, secondnative
+burst/EOS/mute/cleanup. Thisvalidateshalfduplexhandoff, NOTsimultaneousfull-duplex.
+Eachscriptparsed/reviewed; readbeforeexecution. Requireallresults/useraudio+UI
+confirmation, updatehandoff/manifest; noactivecontrolsoncurrent334.
+
+Liveinput source has nofixedsnapshotframe/session-durationcap;250msreaderidle
+lease andexplicitclose/stopteardown. Firstreadwaitingrefreshesconsumerlease;
+newreadfrompersistentHALFD aftercleanteardown requestsnewgeneration. Faults
+sticky; IDbudgetbounded andcannotwrap. Micserviceexplicitonce-per-bootsupervised
+enable; sessionsrestartwhileenabled. Speakerlimits3sessions/6sechardcapremain.
+Gainanalogfixedstock12dB, ADCdigital128/152/176 source0.5dBsteps, noofflinegain
+substitution or AGC. Hardwarecalibrationlevelselectionstillpendingactualspeech.
+
 ## Active handoff:0335 continuous mic/gain/speaker batch prepared (2026-11-17)
 
 Userrequestedcontinuousmicrophone/gaincalibration andspeakersincoherentbuilds.
