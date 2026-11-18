@@ -73,3 +73,15 @@
   clipping. Current334consumed/stashexhausted/routesclosed/ampmuted. Noactive
   retry. Continuousphysicalmic/gaincalibration remainpending; do not conflate
   this explicit snapshot with continuous input. Useuniqueper-run exportWAVname.
+
+- Latest335 combined transport passed18sec live mic+3sec restart/fullcleanup,
+  and user heard speakers before/after, iOS responsive. Acoustic review:0dB
+  andhot+12dB continuoussectionsCLEAR; +12dB restartclipcrackly/chopped. DoNOT
+  claimrestartquality/gaincalibrationcomplete. Both335backendsoff/routesclosed/
+  ampmuted; noactive retries.0336unity-firstADCstartup/timestampcandidatebuilt,
+  hardwarevalidationpending. ReadnewestNOTES forexactimage/evidence/procedure.
+- StoragecleanupNov18 preservedsource/currentnativeinputs/keys/allWAVs/images;
+  oldduplicateKDKPayloadpathnowlinkstocanonical.dependencies KDK. Reports and
+  SHAaudits:/Users/matttyson/Developer/Codex/2026-11-18/storage-cleanup. Historical
+  generatedbuildproducts/oldcompiler/updatercachesremoved; don'tassumetheir
+  generatedoutputsremain. Currentnativebuildtreeisintactand0336buildpassed.

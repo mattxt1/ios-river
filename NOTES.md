@@ -5,6 +5,48 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0336 unity-first restart candidate image VERIFIED (2026-11-18)
+
+Sourcedc322d61ec637b3c83410385d83839c9ed315f1d nativebuildPASSED afterstoragecleanup,
+usingpreservedcanonicalKDK/currenttree. KernelSHA99c165941105f1a9907a0d1bf39f407b770729c5b1ab1d181ea790d01c9a8a45.
+Image river-mic-restart-startup-wifi-dc322d6.img,
+SHA5cf0f2afae985a572e4f3fa680906d1684479cf42e8bf5a0ba4a9d81ffe1e670, 27049984bytes/cmdline577.
+Payload/committedinputs/helpercode/signatures/base/unrelatedRiverFiles/WiFi
+verified. Manifest outputs/mic-restart-startup-wifi-build-manifest.json. New
+hardwarequalityvalidationPENDING; startupchangeisnotclaimedfixyet. Hosttests
+passactualstartupunity/preroll/requestedlivegain/settlingaccounting/timestamp
+quantization+gaps+backwards+invalid, micring/worker/speakerregressions.
+
+USER0dBcontinuouscomparisonCLEAR and+12dB SAMEcontinuoussessioncomparisonCLEAR;
+only+12dB3secRESTARTclipcrackly/chopped. Selectedgainnotfullyacceptedforrestart.
+CurrentPHONE335 remainsbothbackendsoff/allroutesclosed/ampmuted. No phone
+controls sincecombinedtests. QueuedDMAprototypeDEFERRED/notbuilt; sourcefiles
+preservedoutsideGit underwork/audio-read-pipeline/prototype-repo. 0336minimal
+startupcandidatepowersADCupatunity, discards4validblocks, appliesrequestedgain
+viaalreadyclear liveupdate, discards2settlingblocks beforedelivery. Everyreal
+discardaccounted; no fabricatedsilence/offlinegain. Metadata-timestampaudit
+exposesmissing/backward/invalidtime; cannotclaimcontinuityfrominvalidtimestamps.
+
+Active next-run scripts/evidence work/mic-restart-startup tagdc322d6. Allparsed;
+helperbytescopied/hashverifiedagainstunchangedsource. DefaulttrustedWiFiSSH
+192.168.1.232; temporarybootONLY, verifyRiver/serial thenfreshhome/WiFiresponsive/
+listeningreply. Verifyinstalled, mutedprepareONCE, stageinputs, cue speakers
+before (run-speaker.py before). Afterheard/UI, prepare-live-mic.py ONCE enables
+idlebackend+requests gain1(12dB), butNOreader. AskSTARTcountingbeforeclick, keep
+~45sec. Onreplyrun-live-mic.py ONCE:12secinitial+8secrestart BOTHfixed12dB,
+fullcleanup/PAreuse/TIDadvance/framebalance, thenmicdisable/workerexit. Fetch
+closedWAVs, requireclearfirst/restartvoicecomparison plusaudit, cue speakers
+after/run-speaker.py after. Sourcegain24notrepeatedthisbatch (335measured).
+Allsupervisedstopsnowbypasshostlog-spacefailure; mockENOSPCtestverifiedstop
+sentonce/existingevidencerefusesduplicate, NOhardwarecommandsduringhosttest.
+Don'tresenduncertainroutecontrols oroverwriteevidence.
+
+Storagecleanupdone: report canonical2026-11-18/storage-cleanup/REPORT.txt,
+net+17.14GiB beforethisbuild; currentKDK/currentnativeinputs/allWAVs/bootimages
+preserved. 25oldgeneratedbuilddirs/cache/obsoleteupdaters/verifiedduplicateKDK
+cleared; oldKDKreference symlinkstocanonicaldependency. FullhashauditoutsideGit.
+ThisfreshnativebuildPASS alsoverifiesdependencyusableafterdeduplication.
+
 ## Active handoff:storage cleanup done; restart/startup-isolated0336 prepared (2026-11-18)
 
 Userrequestedstoragecleanupandanswered0dBcontinuouscomparisonCLEAR, then+12dB
