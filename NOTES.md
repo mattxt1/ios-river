@@ -5,6 +5,20 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0335 recordings downloaded; selected-gain review pending (2026-11-18)
+
+Allcombinedhardwaretransport and speakeraudibilitypasses recordedbelow. Closed
+18sec/3secWAVs downloadedinboundedchunks andremotesha256verified; no newcapture.
+work/audio-live-20261118/live-calibration.wav SHA
+ a79071ebb4dc1085944c4d81f0814d67c40454d7273a2a17f184c03db5e55616;
+live-restart.wav SHA7d3ed4e0f34ebb03bce5173b605c692202f60ce6783aaddfc55a2272ed8b9736.
+Restart3sec rawpeak3097/no clipping, RMS1sec256/407/433. Itwasrenderedinaudio
+player WITHNOofflinegain; useraskedwhetherclear/undistorted/levelgood atselected
+hardware+12dB. WAITreply. recording-analysis.json/combined-evidence-manifest.json
+preservefiles andgainsegments. Current335bothbackendsDISABLED/workersexited,
+allroutes/mapsclosed/ampmuted; no furtheractivecontrols. Hostdiskstilllow~289MiB
+butaudio/hash/evidencedownloadfinished. Neverrepeatroutejusttorecoverlogs.
+
 ## Active handoff:0335 continuous mic/gain/restart/speaker handoff PASS; audio review pending (2026-11-18)
 
 UserALREADYCOUNTING confirmed~20cm/normalvoice. Live18sec cdevrecordPASS864000
