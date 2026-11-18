@@ -5,6 +5,21 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0335 reverified/fresh temporary boot; home pending (2026-11-18)
+
+Userreturnedafteraway/requestedverifyimageandrebootinfastboot. Devicealready
+fastbootZY226HM8QB/productriver. Reverified c685fd53...image/all3helpers,
+27049984bytes/cmdline577; temporarybootaccepted0.855s, NOflash. SAMEsource
+b4764ac/kernel0fdd1184... asverifiedcombinedbatch. CURRENT PHONE335 fresh,
+NOaudio controls. Freshhome-responsive/WiFijoin/readytolisten requested; WAIT
+replybeforeactivecontrols. New activeevidence/scripts work/audio-live-20261118
+(separatefromNov17work/audio-live, evidencepreserved). Manifestactiveevidence
+updated. Scripts/source-commit/helpers copiedandparsed; defaulttrustedWiFi
+192.168.1.232/hostkeyalias192.168.7.2. Afterreplyverifyinstalled, mutedprepare
+ONCE, stageinputs, cuefirstspeaker; micgain/restartandspeakerafter inTHISboot.
+All0335hardwarevalidation stillPENDING. Followcombinedprocedurebelow, replace
+runnerdirectory withwork/audio-live-20261118. Neverrepeatuncertaincontrols.
+
 ## Active handoff:0335 temporarily booted; home/WiFi/listening pending (2026-11-17)
 
 Userconfirmedfastbootready. Reverified imagec685fd53.../all3helperhashes and
