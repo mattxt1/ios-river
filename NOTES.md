@@ -5,6 +5,44 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0337 built VERIFIED and temporarily booted; home pending (2026-11-18)
+
+Native build of committed a9cbbcb505bc13013a074eb543c5074b47a2bba9 PASSED.
+KernelSHA e4b8413794c7b4ef80b698e8c1b572ae29d4323ea5477a4430da5d8dffb050e1.
+Image outputs/river-ios-app-audio-wifi-a9cbbcb.img SHA
+ d006a8a357414d1bb1a6d1cbb7b044c8fd8eb54f191987e0eac3524606ffcaa1,
+27068416bytes/cmdline577; kernelpayload/helper/source/base/unrelatedRiverFiles
+verified; WiFi preserved. Manifest outputs/ios-app-audio-wifi-build-manifest.json.
+User explicitly said continue build and boot. Fastboot already available;
+verified River product/serialZY226HM8QB, temporary boot accepted0.837sec. NOflash.
+CURRENT PHONE337 fresh; NO audio controls. Fresh home-responsive/WiFi question
+PENDING; do not run active initialization until confirmation. Read-only exact
+helper/baseline verifier started; evidence work/ios-audio-integration. Avoid
+repeating its O_EXCL evidence if interrupted; inspect result before continuing.
+
+After home reply: finish verify-installed.py (USB default/retainedhostkey),
+prepare-device.py ONCE performs known-muted DSP+NGD initialization. Final
+ngd-enumerate codec_address_verified required. Then enable-ios.py ONCE enables
+both services under one coordinator; NO sound or capture requested by helper.
+Ask user stock Voice Memos record10-15sec counting/normal microphone consent,
+stop and replay; start iOS volume low. This covers >6sec playback and normal
+AVFoundation capture/replay in one boot. Keep input gain0; no calibration.
+Inspect --ios-status/--auto-status/--queue-status/--mic-live-status live (these
+use short CPU metadata locks). Do not read codec/channel/ASM status while a
+route runs: ADSP lock spans session and those queries may block. Mic note
+refreshes only after session cleanup. Require actual frame progression,
+cleanup/frame balance/timestamp continuity plus user recognizable speech.
+No claimed app success until these pass. Capture priority/halfduplex; no
+simultaneous playback+record promise. User may try Settings ringtone as speaker
+app check too. Stop --ios-disable ends BOTH services; do not mix legacy enable
+commands once normal attempted. transport.supervised_stop accepts ios-disable
+and bypasses host log allocation errors. One boot tested app switching is goal.
+
+Build/log current native tree retained; no further kernel edits while hardware
+trial pending. Amplifier level unchanged24dB attenuation; normal samples no
+longer clipped2048, linear iOS volume/mute handled before DMA. Host30alternation,
+5session,10sec/lease,600ID and15queuedREAD model checks pass, hardware pending.
+
 ## Active handoff:0337 normal iOS audio candidate; native build next (2026-11-18)
 
 User explicitly requested combined build for speakers/microphone through normal
