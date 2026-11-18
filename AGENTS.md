@@ -85,3 +85,10 @@
   SHAaudits:/Users/matttyson/Developer/Codex/2026-11-18/storage-cleanup. Historical
   generatedbuildproducts/oldcompiler/updatercachesremoved; don'tassumetheir
   generatedoutputsremain. Currentnativebuildtreeisintactand0336buildpassed.
+
+-0337 normal iOS app candidate combines one half-duplex route owner, queued
+ mic input and normal volume/session lifecycle. Native/hardware validation
+ pending; do not claim everyday audio complete. Use stock Voice Memos with
+ normal consent. Initialize muted prerequisites once, then --ios-enable once;
+ no per-app backend swaps. --ios-disable drains both. Current phone336/off;
+ consult newest NOTES before device controls.

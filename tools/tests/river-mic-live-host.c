@@ -23,6 +23,7 @@ static int msleep(void *p,pthread_mutex_t *m,int flags,const char *name,struct t
  if(until.tv_nsec>=1000000000){until.tv_sec++;until.tv_nsec-=1000000000;}
  held=false;int rc=pthread_cond_timedwait(&ready,m,&until);held=true;return rc==ETIMEDOUT?EWOULDBLOCK:rc;
 }
+static struct {bool attempted;} ri_audio_normal __attribute__((unused));
 #include "mic-live-actual.h"
 static void reset(void){memset(&ri_mic_live,0,sizeof(ri_mic_live));sleep_error=0;}
 static int16_t pattern(unsigned n){return (int16_t)((n%20001)-10000);}
@@ -52,11 +53,21 @@ int main(void){
  ri_mic_live.requested=false;ri_mic_live.active=true;sleep_error=EINTR;assert(ri_mic_live_read(samples,512,false)==-EINTR && ri_mic_live.stop && ri_mic_live.reason==4);sleep_error=0;
  reset();ri_mic_live.attempted=ri_mic_live.enabled=ri_mic_live.active=true;
  int16_t block[2048]={0};block[0]=32767;block[1]=-32768;
- for(unsigned n=0;n<8;n++)assert(!ri_mic_live_push(block,2048,2));
- assert(ri_mic_live_push(block,2048,2)==EOVERFLOW && ri_mic_live.overruns==1 && ri_mic_live.used==16384 && ri_mic_live.levels[2].clipped==16 && ri_mic_live.levels[2].peak==32768);
+ for(unsigned n=0;n<RI_MIC_RING_FRAMES/2048;n++)assert(!ri_mic_live_push(block,2048,2));
+ assert(ri_mic_live_push(block,2048,2)==EOVERFLOW && ri_mic_live.overruns==1 && ri_mic_live.used==RI_MIC_RING_FRAMES && ri_mic_live.levels[2].clipped==RI_MIC_RING_FRAMES/1024 && ri_mic_live.levels[2].peak==32768);
  assert(ri_mic_live_read(samples,512,true)==512);ri_mic_live_read_fault(512);assert(ri_mic_live.stop && ri_mic_live.discarded==2560 && ri_mic_live.read_faults==1);
  assert(ri_mic_live.produced==ri_mic_live.consumed+ri_mic_live.discarded+ri_mic_live.used);
- reset();ri_mic_live.enabled=true;ri_mic_live.last_read=ri_audio_queue_now()-251000000ULL;assert(ri_mic_live_stop() && ri_mic_live.reason==3);
+ reset();ri_mic_live.enabled=true;ri_mic_live.last_read=ri_audio_queue_now()-
+#ifdef RIVER_IOS_AUDIO
+ 751000000ULL
+#else
+ 251000000ULL
+#endif
+;assert(ri_mic_live_stop() && ri_mic_live.reason==3);
+#ifdef RIVER_IOS_AUDIO
+ reset();ri_mic_live.enabled=true;ri_mic_live.last_read=ri_audio_queue_now()-500000000ULL;assert(!ri_mic_live_stop());
+ assert(RI_MIC_RING_FRAMES==65536);
+#endif
  puts("PASS actual continuous mic ring: concurrent 409600-frame delivery beyond snapshot capacity, ordering/no loss, gain/clipping stats, close/reopen, nonblocking/interruptible waits, sticky errors, overrun and read-fault cancellation");
  return 0;
 }

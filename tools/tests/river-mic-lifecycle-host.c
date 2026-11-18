@@ -22,7 +22,7 @@ static void lck_mtx_lock(int *p){
 static void lck_mtx_unlock(int *p){if(p==&ri_adsp_lock){assert(adsp);adsp=false;}else if(p==&ri_mic_buffer_lock){assert(buffer);buffer=false;}else if(p==&ri_speaker_lock){assert(speaker);speaker=false;}else if(p==&ri_codec_lock){assert(codec);codec=false;}else{assert(queue);queue=false;}}
 static void lck_mtx_assert(int *p,int flag){assert(p==&ri_adsp_lock && adsp && flag==1);}
 static struct {bool poisoned;} ri_pcm;
-static struct {bool mapped,in_flight,running,asm_open,adm_open,afe_started,connected,defined,active,uncertain,complete,codec_restored,attempted,live;int cleanup_error,error;vm_offset_t page;uint64_t physical;unsigned startup_discard_frames,timestamp_valid,timestamp_invalid,timestamp_gaps,timestamp_backwards,timestamp_max_deviation_us;unsigned tid,gain_level,submitted,completed,failed_opcode,failed_status,adm_reply[2];const char *phase;} ri_mic;
+static struct {bool mapped,in_flight,running,asm_open,adm_open,afe_started,connected,defined,active,uncertain,complete,codec_restored,attempted,live;int cleanup_error,error;vm_offset_t page;uint64_t physical;unsigned max_owned,pipeline_starvations,startup_discard_frames,timestamp_valid,timestamp_invalid,timestamp_gaps,timestamp_backwards,timestamp_max_deviation_us;unsigned tid,gain_level,submitted,completed,failed_opcode,failed_status,adm_reply[2];const char *phase;} ri_mic;
 static struct {bool enabled,worker,active,requested,reader_busy,blocked,stop,attempted;unsigned gain,sessions;int error;char note[2048];} ri_mic_live;
 static struct {bool enabled,worker,active;} ri_audio_auto;
 static struct {bool attempted;} ri_mic_capture;
@@ -60,6 +60,9 @@ static void thread_block(void *c){assert(!c && !adsp && !buffer && !codec && !sp
 static bool thread_fail;
 static int kernel_thread_start(void (*f)(void*,wait_result_t),void *arg,thread_t *t){assert(f && !arg && !adsp && !buffer);*t=(void*)2;return thread_fail?1:0;}
 static void thread_deallocate(thread_t t){assert(t==(void*)2);}
+#ifdef RIVER_IOS_AUDIO
+static struct {bool attempted;} ri_audio_normal;
+#endif
 #include "mic-lifecycle-actual.h"
 static void reset(void){assert(!adsp && !buffer && !codec && !speaker && !queue);memset(&ri_mic,0,sizeof(ri_mic));memset(&ri_mic_live,0,sizeof(ri_mic_live));memset(&ri_audio_auto,0,sizeof(ri_audio_auto));ri_pcm.poisoned=false;ri_stream.complete=ri_route.muted=ri_afe_mute_hold=ri_ngd.address_valid=ri_ngd.enabled=true;ri_ngd.uncertain=ri_mic_capture.attempted=false;ri_clock_attempted=scenario=runs=waits=0;muted=true;thread_fail=false;}
 int main(void){
@@ -74,6 +77,15 @@ int main(void){
  reset();ri_mic.tid=0xea;lck_mtx_lock(&ri_adsp_lock);assert(ri_mic_live_rearm()==EOVERFLOW);lck_mtx_unlock(&ri_adsp_lock);
  reset();ri_audio_auto.enabled=true;assert(ri_mic_live_enable()==EBUSY && !ri_mic_live.attempted);
  reset();thread_fail=true;assert(ri_mic_live_enable()==ENOMEM && ri_mic_live.blocked && !ri_mic_live.worker);
+#ifdef RIVER_IOS_AUDIO
+ reset();ri_audio_normal.attempted=true;ri_mic.tid=0x100;ri_mic_live.active=true;
+ lck_mtx_lock(&ri_adsp_lock);assert(!ri_mic_live_rearm() && ri_mic.tid==0x100 && ri_mic.gain_level==0);lck_mtx_unlock(&ri_adsp_lock);
+ ri_mic_live.active=false;ri_mic_live.enabled=ri_mic_live.worker=ri_mic_live.requested=ri_mic_live.reader_busy=true;
+ ri_mic.attempted=ri_mic.complete=ri_mic.codec_restored=true;
+ lck_mtx_lock(&ri_adsp_lock);assert(!ri_mic_live_release());lck_mtx_unlock(&ri_adsp_lock);
+ ri_mic_live.active=true;lck_mtx_lock(&ri_adsp_lock);assert(ri_mic_live_release()==EBUSY);lck_mtx_unlock(&ri_adsp_lock);
+ puts("PASS normal mic handoff: coordinator may reuse idle enabled service, active capture still excludes playback, monotonic logical IDs beyond wire range");
+#endif
  puts("PASS actual mic lifecycle: reader-driven restart, permanent DMA/monotonic IDs, all ownership guards, clock restoration, poisoned/stuck-state retention, speaker exclusion and thread-start failure");
  return 0;
 }

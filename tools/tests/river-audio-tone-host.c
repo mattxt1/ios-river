@@ -37,6 +37,9 @@ static void delay(unsigned us){assert(held && us==1000);}
 static uint64_t host_now;
 static void clock_get_uptime(uint64_t *out){*out=(host_now+=1000);}
 static void absolutetime_to_nanoseconds(uint64_t absolute,uint64_t *ns){*ns=absolute;}
+#ifdef RIVER_IOS_AUDIO
+static struct {bool attempted;} ri_audio_normal;
+#endif
 #include "tone-actual.h"
 static void reset(void){memset(amp,0,sizeof(amp));memset(&ri_tone,0,sizeof(ri_tone));ri_tone_timer=NULL;held=writes=fail_write=0;alloc_fail=queued=false;ri_afe_mute_hold=true;clock_fll=0x100;amp[0x2018]=0x20;amp[0x2024]=0x10;amp[0x6000]=0x80002678;amp[0x4808]=0x20200200;amp[0x4800]=0x10000;amp[0x4c00]=8;amp[0x2014]=1;amp[0x6c04]=0x220;amp[0x10090]=0x40406000;amp[0x10098]=0x2000000a;}
 static void stopped(void){assert(!held && !(amp[0x2018]&1) && (amp[0x2024]&0x10) && amp[0x6000]==0x80002678 && !queued);}
@@ -73,6 +76,14 @@ int main(void){
  assert(ri_tone.renewals>50 && ri_tone.lease_until==ri_tone.hard_until && ri_tone.active);
  host_now=ri_tone.hard_until;queued=false;timer(NULL,NULL);assert(!ri_tone.active && ri_tone.cutoff);ri_tone_stop();stopped();
  puts("PASS renewable watchdog: complete fresh cycles only, stale callback requeue, expired lease cannot revive, slow cycle mute, independent6second hard cutoff");
+#endif
+#ifdef RIVER_IOS_AUDIO
+ reset();ri_audio_normal.attempted=true;ri_audio_queue.long_mode=true;assert(!ri_live_start());ri_live_health_index=0;
+ uint64_t normal_start=host_now;
+ for(unsigned i=0;i<500;i++){host_now+=20000000ULL;assert(!ri_live_health());}
+ assert(host_now-normal_start>10000000000ULL && ri_tone.active && ri_tone.hard_until==~0ULL && ri_tone.renewals>160);
+ host_now=ri_tone.lease_until;queued=false;timer(NULL,NULL);assert(!ri_tone.active && ri_tone.cutoff && ri_tone.stopped);ri_tone_stop();stopped();
+ puts("PASS normal iOS output beyond10seconds: no six-second cap, unchanged health renewal, expired lease independently mutes");
 #endif
  puts("actual-code quiet output attenuation, ownership/clock/fault gates, deadline mute and cleanup tests passed");return 0;
 }

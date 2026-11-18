@@ -5,6 +5,72 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0337 normal iOS audio candidate; native build next (2026-11-18)
+
+User explicitly requested combined build for speakers/microphone through normal
+iOS apps, one boot. Patch0337 adds ONE route coordinator over existing standard
+CoreAudio cdev bridge: both directions enabled together, physical half-duplex,
+reader requests drain playback then take capture; output resumes after clean
+capture stop/idle. No per-app route commands. Muted ADSP/device initialization
+still done once after fresh home before enabling service; no boot daemon yet.
+Normal mode removes6second/3session diagnostic limits but retains independently
+scheduled750ms mute lease, fresh hardware-health cycles, exact cleanup/poison
+barriers and current amplifier hardware gain. Normal PCM no longer hard-clips
+at2048; iOS volume/mute scale samples linearly without touching live amplifier
+snapshots. This can be louder than diagnostic tests; start low in iOS volume.
+Logical NGD IDs remain monotonic; serialized exactly acknowledged wire IDs
+cycle1..239, tested600commands per direction. Diagnostic guards remain unchanged.
+
+Mic has four independently owned4096byteREAD slots, ordered completion delivery,
+slot-only cache invalidation,65536frameCPUring/750ms consumer idle. Unity gain
+fixed for normal mode. Four unity startup blocks and any requested diagnostic
+gain settling explicitly discarded; timestamp audit covers forwarded sequence.
+No synthetic fallback after service activation/error. Half duplex only; no
+simultaneous speaker+mic promise. User-acoustic/normal-app validation PENDING.
+
+Actual-code host tests PASS: coordinator30alternations/prerequisite/fault/stop;
+normal five playback rearm sessions; linear volume/mute; output10sec beyond
+oldcap/independent lease expiry; concurrent409600micframes and500ms consumer
+pause; queuedREAD15scenarios, both APR header layouts, reordering, bad metadata,
+timeout/NACK ownership retention, startup gain barrier and audit discontinuity;
+channel IDs600per direction; existing336protocol/codec cleanup regressions.
+CurrentPHONE336closed/off; no active audio controls sent. Read-only inventory
+confirms stock VoiceMemos.app com.apple.VoiceMemos and HakiosAudio.driver.
+Use Voice Memos with normal microphone consent; old system diagnostic app had
+permission mismatch and separate IPA install failed signature verification.
+
+Work inputs/evidence work/ios-audio-integration in canonical Nov13 root. Commit
+patch before applying to preserved native336tree/build. Build/package exact
+hashes, verify all helpers/base/unrelatedWiFi content, then request fastboot.
+Next single boot: verify fresh home/helpers; muted initialization ONCE; cue
+quiet normal playback, enable normal service ONCE; stock Voice Memos recording
+and replay, sustained>6sec playback plus volume/stop/restart; final status and
+cleanup/disable. No gain calibration. No flashing; known River serial only.
+
+## Active handoff:0336 closed; prioritize ordinary iOS audio (2026-11-18)
+
+User heard final speaker and confirmed iOS responsive. Both speakers audible,
+exact cleanup passed. Mic first capture stopped after 449216 delivered frames
+(9.359s of intended12s); consumer-idle250ms cutoff fired while reader still
+open. 227 exact READ completions, 5 timestamp gaps, max35004us, no backwards
+or invalid timestamps. Full cleanup passed; mic disabled/worker exited. The
+raw helper removed incomplete WAV; do not claim a preserved recording or
+restart pass. Restart was NOT run. Both backends now off, all maps/routes
+closed, amplifier muted. Read-only USB status reconfirmed; no more active
+controls on this boot. Evidence work/mic-restart-startup.
+
+User now prioritizes getting audio into normal iOS use and moving on after
+several days. Defer further gain calibration; use known clear unity setting
+for initial app integration. Installed HakiosAudio already bridges standard
+CoreAudio to both cdevs, but explicit service enable, exclusive whole-service
+handoff, speaker3-session/6-second validation limits, input timing/idle issue,
+and old diagnostic app permission problem remain. Do not describe these as
+finished everyday audio. Next work must combine lifecycle/application work
+and necessary continuity fixes, rather than another gain-only build.
+Original system-registered AudioCheck permission was denied despite Settings;
+normal separate IPA installation failed signature validation, not bypassed.
+Do not assume that old app can record or repeat the failed installer path.
+
 ## Active handoff:0336 speaker AUDIBLE PASS; mic armed awaiting counting (2026-11-18)
 
 USERheardfirstspeaker andconfirmed iOSresponsive. prepare-live-mic.pyONCEover

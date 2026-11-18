@@ -64,7 +64,7 @@ static void thread_block(void *p){assert(!p);longjmp(exited,1);}
 static int ri_codec_path_run_mode(unsigned mode){
  assert(adsp_held && !queue_held && !speaker_held && mode==4);calls++;
  assert(!ri_codec_path.attempted && !ri_live_stream.attempted && !ri_channel.attempted && !ri_clock_attempted);
- if(calls>1)assert(ri_live_stream.page==0x12340000 && ri_live_stream.physical==0x60000000 && ri_channel.tid==0x77);
+ if(calls>1)assert(ri_live_stream.page==0x12340000 && ri_live_stream.physical==0x60000000 && ri_channel.tid==0x71+(calls-1)*6);
  ri_live_stream.page=0x12340000;ri_live_stream.physical=0x60000000;
  ri_codec_path.attempted=ri_codec_path.complete=ri_codec_path.restored=true;
  ri_live_stream.attempted=ri_live_stream.complete=ri_live_stream.eos_rendered=true;
@@ -83,6 +83,9 @@ static int ri_mic_live_release(void){assert(adsp_held);return microphone_busy?EB
 #endif
 #include "lifecycle-actual.h"
 static void reset(void){
+#ifdef RIVER_IOS_AUDIO
+ memset(&ri_audio_normal,0,sizeof(ri_audio_normal));
+#endif
  assert(!queue_held && !adsp_held && !speaker_held);
  memset(&ri_audio_auto,0,sizeof(ri_audio_auto));memset(&ri_audio_queue,0,sizeof(ri_audio_queue));memset(&ri_pcm,0,sizeof(ri_pcm));memset(&ri_live_stream,0,sizeof(ri_live_stream));memset(&ri_route,0,sizeof(ri_route));memset(&ri_channel,0,sizeof(ri_channel));memset(&ri_tone,0,sizeof(ri_tone));memset(&ri_codec_path,0,sizeof(ri_codec_path));
  ri_stream.complete=ri_route.muted=ri_afe_mute_hold=ri_ngd.address_valid=ri_ngd.enabled=ri_i2s_codec_restored=ri_i2s_amp_restored=ri_clock_data_restored=quiet=muted=true;ri_ngd.uncertain=thread_fail=false;ri_clock_attempted=ri_live_health_index=cancels=calls=scenario=waits=0;clock_ns=0;ri_tone_timer=NULL;ri_i2s_amp_saved[0]=0x21;ri_i2s_amp_saved[1]=0x10;ri_i2s_amp_saved[4]=0x20200233;for(unsigned i=0;i<2048;i++)input[i]=1234;
@@ -113,5 +116,21 @@ int main(void){
   lck_mtx_lock(&ri_adsp_lock);assert(ri_audio_auto_rearm()==EBUSY && ri_live_stream.page==0x12340000 && ri_codec_path.attempted);lck_mtx_unlock(&ri_adsp_lock);
  }
  reset();ri_codec_path.attempted=ri_codec_path.complete=ri_codec_path.restored=ri_live_stream.complete=ri_live_stream.eos_rendered=ri_channel.complete=true;muted=false;lck_mtx_lock(&ri_adsp_lock);assert(ri_audio_auto_rearm()==EIO && ri_codec_path.attempted);lck_mtx_unlock(&ri_adsp_lock);
+#ifdef RIVER_IOS_AUDIO
+ reset();ri_audio_normal.attempted=ri_audio_normal.enabled=ri_audio_auto.enabled=ri_audio_auto.worker=true;
+ for(unsigned i=0;i<5;i++) {ri_audio_auto.active=true;ri_audio_queue.armed=true;ri_audio_queue.used=4096;ri_audio_auto_session();assert(!ri_audio_auto.error && ri_audio_auto.enabled && !ri_audio_auto.at_limit && !ri_audio_auto.blocked && !ri_audio_auto.active);}
+ assert(calls==5 && ri_audio_auto.sessions==5 && ri_channel.tid==0x71+5*6);
+ assert(ri_audio_auto_enable()==EBUSY);
+ ri_audio_queue.armed=true;ri_audio_queue.long_mode=true;ri_audio_queue.target_blocks=RI_AUDIO_NORMAL_BLOCKS;
+ for(unsigned i=0;i<2048;i++)input[i]=16000;
+ assert(ri_audio_normal_volume(0,false));assert(ri_audio_queue_reserve(1024)==1);ri_audio_queue_commit(input,1024,false);
+ int16_t normal_block[2048];assert(ri_audio_queue_pop(normal_block,0)==1 && normal_block[512]==16000);
+ assert(ri_audio_normal_volume(48,false));assert(ri_audio_queue_reserve(1024)==1);ri_audio_queue_commit(input,1024,false);
+ assert(ri_audio_queue_pop(normal_block,1)==1 && normal_block[512]>7900 && normal_block[512]<8100);
+ assert(ri_audio_normal_volume(0,true));assert(ri_audio_queue_reserve(1024)==1);ri_audio_queue_commit(input,1024,false);
+ assert(ri_audio_queue_pop(normal_block,2)==1 && normal_block[512]==0);
+ puts("PASS normal iOS volume: linear PCM without diagnostic clipping, -6dB attenuation, mute, no hardware snapshot writes");
+ puts("PASS normal iOS actual session rearm: five playback sessions without three-session cap, monotonic identity and retained DMA");
+#endif
  puts("PASS actual lifecycle worker: native-triggered start, successful stop/rearm/restart, permanent DMA page reuse, monotonic channel IDs, cancellation quiescence, session cap, sticky poison/restore failures, allocation failure and no speculative reset");
 }
