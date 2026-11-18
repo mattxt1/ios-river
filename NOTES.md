@@ -5,6 +5,40 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0335 continuous mic/gain/restart/speaker handoff PASS; audio review pending (2026-11-18)
+
+UserALREADYCOUNTING confirmed~20cm/normalvoice. Live18sec cdevrecordPASS864000
+frames, gain0/+12/+24dB actualverified;430exactREADcompletions. Levelpeaks
+1325/4488/18903, no clippingatanylevel. +12dBselected for17.27dBheadroom vs
++24dB4.78dB (target>=6dB). Level boundariesactual363744/279584/234080frames;
+lastincludesunusedtail. New3sec reader/restartPASS144000frames/71exactREADs,
+samePA0x20480000/TID151->157. TotalDSPproduced1022016/consumed1008000/
+explicitdiscarded14016/queued0, zerooverrun/readfault, allframesaccounted.
+Bothsessionsfullmap/ASM/ADM/AFE/sourcechannel/codec/FLL/pincleanup, backend
+explicitlydisabled/workerexited, no poison/uncertainty. Userconfirmsresponsive.
+
+SpeakerbeforeUSERHEARD; speakerAFTER alsoUSERHEARD/iOSresponsive. Thus sameboot
+speaker->miccontinuous/restart->speaker handoffacousticallypassed. Speakerafter
+114livebuffers116736frames+4preroll=118completions, zeroqueuefault/drop,
+EOS/fullcleanup, output2.463179sec/mute2.579743sec/50renewals/maxcheck16.84ms.
+Before output1.249750sec/mute1.310603sec. Don'tclaimfull6sec appbursts audible.
+
+HOSTDISKFILLEDduringafter-speakerprogresslogging: captureO_EXCLfailedBEFORE
+itsfinallydisablewasSENT. SentONEdirect--auto-disablewithoutlocalfiledependency,
+verifiedworkerexit/EOS/fullownershipcleanupandampmute0x10READONLY. No route
+retry. ClearedONLYregenerablework/build/ccache (not inputs/evidence/images/KDK),
+recoveredspace~256-289MiB. AfterresultreconstructedfromnewREADONLYcaptures;
+apphostexitstatusunobserved, notclaimedexit0. Speakeruserconfirmationpassed.
+BothbackendsNOWdisabled, allroutesclosed/ampmuted. No furtheractivecontrols.
+
+Activeevidence work/audio-live-20261118/*.json +recovery*.txt. fetch-recordings.py
+RUNNINGread-onlychunkdownload/hashvalidation ofclosed18sec/3secWAVs. Calibration
+remoteSHAa79071ebb4dc1085944c4d81f0814d67c40454d7273a2a17f184c03db5e55616,
+1728044bytes. Preservechunks/uniqueaudio. Oncefetchedrenderselected+12dBraw
+reviewwithoutofflinegain andaskrecognizeclearcounting/level; calibrationspeech
+reviewstillPENDING. No hardware replay needed. Manifestupdatedtransportpasses.
+Nativeapps/permissionedappcapture andlongendurance/full-duplex notvalidated.
+
 ## Active handoff:0335 speaker-before AUDIBLE PASS; mic armed awaiting counting (2026-11-18)
 
 Userfreshhome/WiFiresponsive/ready confirmed. Exacthelper/freshallbackendstate
