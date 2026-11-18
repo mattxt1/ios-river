@@ -5,6 +5,45 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:storage cleanup done; restart/startup-isolated0336 prepared (2026-11-18)
+
+Userrequestedstoragecleanupandanswered0dBcontinuouscomparisonCLEAR, then+12dB
+SAMEcontinuoussessioncomparisonCLEAR. Only3secRESTARTclipreportedcrackly/chopped.
+Thuscontinuousgain0/hotgain12acousticallyclear; initialnonzero-gainstartup or
+restart-specificissue remains, notprovenordinarycontinuouscapturefault. +12dB
+candidate safelevels butnormal/restartedstartup stillrequiresqualitypass.
+
+Storageaudit /Users/matttyson/Developer/Codex/2026-11-18/storage-cleanup/REPORT.txt:
+free0.45GiB->17.59GiB, net+17.14GiB. Removedgeneratedproductsfrom25inactiveNov12
+builds(~9.67GB), old1.9GiBccache,2obsoleteupdaterbuilds25471/25894(active27194),
+notrunning. Verified6278KDKfilesSHA256/10828entries againstcanonicaldependency,
+removedoldduplicatePayload(~2.9GiB) andpreservedoldpathassymlinktocanonical
+.dependencies/river-kdk-22G74/expanded/KDK.pkg/Payload. Currenttoolchain/build
+source/inputs/bootimages/SSHkeys/logs/audio preservedandreverified. Keptunique
+12GiBrootimageandonehistoricalbuildwhose xnusourceexistencecheckfailed.
+Duplicate-largefileaudit104hashgroups; reportsremainoutsideGit. Activecurrent
+build's regenerablelink/debugproducts werecleared earlierfordiskpressure and
+willregenerate; native335kernel/source/imagepreserved. No phonecontrols.
+
+0336 MINIMALrestart/startupcandidate inwork/mic-restart-startup: alwayspowerADC
+upatunity, discardfirst4realREADblocks; applyrequestednonzero gainthroughknown
+clearliveupdatepath then2blocksettlingdiscard beforefirstdeliveredframes.
+Countallstartupdiscards; no fabricatedsilence/noofflinegain. Existinghotgain
+changesduringestablishedstreamremainunchanged. DSPREAD_DONEtimestampaudit
+countsvalid/invalid/backwards/gaps>100us/maxdeviation,metadataonly; neverclaim
+continuityifinvalidtimestampsorgaps. Exactownership/gainreadback/cleanup guards
+unchanged. CandidateisHYPOTHESISnotclaimedhardwarefix. Hostactualcodec/protocol/
+ring/worker/speakerregressiontestsPASS inclstartupnonzerogainandtimestampcases.
+UnbuiltqueuedREADprototypewasdeferredaftercomparisons; preservedOUTSIDErepo
+work/audio-read-pipeline/prototype-repo, notactive/deployed. Currentnative335
+unchanged, bothbackendsoff/routesclosed/ampmuted. Commit0336beforebuild.
+
+Nextsamebootbatch: speakersbefore, fixed+12dB12secfirstmicrophonesession,
+fixed+12dB8secrestart, comparevoice/timestampmetrics, thenspeakersafter. No
+needrepeatgain24rangealreadymeasuredsafe-butlowheadroom; goalclearstartup/
+restartatselectedgain. Askfreshfastbootonlyafterconcreteverifiedimage; then
+freshhome/WiFi/readinessandcues. Keepallcurrent335evidence/originalWAVs.
+
 ## Active handoff:0335 transport PASS but acoustic quality FAILED (2026-11-18)
 
 USERselectedDistortedOrUnclear, clarified "Crackling or chopped speech" forraw

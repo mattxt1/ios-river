@@ -22,7 +22,7 @@ static void lck_mtx_lock(int *p){
 static void lck_mtx_unlock(int *p){if(p==&ri_adsp_lock){assert(adsp);adsp=false;}else if(p==&ri_mic_buffer_lock){assert(buffer);buffer=false;}else if(p==&ri_speaker_lock){assert(speaker);speaker=false;}else if(p==&ri_codec_lock){assert(codec);codec=false;}else{assert(queue);queue=false;}}
 static void lck_mtx_assert(int *p,int flag){assert(p==&ri_adsp_lock && adsp && flag==1);}
 static struct {bool poisoned;} ri_pcm;
-static struct {bool mapped,in_flight,running,asm_open,adm_open,afe_started,connected,defined,active,uncertain,complete,codec_restored,attempted,live;int cleanup_error,error;vm_offset_t page;uint64_t physical;unsigned tid,gain_level,submitted,completed,failed_opcode,failed_status,adm_reply[2];const char *phase;} ri_mic;
+static struct {bool mapped,in_flight,running,asm_open,adm_open,afe_started,connected,defined,active,uncertain,complete,codec_restored,attempted,live;int cleanup_error,error;vm_offset_t page;uint64_t physical;unsigned startup_discard_frames,timestamp_valid,timestamp_invalid,timestamp_gaps,timestamp_backwards,timestamp_max_deviation_us;unsigned tid,gain_level,submitted,completed,failed_opcode,failed_status,adm_reply[2];const char *phase;} ri_mic;
 static struct {bool enabled,worker,active,requested,reader_busy,blocked,stop,attempted;unsigned gain,sessions;int error;char note[2048];} ri_mic_live;
 static struct {bool enabled,worker,active;} ri_audio_auto;
 static struct {bool attempted;} ri_mic_capture;
@@ -41,7 +41,10 @@ static void wakeup(void *p){assert(p==&ri_mic_live && buffer);}
 static int ri_mic_codec(void){assert(adsp && codec && speaker);return 0;}
 static int ri_clock_run_impl(bool test,bool route,bool i2s){
  assert(adsp && codec && speaker && test && route && !i2s && ri_clock_capture_test==ri_mic_codec && !ri_clock_attempted);
- runs++;ri_clock_attempted=1;ri_mic.page=0x10000;ri_mic.physical=0x20000000;ri_mic.tid+=6;ri_mic.submitted=ri_mic.completed=200;ri_mic.codec_restored=true;ri_mic.phase="captured";strcpy(ri_clock_note,"clock_restored=1 pins_restored=1");
+#ifdef RIVER_MIC_RESTART_TEST
+ assert(ri_mic.gain_level==0);
+#endif
+ runs++;ri_mic.gain_level=ri_mic_live.gain;ri_clock_attempted=1;ri_mic.page=0x10000;ri_mic.physical=0x20000000;ri_mic.tid+=6;ri_mic.submitted=ri_mic.completed=200;ri_mic.codec_restored=true;ri_mic.phase="captured";strcpy(ri_clock_note,"clock_restored=1 pins_restored=1");
  if(scenario==1){ri_pcm.poisoned=true;ri_mic.mapped=true;ri_mic.uncertain=true;return EIO;}
  if(scenario==2){ri_mic.codec_restored=false;return EIO;}
  return 0;

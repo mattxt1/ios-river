@@ -41,6 +41,10 @@ static int ri_ngd_poll(vm_offset_t base,bool *sent){assert(base==0x1000 && !held
 #ifdef RIVER_MIC_LIVE_TEST
 static struct {bool attempted;unsigned gain,applied_gain;} ri_mic_live;
 static unsigned live_frames,live_limit,live_pushes;
+#ifdef RIVER_MIC_RESTART_TEST
+static unsigned startup_discarded;
+static void ri_mic_live_startup_discard(unsigned frames){assert(!held);startup_discarded+=frames;}
+#endif
 static bool ri_mic_live_stop(void){return reads>=live_limit;}
 static int ri_mic_live_push(const int16_t *samples,unsigned frames,unsigned gain){assert(!held && samples && frames==2048 && gain==ri_mic_live.gain);live_frames+=frames;live_pushes++;if(reads==50)ri_mic_live.gain=1;if(reads==100)ri_mic_live.gain=2;return 0;}
 #endif
@@ -73,7 +77,7 @@ static int ri_pcm_transaction(struct ri_apr_request *r,struct ri_apr_reply *repl
  case 0x10dac:{
   assert(r->source==(stream|0x507) && r->destination==(stream|0x407) && r->response==0x10d9a && r->words==5 && r->payload[0]==0x60000000+(reads&3)*4096 && !r->payload[1] && r->payload[2]==0xabcd && r->payload[3]==4096 && r->payload[4]==reads);
   int16_t *samples=(int16_t*)(dma+(reads&3)*4096);for(unsigned i=0;i<2048;i++)samples[i]=(int16_t)((i&1)?-1234:4321);
-  reply->words=11;reply->data[1]=r->payload[0];reply->data[3]=0xabcd;reply->data[4]=4096;reply->data[8]=0x80000000;reply->data[9]=1;reply->data[10]=reads;
+  reply->words=11;reply->data[1]=r->payload[0];reply->data[3]=0xabcd;reply->data[4]=4096;reply->data[8]=0x80000000;reply->data[9]=1;reply->data[10]=reads;reply->data[6]=(uint32_t)((uint64_t)reads*2048*1000000/48000);
   reads++;now+=42666667ULL;
   switch(mode){case 1:reply->words=10;break;case 2:reply->data[0]=7;break;case 3:reply->data[1]+=4096;break;case 4:reply->data[2]=1;break;case 5:reply->data[3]++;break;case 6:reply->data[4]=4097;break;case 7:reply->data[5]=2;break;case 8:reply->data[4]=4095;break;case 9:reply->data[8]|=0x40000000;break;case 10:reply->data[10]++;break;case 11:reply->data[4]=0;break;case 12:reply->data[8]|=1;break;case 13:now+=4000000000ULL;break;}
   break;
@@ -118,8 +122,18 @@ int main(void){
  puts("PASS actual AFE TX SET/GET: nonzero24-byte capacity, exact self-declared record, bounded opaque tail, mismatch/rejection stops before start");
 #ifdef RIVER_MIC_LIVE_TEST
  reset();ri_mic.live=true;ri_mic_live.gain=0;live_frames=live_pushes=0;live_limit=200;ri_mic.mapped=ri_mic.afe_started=true;
- assert(!ri_mic_dsp_run() && reads==200 && live_frames==409600 && live_pushes==200 && ri_mic.gain_level==2 && (regs[0x311]&255)==176 && ri_mic_live.applied_gain==2);
+ assert(!ri_mic_dsp_run() && reads==200 && ri_mic.gain_level==2 && (regs[0x311]&255)==176 && ri_mic_live.applied_gain==2);
+#ifdef RIVER_MIC_RESTART_TEST
+ assert(live_frames==401408 && live_pushes==196 && startup_discarded==8192 && ri_mic.timestamp_valid==200 && !ri_mic.timestamp_gaps && ri_mic.timestamp_max_deviation_us<=1);
+#else
+ assert(live_frames==409600 && live_pushes==200);
+#endif
  ri_mic_dsp_cleanup();assert(!ri_mic.mapped && !ri_mic.asm_open && !ri_mic.adm_open && !ri_mic.afe_started);
+#ifdef RIVER_MIC_RESTART_TEST
+ reset();ri_mic.live=true;ri_mic_live.gain=1;startup_discarded=live_frames=live_pushes=0;live_limit=12;assert(!ri_mic_dsp_run() && reads==12 && ri_mic.gain_level==1 && ri_mic.startup_discard_frames==12288 && startup_discarded==12288 && live_frames==12288 && live_pushes==6 && ri_mic.timestamp_valid==12 && !ri_mic.timestamp_gaps);
+ reset();struct ri_apr_reply time_reply={0};time_reply.data[8]=0x80000000;ri_mic_timestamp_audit(&time_reply,2048);time_reply.data[6]=42666;ri_mic_timestamp_audit(&time_reply,2048);assert(!ri_mic.timestamp_gaps && ri_mic.timestamp_max_deviation_us<=1);time_reply.data[6]=85833;ri_mic_timestamp_audit(&time_reply,2048);assert(ri_mic.timestamp_gaps==1);time_reply.data[6]=0;ri_mic_timestamp_audit(&time_reply,2048);assert(ri_mic.timestamp_backwards==1);time_reply.data[8]=0;ri_mic_timestamp_audit(&time_reply,2048);assert(ri_mic.timestamp_invalid==1 && !ri_mic.timestamp_previous);
+ puts("PASS actual restart startup: unity pre-roll, requested live gain only after valid buffers, bounded settling discard with no synthetic padding; timestamp rounding/gap/backwards/invalid audit");
+#endif
  puts("PASS actual continuous DSP READ loop: 200 buffers/409600 frames beyond snapshot limit, live gain0/12/24dB verified, close and unmap");
 #endif
  int16_t samples[512];reset();assert(ri_mic_buffer_read(samples,512)==-ENXIO && ri_mic_buffer_flags()==2);ri_mic_capture.attempted=true;assert(ri_mic_buffer_read(samples,512)==-EWOULDBLOCK);ri_mic_capture.done=true;assert(ri_mic_buffer_read(samples,512)==-EIO);

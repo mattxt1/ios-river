@@ -1,0 +1,123 @@
+diff --git a/bsd/dev/river_adsp_capture.h b/bsd/dev/river_adsp_capture.h
+--- a/bsd/dev/river_adsp_capture.h
++++ b/bsd/dev/river_adsp_capture.h
+@@ -4,7 +4,9 @@
+ static struct {
+  bool attempted,mapped,asm_open,adm_open,afe_started,running,in_flight;
+  bool connected,defined,active,uncertain,codec_restored,complete,live;
+- unsigned gain_level;
++ unsigned gain_level,startup_discard_blocks,startup_discard_frames,live_forwarded_frames;
++ unsigned timestamp_valid,timestamp_invalid,timestamp_gaps,timestamp_backwards,timestamp_max_deviation_us;
++ bool timestamp_previous;uint64_t timestamp_us;unsigned timestamp_frames;
+  vm_offset_t page;uint64_t physical;
+  uint32_t handle,copp;
+  unsigned submitted,completed,frames,peak,tid,bad_reg;
+@@ -40,6 +42,32 @@
+     ((reply->data[4]|reply->data[5])&1) || (reply->data[8]&~0x80000000u) ||
+     reply->data[10]!=sequence)return false;
+  *offset=reply->data[5];*bytes=reply->data[4];return true;
++}
++/* Metadata-only timing audit; ownership is established separately. A timing
++ * discontinuity is exposed without pretending a transport-successful file is
++ * acoustically continuous. Invalid timestamps never count as verification. */
++static void
++ri_mic_timestamp_audit(const struct ri_apr_reply *reply,unsigned frames)
++{
++ if(!(reply->data[8]&0x80000000u)) {
++  ri_mic.timestamp_invalid++;ri_mic.timestamp_previous=false;return;
++ }
++ uint64_t stamp=((uint64_t)reply->data[7]<<32)|reply->data[6];ri_mic.timestamp_valid++;
++ if(ri_mic.timestamp_previous) {
++  if(stamp<ri_mic.timestamp_us)ri_mic.timestamp_backwards++;
++  else {
++   uint64_t delta=stamp-ri_mic.timestamp_us;
++   if(delta>1000000)ri_mic.timestamp_gaps++;
++   else {
++    int64_t difference=(int64_t)(delta*48)-(int64_t)ri_mic.timestamp_frames*1000;
++    uint64_t magnitude=difference<0?(uint64_t)-difference:(uint64_t)difference;
++    unsigned deviation=(unsigned)((magnitude+47)/48);
++    if(deviation>ri_mic.timestamp_max_deviation_us)ri_mic.timestamp_max_deviation_us=deviation;
++    if(magnitude>4800)ri_mic.timestamp_gaps++;
++   }
++  }
++ }
++ ri_mic.timestamp_previous=true;ri_mic.timestamp_us=stamp;ri_mic.timestamp_frames=frames;
+ }
+ static void
+ ri_mic_invalidate(vm_offset_t page)
+@@ -151,16 +179,21 @@
+  error=ri_mic_command(stream|0x507,stream|0x407,0x10daa,0,run,3,&reply);if(error)return error;
+  ri_mic.running=true;
+  if(ri_mic.live) {lck_mtx_lock(&ri_mic_buffer_lock);ri_mic_live.applied_gain=ri_mic.gain_level;lck_mtx_unlock(&ri_mic_buffer_lock);}
++ /* Configure ADC at the known-clear unity setting before input power-up.
++  * Once valid READs exist, apply requested gain through the verified live
++  * update path. Discard real startup frames explicitly; never pad silence. */
++ if(ri_mic.live)ri_mic.startup_discard_blocks=4;
+  uint64_t start=ri_pipeline_now();
+  for(unsigned index=0;;index++) {
+   if(ri_mic.live) {
+    if(ri_mic_live_stop())break;
+    if(index==~0u)return EOVERFLOW;
+    lck_mtx_lock(&ri_mic_buffer_lock);unsigned gain=ri_mic_live.gain;lck_mtx_unlock(&ri_mic_buffer_lock);
+-   if(gain!=ri_mic.gain_level) {
++   if(gain!=ri_mic.gain_level && index>=4) {
+     uint16_t value=ri_clock_read(0x311);
+     if(value==0xffff || (value&0x100) || !ri_clock_write(0x311,(value&~255u)|0x200|(128+gain*24)))return EIO;
+     ri_mic.gain_level=gain;
++    if(!ri_mic.live_forwarded_frames)ri_mic.startup_discard_blocks=2;
+     lck_mtx_lock(&ri_mic_buffer_lock);ri_mic_live.applied_gain=gain;lck_mtx_unlock(&ri_mic_buffer_lock);
+    }
+   } else {
+@@ -181,7 +214,14 @@
+   const int16_t *samples=(const int16_t *)(ri_mic.page+(index&3)*4096+offset);
+   /* No sample reads until exact completion and cache invalidation. */
+   if(ri_mic.live) {
+-   error=ri_mic_live_push(samples,bytes/2,ri_mic.gain_level);if(error)return error;
++   ri_mic_timestamp_audit(&reply,bytes/2);
++   if(ri_mic.startup_discard_blocks) {
++    ri_mic.startup_discard_blocks--;ri_mic.startup_discard_frames+=bytes/2;
++    ri_mic_live_startup_discard(bytes/2);
++   } else {
++    error=ri_mic_live_push(samples,bytes/2,ri_mic.gain_level);if(error)return error;
++    ri_mic.live_forwarded_frames+=bytes/2;
++   }
+   } else {
+    lck_mtx_lock(&ri_mic_buffer_lock);
+    memcpy(ri_mic_capture.samples+ri_mic.frames,samples,bytes);
+diff --git a/bsd/dev/river_mic_lifecycle.h b/bsd/dev/river_mic_lifecycle.h
+--- a/bsd/dev/river_mic_lifecycle.h
++++ b/bsd/dev/river_mic_lifecycle.h
+@@ -27,7 +27,7 @@
+  if(ri_clock_attempted)return EBUSY;
+  memset(&ri_mic,0,sizeof(ri_mic));ri_mic.page=page;ri_mic.physical=physical;ri_mic.tid=tid;
+  ri_mic.live=ri_mic.attempted=true;
+- lck_mtx_lock(&ri_mic_buffer_lock);ri_mic.gain_level=ri_mic_live.gain;lck_mtx_unlock(&ri_mic_buffer_lock);
++ ri_mic.gain_level=0; /* Always power ADC up at unity, then apply live gain. */
+  return 0;
+ }
+ static void ri_mic_live_worker(void *arg,wait_result_t wait) {
+@@ -59,7 +59,8 @@
+   ri_mic_live.sessions++;ri_mic_live.active=false;ri_mic_live.stop=true;
+   ri_mic_live.error=error;
+   if(error) {ri_mic_live.blocked=true;ri_mic_live.enabled=false;}
+-  snprintf(ri_mic_live.note,sizeof(ri_mic_live.note),"cleanup_verified=%u phase=%s poisoned=%u mapped=%u in_flight=%u submitted=%u completed=%u asm_open=%u adm_open=%u afe_started=%u source_connected=%u channel_defined=%u channel_active=%u uncertain=%u codec_restored=%u cleanup_error=%d tid=%u physical=%#llx failed_opcode=%#x failed_status=%#x adm_reply=%#x,%#x clock={%s}",
++  snprintf(ri_mic_live.note,sizeof(ri_mic_live.note),"startup_discard_frames=%u timestamp_valid=%u timestamp_invalid=%u timestamp_gaps=%u timestamp_backwards=%u timestamp_max_deviation_us=%u cleanup_verified=%u phase=%s poisoned=%u mapped=%u in_flight=%u submitted=%u completed=%u asm_open=%u adm_open=%u afe_started=%u source_connected=%u channel_defined=%u channel_active=%u uncertain=%u codec_restored=%u cleanup_error=%d tid=%u physical=%#llx failed_opcode=%#x failed_status=%#x adm_reply=%#x,%#x clock={%s}",
++   ri_mic.startup_discard_frames,ri_mic.timestamp_valid,ri_mic.timestamp_invalid,ri_mic.timestamp_gaps,ri_mic.timestamp_backwards,ri_mic.timestamp_max_deviation_us,
+    clean,ri_mic.phase?ri_mic.phase:"prerequisite",ri_pcm.poisoned,ri_mic.mapped,ri_mic.in_flight,
+    ri_mic.submitted,ri_mic.completed,ri_mic.asm_open,ri_mic.adm_open,ri_mic.afe_started,
+    ri_mic.connected,ri_mic.defined,ri_mic.active,ri_mic.uncertain,ri_mic.codec_restored,
+diff --git a/bsd/dev/river_mic_live.h b/bsd/dev/river_mic_live.h
+--- a/bsd/dev/river_mic_live.h
++++ b/bsd/dev/river_mic_live.h
+@@ -37,6 +37,11 @@
+   stop=ri_mic_live.stop=true;ri_mic_live.reason=3;
+  }
+  lck_mtx_unlock(&ri_mic_buffer_lock);return stop;
++}
++static void ri_mic_live_startup_discard(unsigned frames) {
++ lck_mtx_lock(&ri_mic_buffer_lock);
++ ri_mic_live.produced+=frames;ri_mic_live.discarded+=frames;
++ lck_mtx_unlock(&ri_mic_buffer_lock);
+ }
+ static int ri_mic_live_push(const int16_t *samples,unsigned frames,unsigned gain) {
+  if(!samples || frames>2048 || gain>2)return EINVAL;

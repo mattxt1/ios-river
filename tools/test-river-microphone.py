@@ -3,12 +3,12 @@
 from pathlib import Path
 import subprocess,tempfile,os,argparse
 repo=Path(__file__).resolve().parent.parent
-parser=argparse.ArgumentParser();parser.add_argument('--live',action='store_true');args=parser.parse_args()
+parser=argparse.ArgumentParser();parser.add_argument('--live',action='store_true');parser.add_argument('--restart',action='store_true');args=parser.parse_args();args.live=args.live or args.restart
 patch=next((repo/'xnu/patches').glob('0331-*.patch')).read_text()
 def added(name):
  s=patch.split('diff --git a/bsd/dev/'+name,1)[1].split('diff --git ',1)[0]
  text='\n'.join(x[1:] for x in s.splitlines() if x.startswith('+') and not x.startswith('+++'))+'\n'
- for pattern in ['0332-*.patch','0333-*.patch','0334-*.patch']+(['0335-*.patch'] if args.live else []):
+ for pattern in ['0332-*.patch','0333-*.patch','0334-*.patch']+(['0335-*.patch'] if args.live else [])+(['0336-*.patch'] if args.restart else []):
   p=next((repo/'xnu/patches').glob(pattern),None)
   if p and 'diff --git a/bsd/dev/'+name in p.read_text():
    with tempfile.TemporaryDirectory(prefix='river-mic-patch-',dir=repo.parents[1]/'work') as d:
@@ -34,5 +34,5 @@ with tempfile.TemporaryDirectory(prefix='river-mic-',dir=repo.parents[1]/'work')
  reader=(source/'bsd/dev/river_audio.c').read_text();reader=reader[reader.index('static int\nriver_mic_read'):reader.index('static int\nriver_mic_ioctl')]
  (root/'mic-reader-actual.h').write_text(reader)
  for n,s in [('mic-buffer-actual.h',stash),('mic-protocol-actual.h',protocol),('mic-codec-actual.h',codec)]:(root/n).write_text(s)
- subprocess.run([os.environ.get('CC','cc'),*(['-DRIVER_MIC_LIVE_TEST'] if args.live else []),'-O1','-g','-Wall','-Wextra','-Werror','-Wno-unused-function','-fsanitize=address,undefined','-I',d,str(repo/'tools/tests/river-microphone-host.c'),'-o',str(root/'test')],check=True)
+ subprocess.run([os.environ.get('CC','cc'),*(['-DRIVER_MIC_LIVE_TEST'] if args.live else []),*(['-DRIVER_MIC_RESTART_TEST'] if args.restart else []),'-O1','-g','-Wall','-Wextra','-Werror','-Wno-unused-function','-fsanitize=address,undefined','-I',d,str(repo/'tools/tests/river-microphone-host.c'),'-o',str(root/'test')],check=True)
  subprocess.run([str(root/'test')],check=True)
