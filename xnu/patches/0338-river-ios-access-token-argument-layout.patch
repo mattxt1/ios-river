@@ -1,0 +1,110 @@
+diff --git a/bsd/dev/river_audio_queue.h b/bsd/dev/river_audio_queue.h
+--- a/bsd/dev/river_audio_queue.h
++++ b/bsd/dev/river_audio_queue.h
+@@ -6,6 +6,10 @@
+ static void ri_audio_normal_disable(void);
+ static bool ri_audio_normal_input_pending(void);
+ #define RI_AUDIO_NORMAL_BLOCKS 4194303u
++#define RI_AUDIO_QUEUE_STORAGE_FRAMES 262144u
++static unsigned ri_audio_queue_capacity(void) {
++ return ri_audio_normal.attempted?RI_AUDIO_QUEUE_STORAGE_FRAMES:8192u;
++}
+ /* Apply iOS volume to normal PCM without changing the protected amplifier
+  * snapshot or racing hardware health checks. Gain is fixed point, no FP. */
+ static bool ri_audio_normal_volume(uint32_t below,bool muted);
+@@ -35,7 +39,7 @@
+  unsigned dsp_submitted,dsp_completed,max_owned,health_checks;
+  unsigned target_blocks,reserved,backpressure,cancelled_frames,discarded_at_stop,eof_padding_frames;
+  int error;
+- int16_t samples[8192*2];
++ int16_t samples[RI_AUDIO_QUEUE_STORAGE_FRAMES*2];
+ } ri_audio_queue;
+ static LCK_GRP_DECLARE(ri_audio_queue_group,"river-audio-queue");
+ static LCK_MTX_DECLARE(ri_audio_queue_lock,&ri_audio_queue_group);
+@@ -66,7 +70,7 @@
+ ri_audio_queue_copy_locked(const int16_t *pcm,size_t frames)
+ {
+  for(unsigned i=0;i<frames;i++) {
+-  unsigned n=(ri_audio_queue.head+ri_audio_queue.used+i)&8191;
++  unsigned n=(ri_audio_queue.head+ri_audio_queue.used+i)&(ri_audio_queue_capacity()-1);
+   for(unsigned c=0;c<2;c++) {
+    int value=pcm[i*2+c];unsigned magnitude=value<0?(unsigned)-value:(unsigned)value;
+    if(magnitude>ri_audio_queue.peak)ri_audio_queue.peak=magnitude;
+@@ -84,7 +88,7 @@
+  lck_mtx_lock(&ri_audio_queue_lock);
+  if(!ri_audio_queue.armed || ri_audio_queue.stop || ri_audio_queue.long_mode)goto out;
+  if(!pcm || frames>1024) {ri_audio_queue.rejected++;goto out;}
+- if(frames>8192-ri_audio_queue.used-ri_audio_queue.reserved) {
++ if(frames>ri_audio_queue_capacity()-ri_audio_queue.used-ri_audio_queue.reserved) {
+   ri_audio_queue.overflows++;ri_audio_queue.dropped+=frames;goto out;
+  }
+  ri_audio_queue_copy_locked(pcm,frames);
+@@ -108,7 +112,7 @@
+  }
+  if(!ri_audio_queue.armed || !ri_audio_queue.long_mode || ri_audio_queue.stop)goto out;
+  if(!frames || frames>1024) {result=-EINVAL;goto out;}
+- if(frames>8192-ri_audio_queue.used-ri_audio_queue.reserved) {
++ if(frames>ri_audio_queue_capacity()-ri_audio_queue.used-ri_audio_queue.reserved) {
+   ri_audio_queue.backpressure++;result=-EWOULDBLOCK;goto out;
+  }
+  ri_audio_queue.reserved+=(unsigned)frames;result=1;
+@@ -157,13 +161,13 @@
+     * frames with silence; never invent capture data or refill an underrun. */
+    unsigned used=ri_audio_queue.used;ri_audio_queue.eof_padding_frames+=1024-used;
+    for(unsigned i=used;i<1024;i++) {
+-    unsigned n=(ri_audio_queue.head+i)&8191;ri_audio_queue.samples[n*2]=ri_audio_queue.samples[n*2+1]=0;
++    unsigned n=(ri_audio_queue.head+i)&(ri_audio_queue_capacity()-1);ri_audio_queue.samples[n*2]=ri_audio_queue.samples[n*2+1]=0;
+    }
+    ri_audio_queue.used=1024;
+   } else {if(!ri_audio_queue.long_mode)ri_audio_queue.underruns++;result=-1;goto out;}
+  }
+  for(unsigned i=0;i<1024;i++) {
+-  unsigned n=(ri_audio_queue.head+i)&8191,frame=block*1024+i;
++  unsigned n=(ri_audio_queue.head+i)&(ri_audio_queue_capacity()-1),frame=block*1024+i;
+   unsigned remaining=ri_audio_queue.target_blocks*1024-1-frame;
+   unsigned ramp=frame<240?frame:remaining<240?remaining:240;
+   for(unsigned c=0;c<2;c++) {
+@@ -174,7 +178,7 @@
+    pcm[i*2+c]=(int16_t)(value*(int)ramp/240);
+   }
+  }
+- ri_audio_queue.head=(ri_audio_queue.head+1024)&8191;
++ ri_audio_queue.head=(ri_audio_queue.head+1024)&(ri_audio_queue_capacity()-1);
+  ri_audio_queue.used-=1024;ri_audio_queue.consumed+=1024;
+  out:lck_mtx_unlock(&ri_audio_queue_lock);return result;
+ }
+@@ -249,9 +253,9 @@
+ river_audio_queue_status_sysctl SYSCTL_HANDLER_ARGS
+ {
+  char note[1024];lck_mtx_lock(&ri_audio_queue_lock);
+- snprintf(note,sizeof(note),"armed=%u launched=%u stop=%u done=%u error=%d queued_frames=%u capacity_frames=8192 high_water=%u accepted_frames=%llu dropped_frames=%llu consumed_frames=%llu overflows=%u underruns=%u rejected=%u peak=%u dsp_submitted=%u dsp_completed=%u max_owned=%u health_checks=%u long_mode=%u waiting_output=%u go=%u reserved_frames=%u backpressure=%u cancelled_frames=%u discarded_at_stop=%u eof_padding_frames=%u target_blocks=%u overflow_policy=%s underrun_policy=mute_abort source=ios_device_write worker=dedicated_dsp initial_mute_deadline_ms=750 long_hard_limit_ms=%u",
++ snprintf(note,sizeof(note),"armed=%u launched=%u stop=%u done=%u error=%d queued_frames=%u capacity_frames=%u high_water=%u accepted_frames=%llu dropped_frames=%llu consumed_frames=%llu overflows=%u underruns=%u rejected=%u peak=%u dsp_submitted=%u dsp_completed=%u max_owned=%u health_checks=%u long_mode=%u waiting_output=%u go=%u reserved_frames=%u backpressure=%u cancelled_frames=%u discarded_at_stop=%u eof_padding_frames=%u target_blocks=%u overflow_policy=%s underrun_policy=mute_abort source=ios_device_write worker=dedicated_dsp initial_mute_deadline_ms=750 long_hard_limit_ms=%u",
+  ri_audio_queue.armed,ri_audio_queue.launched,ri_audio_queue.stop,ri_audio_queue.done,ri_audio_queue.error,
+- ri_audio_queue.used,ri_audio_queue.high_water,(unsigned long long)ri_audio_queue.accepted,
++ ri_audio_queue.used,ri_audio_queue_capacity(),ri_audio_queue.high_water,(unsigned long long)ri_audio_queue.accepted,
+  (unsigned long long)ri_audio_queue.dropped,(unsigned long long)ri_audio_queue.consumed,
+  ri_audio_queue.overflows,ri_audio_queue.underruns,ri_audio_queue.rejected,ri_audio_queue.peak,ri_audio_queue.dsp_submitted,ri_audio_queue.dsp_completed,ri_audio_queue.max_owned,ri_audio_queue.health_checks,
+  ri_audio_queue.long_mode,ri_audio_queue.waiting_output,ri_audio_queue.go,ri_audio_queue.reserved,ri_audio_queue.backpressure,ri_audio_queue.cancelled_frames,ri_audio_queue.discarded_at_stop,ri_audio_queue.eof_padding_frames,ri_audio_queue.target_blocks,
+diff --git a/bsd/kern/sweet_amfi.c b/bsd/kern/sweet_amfi.c
+--- a/bsd/kern/sweet_amfi.c
++++ b/bsd/kern/sweet_amfi.c
+@@ -301,11 +301,17 @@
+ 	case 4:         /* container path (audit token / pid) */
+ 	case 0x43:      /* container expected */
+ 		return ENOENT;
+-	case 5: {       /* extension issue: permissive token for missing Sandbox */
++	case 5: {       /* extension issue: existing permissive policy sentinel */
++        /* iOS16 issue_common passes seven u64 words: class,type,resource,
++         * flags,output_buffer,target_pid,target_pidversion. Word5 is NOT
++         * output capacity. Untargeted requests deliberately pass pid0.
++         * libsystem allocates2048 bytes before this call; we return only
++         * its existing8-byte invalid sentinel, with copyout checking access.
++         * Do not alter TCC decisions or substitute a microphone grant. */
+ 		uint64_t request[7];
+ 		static const char token[] = "invalid";
+ 		if (copyin(arg, request, sizeof(request)) != 0 ||
+-		    request[4] == 0 || request[5] < sizeof(token)) {
++		    request[4] == 0) {
+ 			return EFAULT;
+ 		}
+ 		return copyout(token, (user_addr_t)request[4], sizeof(token));

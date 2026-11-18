@@ -129,6 +129,19 @@ int main(void){
  assert(ri_audio_queue_pop(normal_block,1)==1 && normal_block[512]>7900 && normal_block[512]<8100);
  assert(ri_audio_normal_volume(0,true));assert(ri_audio_queue_reserve(1024)==1);ri_audio_queue_commit(input,1024,false);
  assert(ri_audio_queue_pop(normal_block,2)==1 && normal_block[512]==0);
+ /* Reproduce a HAL which writes every callback and never retries EAGAIN.
+  * Route startup may take several seconds: retain every callback in order. */
+ memset(&ri_audio_queue,0,sizeof(ri_audio_queue));ri_audio_auto.drain=false;
+ assert(ri_audio_queue_capacity()==262144);
+ assert(ri_audio_normal_volume(0,false));
+ for(unsigned i=0;i<200;i++) {
+  for(unsigned n=0;n<2048;n++)input[n]=(int16_t)(1000+i);
+  assert(ri_audio_queue_reserve(1024)==1);ri_audio_queue_commit(input,1024,false);
+ }
+ assert(ri_audio_queue.used==204800 && ri_audio_queue.accepted==204800 && !ri_audio_queue.backpressure);
+ for(unsigned i=0;i<200;i++) {assert(ri_audio_queue_pop(normal_block,i)==1);assert(normal_block[512]==(int16_t)(1000+i));}
+ assert(!ri_audio_queue.used && ri_audio_queue.consumed==204800 && !ri_audio_queue.dropped && !ri_audio_queue.discarded_at_stop);
+ puts("PASS normal HAL startup buffer:4.267seconds/200nonretrying callbacks preserved in order; unchanged diagnostic8192frame capacity");
  puts("PASS normal iOS volume: linear PCM without diagnostic clipping, -6dB attenuation, mute, no hardware snapshot writes");
  puts("PASS normal iOS actual session rearm: five playback sessions without three-session cap, monotonic identity and retained DMA");
 #endif

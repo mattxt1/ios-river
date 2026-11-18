@@ -5,6 +5,83 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0337 normal ringtone audible; Voice Memos blocked upstream;0338 candidate (2026-11-18)
+
+User reports ringtone audible through normal Settings app; sometimes full,
+sometimes cuts after seconds and delayed. Read-only state confirms8successful
+normal playback sessions/7restarts, accepted=completed519168/no discarded,
+last114688frames/112exactbuffers, backpressure215, no queuefault/drivererror/
+cutoff/atlimit. Normal coordinator remains enabled1/worker1, all routes idle.
+DoNOTclaimconsistent/playbackcomplete; producer omissions upstream notmeasured.
+Voice Memos doesnotprompt/record; mic opens0/produced0/sessions0. Scoped ONLY
+VoiceMemosaudio log proves TCCerror6: Failed to issue Sandbox Extension for
+kTCCServiceMicrophone. Sameattempt fails recordingfileopen NSOSStatus-17508/
+NSURLError-1100. AppregisteredSystem with real501:501datacontainer, process640.
+No privacy state modified, no microphone grant override, no installer changes.
+
+Exact iOS16 library code inspection proves extension issue sevenwordlayout:
+[class,type,resource,flags,output_buffer,target_pid,target_pidversion]. Old0212
+wrongly treats word5asoutputcapacity and rejects untargetedpid0 withEFAULT.
+Benign deviceprobe ONLYclasscom.river.audio.abi-test reproducedgenericNULL/
+errno14 vs targetedSELFreturnexistinginvalidsentinel. No microphone/filetoken
+issued byprobe. 0338corrects argumentcheck, leaves existing8bytesentinel/
+consume/container/TCCdecisions unchanged. DoesnotaddSandboxenforcementtoport.
+
+InstalledHakiosAudio driver inspected: DoIOOperation calls writeONCE, ignores
+partialresult/EAGAIN, returnsCoreAudio success; fixedinitialring8192=170.7ms can
+fillduringroute startup. 0338normalring262144stereo frames=5.461sec (1MiBCPU),
+diagnosticcapacitystill8192. No overwrite/no syntheticpadding; normalvolume/
+health/cleanup unchanged. Actualqueuehostpreserves4.267sec/200nonretryingHAL
+callbacks in order; APIhosttestzero/small/ordinaryPID/exact8bytecanaries/faults
+pass. This buffering targetsstartup loss, notprovenfixforallsystemslowness.
+Userinformedbothfixesbatched/newtemporarybootnecessary(kernelABI).
+
+CurrentPHONE337combinedserviceON/idle/ampmuted, no micrecording everstarted.
+No active route repeats; normalplaybacks were user-triggered. Hostmonitor
+completed180sec withoutfault. Scopedlog helper exits50sec. Work evidence
+work/ios-audio-integration; nextbuildinputs work/ios-audio-token-abi. Build
+0338committedpatch/nativebaseline337 beforeaskingfastboot; preserveall337
+observations andsha. Future testsamebatch stockringtone+VoiceMemosrecord/replay,
+repeat/stop/volume and continuous>6sec. Normalconsentmustremainunchanged.
+
+## Active handoff:0337 normal app audio ENABLED; Voice Memos test pending (2026-11-18)
+
+User confirmed home responsive/WiFi connected. Read-only USB recovery passed
+all fresh zero-state checks and exact four installed helper hashes; no transport
+fallback needed. prepare-device.py ONCE passed entire muted initialization:
+firmware hash/stage/auth, handshake/core/map/ASM/AFE/ADM/silence/SLIM/NGD;
+codec_address_verified, no uncertainty. User cued before enabling app audio.
+enable-ios.py ONCE succeeded normal attempted1/enabled1/worker1/blocked0/error0.
+CURRENTPHONE337 normal combined service ON. DoNOT repeat prepare/enable or mix
+legacy controls. Normal gain0;64000+ring, queued physical input; halfduplex.
+No recording/playback initiated by host. User asked open stock Voice Memos,
+normal mic consent, count10-15sec/stop/replay, lowvolume thenadjust; replyPENDING.
+
+work/ios-audio-integration/monitor-apps.py running read-only metadata monitor,
+app-session-monitor.jsonl. It sends ios-disable ONCE only if explicit backend
+fault; otherwise leaves normal service enabled. Inspect log/session result
+before any stop or recovery, don't repeat uncertain controls. Normal --ios,
+--auto,--queue,--mic-live status use short locks; codec/ASM status waitsADSP.
+After app reply capture read-only posttest exact frame/session/timestamp/cleanup
+state, preserve user acoustic outcome, require UI responsive. On backendfault
+stopboth once and preserve ownership; on successful test keepservice enabled
+for normaluse asuserwants. No unprompted newboot; all changes alreadyoneboot.
+
+## Active handoff:0337 initial read-only checks; USB banner timeout (2026-11-18)
+
+Temporary boot successful as below. Baseline ios/start/queue/auto/mic read-only
+checks passed fresh all-zero. USB SSH next baseline-mic-live FAILED during
+banner exchange (exit255); no remote audio command executed in that failed
+connection. No hardware controls/initialization sent; service remains disabled.
+Freshhome/WiFi response PENDING. No claim exact installed helpers checked yet.
+Preserve work/ios-audio-integration/baseline*; don't rerun O_EXCL verifier.
+After user home/WiFi reply use resume-verification.py READONLY with the working
+transport (RIVER_AUDIO_SSH_HOST override if needed, trustedhostkey unchanged).
+This recaptures fresh state and all helper bytes before installed-verification
+marker. Then prepare-device.py once and enable-ios.py once as below. User
+informed timeout and that no audio was enabled. No need new build/reboot from
+banner failure alone. Currentphone337 untouched physical audio state.
+
 ## Active handoff:0337 built VERIFIED and temporarily booted; home pending (2026-11-18)
 
 Native build of committed a9cbbcb505bc13013a074eb543c5074b47a2bba9 PASSED.
