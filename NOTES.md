@@ -5,6 +5,25 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0336 speaker AUDIBLE PASS; mic armed awaiting counting (2026-11-18)
+
+USERheardfirstspeaker andconfirmed iOSresponsive. prepare-live-mic.pyONCEover
+verifiedUSB enabledidlemic/gain1(12dB). CURRENT336micattempted1/enabled1/worker1,
+active0/requested0/sessions0/opens0/produced0; noreader/nocaptureyet, ampmuted.
+DoNOTrepeatprepare/enable. Evidence work/mic-restart-startup/live-mic-prepared.json
+andlive-mic-enable/gain12 captures. Per-runtransportdefaults192.168.7.2 USB,
+verifiedworking; WiFihelperreadpreviouslytimedout. SameSSHidentity/hostkeyalias.
+
+AskSTARTcountingnormalvoice~20cmBEFOREclickingAlreadycounting, continue~45sec.
+Onreply immediately python3 work/mic-restart-startup/run-live-mic.py fromcanonical
+apr-communication evidence root. Itrequirespreparedstate, checksunrequested,
+records12secfirst+8secrestart BOTHrequested12dB, unity-firstwarmup/settlingreal
+samplediscard/timestampaudit. Requirefullcleanup/PAreuse/TIDadvance/framebalance;
+finallydisablemicwithoutlog-spacedependency/workerexit. ThenuserUIresponsive/
+readiness, finalcuedrun-speaker.py after; fetchclosedWAVsandcomparevoiceclear
+initialvsrestart, plus timestampmetrics. Candidatefixnotyetproven. Preserve
+335negativequalityfeedback andalloriginalWAVs. Noactivecapturerequestsyet.
+
 ## Active handoff:0336 speaker-before transport PASS; heard/UI reply pending (2026-11-18)
 
 Userfreshhome/WiFi/readyconfirmed. InitialWiFiverifyread-onlystatepassed but
