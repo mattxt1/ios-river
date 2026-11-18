@@ -5,6 +5,22 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0335 transport PASS but acoustic quality FAILED (2026-11-18)
+
+USERselectedDistortedOrUnclear, clarified "Crackling or chopped speech" forraw
++12dB3sec restartclip. ThisOVERRIDES pendingacousticreview: doNOTclaimcontinuous
+mic/gaincalibrationdone. Transport18sec/restart3sec/zerooverruns/fullcleanup and
+bothspeakersaudible remainvalid, butgaincandidate12dB notuseraccepted. Original
+hashverified/no digitalclipping, waveformlargejumpsarenotobviouslyalignedtoDMA
+boundaries. Roughhosttimestamps give~47842frames/sec (near48k, notconclusive).
+CurrentREADloop single-inflight; investigatingcapturetiming/pullstarvation.
+NeedqueuedREADs andDSPtimestampcontinuity diagnostics toverifyorfalsifygaps,
+notjustlarger gain/offlineprocessing. Keepalloriginalprivateaudio/evidence.
+CURRENT335bothbackendsoff/allroutesclosed/ampmuted; noactivecontrolsorretry.
+Nextcoherentbuildshould includeinputpipeline/timestampaudit andspeakersbefore/
+after, samegainsteps; physicalvalidationrequired. Hostdisklow~307MiB after
+onlytaskcompiler-cacheclear; ensurebuildspacewithoutdeletingsource/KDK/evidence.
+
 ## Active handoff:0335 recordings downloaded; selected-gain review pending (2026-11-18)
 
 Allcombinedhardwaretransport and speakeraudibilitypasses recordedbelow. Closed
