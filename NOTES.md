@@ -5,6 +5,30 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0335 speaker-before AUDIBLE PASS; mic armed awaiting counting (2026-11-18)
+
+Userfreshhome/WiFiresponsive/ready confirmed. Exacthelper/freshallbackendstate
+passedovertrustedWiFi192.168.1.232. MutedprepareONCE throughNGD andstageinputs
+passed. Cuedfirstnative6sec appburst PASS:57livebuffers/58368frames plus4silent
+preroll=61DMAcompletions, ZEROqueueunderrun/overflow/reject/drop/padding, exact
+EOS/fullcleanup; output1.249750sec/mute1.310603sec/24healthrenewals/maxcheck20.5ms.
+DoNOTclaim6sec audibleoutput;startupconsumedmostappburst. USER HEARDtone and
+confirmed iOSresponsive. Backendexplicitlydisabled/workerexited. Firstspeaker
+sessionconsumed; evidence work/audio-live-20261118/speaker-before-result.json.
+
+Thenprepare-live-mic.py sent --mic-live-enable ONCE and --mic-gain0metadata.
+CURRENT335 liveMICenabled1/worker1/active0/requested0/sessions0/opens0/produced0;
+no reader yet/no mic recording, ampmuted. DoNOTrepeatprepare/enable. UsertoSTART
+countingnormalvoice~20cmfrombottommic BEFOREclickingAlreadycounting, continue40sec.
+Onreply immediately run-live-mic.py inwork/audio-live-20261118. Runnerlocally
+adaptedto requirelive-mic-prepared.json andverifyenabledunrequestedstate, not
+repeatmicenable. 18sec continuouscapture/gain0,+12,+24 at6/12secconsumedthresholds,
+selectzero-clippinggainwith>=6dBheadroom, close/reopen3sec atcandidate, then
+micdisable/workerexit. Requirefullcleanup/frameaccounting/pageIDreuse. No
+uncertainactive retry. Fetchclosedrecordingsanduserreview, cue speakerafter.
+DefaultWiFiSSHworks, stdinDEVNULL forreader/appchildren. Combinedbuildsource/
+imageunchangedb4764ac/c685fd53... . Hardwarelivecapture/gain/handoffpending.
+
 ## Active handoff:0335 reverified/fresh temporary boot; home pending (2026-11-18)
 
 Userreturnedafteraway/requestedverifyimageandrebootinfastboot. Devicealready
