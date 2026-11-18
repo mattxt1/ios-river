@@ -5,6 +5,34 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0336 speaker-before transport PASS; heard/UI reply pending (2026-11-18)
+
+Userfreshhome/WiFi/readyconfirmed. InitialWiFiverifyread-onlystatepassed but
+helperbyte-readriver-net88624timedout25sec, nohardwarecontrols. Preserved
+baselinefiles/wifi-verification-timeout.json. USBSSHread-onlyworked; resumed
+exactfreshstate/all4helperbyteverificationoverUSB viaresume-verification-usb.py,
+installed-helper-verification.json completed. MutedprepareONCE throughNGD and
+stageinputs passedOVERUSB. Allactivecommandswere RIVER_AUDIO_SSH_HOST=192.168.7.2.
+Per-runtransport.py nowdefaultsUSB toavoidlateraccidentalWiFi use; samekey/alias.
+
+Cuedrun-speaker.py before completedPASS:105livebuffers107520frames+4preroll=
+109exactcompletions, zeroqueuefaults/drops, EOS/fullcleanup. Output2.273403sec,
+mute2.347343sec,48healthrenewals/maxcheck21.3ms. Backenddisabled/workerexited,
+ampmute0x10. Speakeruserheard/UIresponsive questionPENDING; WAITreply before
+micprepare ascommunicated. CURRENT336startup/speakerfirstsessionconsumed,
+MICserviceattempted0/notenabled/nocapture. Noactivecontrolretry.
+
+Activeevidence work/mic-restart-startup. Nextafterheard/UIreply:
+prepare-live-mic.py ONCE enablesidlebackend+gain1(12dB), no reader. Askuser
+STARTcountingbeforeclickAlreadycounting/~45sec. Onreplyrun-live-mic.py ONCE:
+12secinitial+8secrestart BOTHrequested12dB, unity-firstwarmup/discards/timestamp
+audit. Fullcleanup/framebalance/PAreuse/TIDadvance; thenmicdisableworkerexit.
+FetchclosedWAVs forclearvoicecomparison; cue speakersafter. Sourceimageunchanged
+dc322d6/5cf0f2af... . Hostprogressloopsadaptedtoelapsedwallclockbounds instead
+ofWiFi-dependentfixedpollcounts (USBfaster); stopstillbypasseslog-spacefailure.
+Allscriptsparsed. Needacousticreview beforeclaimingrestartfix. Storagefreed17GiB
+andactiveKDK/nativeinputs preserved; no furthercleanuprequiredforthistest.
+
 ## Active handoff:0336 temporarily booted; home/WiFi/listening pending (2026-11-18)
 
 Userconfirmedfastbootready. Reverifiedimage5cf0f2af.../all3helpers andRiver
