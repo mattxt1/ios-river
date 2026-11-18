@@ -5,6 +5,38 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0338 correction built/verified/temporarily booted; home pending (2026-11-18)
+
+Userfastbootready confirmed; River product/serialZY226HM8QB reverified. Temporary
+boot of verified0338 accepted0.824sec, NOflash. Source0398b80dd072c6d213311bb345719bbee00f1eaa,
+kernelSHA f96b41b9843a4e8fe7802af1946555793896287c467ce24bc29b3d5f67421397;
+image outputs/river-ios-audio-token-abi-wifi-0398b80.img SHA
+ c529e43d9ac5173628b7d91c9f9c29a688f748c8eef1d6d9063953f657ba5863,
+27068416bytes/cmdline577. Nativeexit0, source/kernel/helper/base/payload/unrelated
+RiverFiles verified. Manifest outputs/ios-audio-token-abi-wifi-build-manifest.json.
+CURRENT PHONE338fresh, home-responsive/WiFi replyPENDING, NOaudio controls.
+Earlyread-onlyverify-installed.py baseline-ios SSHconnectREFUSED duringboot;
+no commandexecuted/nohardwareeffect. Preserve baseline-ios-0398b80.txt; DON'T
+rerun originalverifier/O_EXCL. Use resume-verification.py afterhome/WiFi reply.
+USBdefault192.168.7.2; trustedWiFi192.168.1.232 fallbackonlyifconfirmedreachable.
+
+Active scripts/evidence work/ios-audio-token-abi, allparsed. Afterhome reply:
+resume-verification.py -> verify-token-api.py benignownclass probe (generic
+andtargetedself bothnonnull/existinginvalidsentinel/errno0; no microphoneorfile
+permission requested/privacyunchanged) -> prepare-device.py ONCEknownmuted
+initialization -> cued enable-ios.py ONCE. Itrequirestokenproof andchecksnormal
+outputcapacity262144. StockVoiceMemosnormalconsent/count10-15sec/stop/replay,
+repeat/stop/volume plusnormalringtone; usermustreportrecognizablevoice/full
+playback. No per-appcontrolswaps. Guarded halfduplex; no simultaneous promise.
+Monitor-apps.py shortCPUmetadataonly, stopbothonfault; no repeatedenables.
+Gain0 fixed. Mic4ownedREADpipelinephysicalvalidationstillPENDING because337
+neveropenedmic(TCCfailure).338ABIcorrection/devicegenericproofnotyetverified.
+Inputquality, consistentoutput/startlatency remainunproven; doNOTclaimfinished.
+
+337scopedVoiceMemoslogs+benignABIprobe and actualHALdisassembly preserved under
+work/ios-audio-integration. No broadtccd/mediaserverdlogs orprivacywrites.
+Old0337service endedwithuserfastbootreset; no cleanupuncertaintybeforeit.
+
 ## Active handoff:0337 normal ringtone audible; Voice Memos blocked upstream;0338 candidate (2026-11-18)
 
 User reports ringtone audible through normal Settings app; sometimes full,
