@@ -5,6 +5,20 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0336 temporarily booted; home/WiFi/listening pending (2026-11-18)
+
+Userconfirmedfastbootready. Reverifiedimage5cf0f2af.../all3helpers andRiver
+serialZY226HM8QB/productriver. Temporarybootaccepted0.855s; NOflash. CURRENT
+PHONE336 fresh, NOaudio controls. Freshhome-responsive/WiFijoin/readytolisten
+confirmationrequested; WAITreplybeforeactivecontrols. Evidence work/mic-restart-startup/
+fastboot-preflight.json, fastboot-boot-dc322d6.txt, verified-boot.json andlogger.
+Manifestphone_current_patch336. Afterreplyfollowprocedurebelow: exactverify,
+mutedprepareONCE, stagehelpers, cuespeakerbefore, thenenableidlemic/gain12 and
+countbeforeclick;12secinitial+8secrestart; metadata/timestamp/audioqualityreview,
+cuespeakerafter. Preserveall335recordings/negativequalityfeedback. Candidate
+hardwarefixnotyetverified. NoqueuedDMAprototypeinthisimage. Currenttoolchain
+remainsusableafter17.14GiBstoragecleanup andcanonicalKDKdeduplication.
+
 ## Active handoff:0336 unity-first restart candidate image VERIFIED (2026-11-18)
 
 Sourcedc322d61ec637b3c83410385d83839c9ed315f1d nativebuildPASSED afterstoragecleanup,
