@@ -5,6 +5,31 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## 0349 temporary boot accepted; system and hardware qualification pending (2026-11-19)
+
+The new session used approved USB access to enumerate the expected River serial,
+verify product `river`, and run the prepared 0349 image through the existing
+guarded runner. Preflight verified the candidate, full 0345 rollback, helper and
+embedded command line. Fastboot reported 0.622 s to send and 0.215 s to boot.
+The command was `fastboot boot`. No partitions were flashed.
+
+River XNU enumerated over USB Ethernet, and two ICMP probes returned. USB SSH
+initially refused port 22, then reached the Dropbear banner on one attempt and
+stalled waiting for the key-exchange reply. No SSH session authenticated.
+The established Wi-Fi fallback timed out. A 40-second listen on the existing
+USB kernel-log endpoint received no packets. The final USB check showed the
+host interface active at 192.168.7.1 with incomplete ARP for 192.168.7.2,
+four unanswered ICMP probes, and another SSH timeout. This establishes loss
+of USB network reachability after the earlier replies. Home, navigation and
+typing have not been confirmed. The private runner capture
+is in `outputs/hardware/device-0349/20261119T214301083024Z-boot` of the original
+November 19 task workspace. The prior empty-device logs predate this boot.
+
+No battery, brightness, haptics or process diagnostics ran. Continue on this
+0349 boot if a trusted SSH connection and fresh Home become available. Preserve
+any user-reported pauses with timestamps and capture stacks when possible.
+No audio setup or controls were sent.
+
 ## Active handoff:0349 boot authorized; host device access blocked (2026-11-19)
 
 User is starting a new chat because permission controls are absent here. Read

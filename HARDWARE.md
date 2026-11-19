@@ -1,9 +1,10 @@
 # River battery, backlight and native feedback
 
 The November 19 candidate adds patches 0346–0349 and an opt-in SpringBoard
-bridge. It has **not been booted or hardware-validated**. Last known phone
-image is 0345. No audio initialization, audio enable, playback or capture was
-performed in this task. Device SSH was denied by the host session permissions.
+bridge. The prepared 0349 image was sent and accepted via temporary fastboot
+boot. River XNU subsequently enumerated over USB Ethernet. Home readiness and
+hardware behavior still need validation. No audio initialization, enable,
+playback or capture was performed.
 
 The final **0349** kernel build, iOS arm64 library/helper builds and host checks
 pass. The applied source hashes match the host-tested inputs. Local candidate:
@@ -106,11 +107,12 @@ kernel logs when diagnosing a pause. It is a point-in-time sample, not a stall
 detector or a frame-rate measurement. A nonzero/timeout result stops dependent
 operations. Use `--manifest` outside this task's current directory layout.
 
-On November19, macOS IOUSB identified the expected Fastboot River serial, but
-the session's fastboot returned no accessible devices and SSH explicitly failed
-with Operation not permitted. The guarded boot therefore stopped before sending
-an image. Boot and device validation remain pending execution from a permitted
-Terminal/session; preflight and simulated boot guards passed.
+The original session lacked USB access. In the continuation, approved USB
+access let the guarded runner verify the expected serial and product and send
+0349 on November 19. Fastboot reported success and macOS subsequently saw
+River XNU USB Ethernet. SSH reached the Dropbear banner once and stalled
+during key exchange. The known Wi-Fi fallback timed out. No authenticated
+session was available for the on-device checks below.
 
 1. Verify the candidate and full 0345 rollback hashes. Verify product River;
    use temporary `fastboot boot` only, never flash. Do not initialize audio.
