@@ -5,6 +5,65 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:339performance candidate prepared; not built/deployed (2026-11-18)
+
+Current338audioleftON/healthy; usercouldnotexitVoiceMemos/keyboardmissing.
+Code-onlystacks showSpringBoardcamera-discovery synchronouswait; UIrestartONCE
+(SIGTERM26) restorednavigation+keyboard USERconfirmed. DoNOTuse original338
+samplesasFPSbaseline. No otherdaemonstopped/CPUbudgetapplied. Cameraendpoint
+identity/rootcause stilllead, notproven; no serviceconfigurationchanged.
+
+Localwork canonical2026-11-18/river-performance; CURRENT_TASK.md fullhandoff.
+ResearchpinnedSailfish6f27e41/Apollo1f75f38 primarysources.339candidatechanges:
+RIVER fixedabsolute60Hzdeadline vsold16667us-afterpresentation; preservesall
+present/fence/pending-show-retireownership paths, legacyriverframeclock=0 option,
+late/skippedtimingcounts. Actualclock600frames/3.8mswork/late/longpausetestsPASS.
+Audioidlecoordinatorusesproducer-eventwakewithgenerationcheckafterassertwait,
+not500timerwakeups/sec;150msqueuedtaildrain/activeDSP/750mshealthunchanged.
+Actualcoordinator30alternations/generationraces/stop/fault plusring/rearm/volume
+regressions PASS. No hardwareFPSgainclaim. Nextnative339buildfromcommittedpatch.
+
+RecoveredfullMesa26.2.5basef9ce5e81+28actualRiverfiles fromreadonlylegacyiCloud
+archive into LOCALperformance/dependencies/mesa.112.9MBpackSHA1verified,
+perfileSHA256manifest; no activeiCloudwork. Actualadapter87214bytes SHAe231f814...
+still3unconditionaldiagnosticglGetperclear. Rebuildingcompatiblegraphicslibrary
+candidate separately, tocombinewith339kernelinONEverifiedboot. DoNOToverwrite
+working /usr/local/lib/sweetgl.dylib20,058,240bytes. StagecandidateatUNIQUEnonactive
+path andselectvia339bootarg;338fallbackmustcontinueusingoldlib. FullMesa build
+requirements isolated. NeverclaimsourcerecoveryaloneisFPSimprovement.
+
+Readnewestworkjournal beforecontinuing. Userexpectsmeaningfulbatchedperformance
+work, preservingcurrentaudio, freshhealthybootbeforecomparativeFPSmeasurements.
+
+## Active handoff:performance investigation;338audio PASS; UI recovered (2026-11-18)
+
+User's NEWpriority: systemslowness/FPS/performance, researchios-sailfish and
+similarports, batchmeaningfulchangesintoboots. Current338normalaudioleftON,
+clearVoiceMemosrecord/replay milestonepreserved. Duringperformancestudyuser
+couldnotexitapp/keyboardmissing; markoriginalmeasurementsDEGRADED, NOTvalidFPS
+baseline. CapturedSpringBoardmainthread camera-discovery synchronouswait plus
+systemstacks. RestartedONLYSpringBoard once(SIGTERM26) afterevidence; user
+confirmednavigation+keyboardworkagain. Backboardd/audio untouched. No newkernel
+orgraphicslibdeployed. No otherdaemonstopped/CPUbudgetapplied. Currentrecoveredsession
+usable; freshbootforcomparativeFPSvalidationascommunicated.
+
+Newcanonicalworkspace /Users/matttyson/Developer/Codex/2026-11-18/river-performance;
+CURRENT_TASK.md hascompletesourceprovenance/paths/finding/nextsteps. CPUdiagnostic:
+aggregated67%,coreduetd47%,biomed39%onecore; diagnosticnotcausalproof. Source
+researchpinnedSailfish6f27e41/Apollo1f75f38; Apolloabsolutevsync/presenter and
+backgroundbudgetideasreviewing, clocks/MetalA6xxnotportabletoA506. Rivercurrent
+vsynctimer schedules16667usAFTERheavycallback; investigatefixeddeadlinepacing
+whilepreservingSweetSurfaceownership. NoFPSgainclaimed. Normalaudioowneridle
+polls2ms (sleeping,notbusyspin), eventdrivenwakecandidate. Camera-servicelead
+needsvalidationbeforechangingconfig. Retrievedsystemlaunchd793318bytes locally,
+onlymediaserverdMachServices inspected; advertisescapturesourcealongsideaudio.
+
+OldMesasourceswereoffloaded/skippedbymigration: recoveredactualeagl.c87214bytes
+intolocalperformance/recovered-source withSHA e231f814...; fullMesa source/build
+stillmissinglocally. Don'tclaimoldrendererbaselineavailable/deployuntestedlibs.
+AllACTIVEworklocaloutsideiCloud; archiveonlyreadonlyrecovery/hashverification.
+Currentnative338retained; nextnumber339. ReadCURRENT_TASK.mdbeforecontinuing.
+
 ## Active handoff:0338 NORMAL iOS Voice Memos record/replay CLEAR PASS (2026-11-18)
 
 USER: "Records and plays my counting clearly" in stockcom.apple.VoiceMemos.

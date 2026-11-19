@@ -16,6 +16,8 @@ static void lck_mtx_unlock(int *);
 static uint64_t clock_ns;
 static void clock_get_uptime(uint64_t *out){*out=clock_ns;}
 static void absolutetime_to_nanoseconds(uint64_t t,uint64_t *ns){*ns=t;}
+static unsigned normal_signals;
+static void thread_wakeup(void *event){assert(event);normal_signals++;}
 #include "queue-actual.h"
 static void lck_mtx_lock(int *p){
  if(p==&ri_audio_queue_lock){assert(!queue_held);queue_held=1;}
@@ -133,12 +135,12 @@ int main(void){
   * Route startup may take several seconds: retain every callback in order. */
  memset(&ri_audio_queue,0,sizeof(ri_audio_queue));ri_audio_auto.drain=false;
  assert(ri_audio_queue_capacity()==262144);
- assert(ri_audio_normal_volume(0,false));
+ assert(ri_audio_normal_volume(0,false));normal_signals=0;
  for(unsigned i=0;i<200;i++) {
   for(unsigned n=0;n<2048;n++)input[n]=(int16_t)(1000+i);
   assert(ri_audio_queue_reserve(1024)==1);ri_audio_queue_commit(input,1024,false);
  }
- assert(ri_audio_queue.used==204800 && ri_audio_queue.accepted==204800 && !ri_audio_queue.backpressure);
+ assert(ri_audio_queue.used==204800 && ri_audio_queue.accepted==204800 && !ri_audio_queue.backpressure && normal_signals==2);
  for(unsigned i=0;i<200;i++) {assert(ri_audio_queue_pop(normal_block,i)==1);assert(normal_block[512]==(int16_t)(1000+i));}
  assert(!ri_audio_queue.used && ri_audio_queue.consumed==204800 && !ri_audio_queue.dropped && !ri_audio_queue.discarded_at_stop);
  puts("PASS normal HAL startup buffer:4.267seconds/200nonretrying callbacks preserved in order; unchanged diagnostic8192frame capacity");

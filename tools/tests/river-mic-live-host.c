@@ -24,6 +24,7 @@ static int msleep(void *p,pthread_mutex_t *m,int flags,const char *name,struct t
  held=false;int rc=pthread_cond_timedwait(&ready,m,&until);held=true;return rc==ETIMEDOUT?EWOULDBLOCK:rc;
 }
 static struct {bool attempted;} ri_audio_normal __attribute__((unused));
+static void ri_audio_normal_signal(void) {}
 #include "mic-live-actual.h"
 static void reset(void){memset(&ri_mic_live,0,sizeof(ri_mic_live));sleep_error=0;}
 static int16_t pattern(unsigned n){return (int16_t)((n%20001)-10000);}

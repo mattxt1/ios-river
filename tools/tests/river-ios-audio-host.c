@@ -10,6 +10,9 @@ typedef void *thread_t;
 #define THREAD_NULL NULL
 #define THREAD_CONTINUE_NULL NULL
 #define KERN_SUCCESS 0
+#define NSEC_PER_MSEC 1000000
+#define THREAD_UNINT 0
+#define THREAD_AWAKENED 1
 static int ri_adsp_lock,ri_audio_queue_lock,ri_mic_buffer_lock;
 static bool adsp_held,queue_held,mic_held;
 static void lck_mtx_lock(int *p){
@@ -46,7 +49,14 @@ static void thread_deallocate(thread_t t){assert(t==(void*)1);}
 static void *current_thread(void){return (void*)2;}
 static int thread_terminate(void *t){assert(t==(void*)2);return 0;}
 static jmp_buf stopped;
-static void thread_block(void *c){assert(!c && !adsp_held && !queue_held && !mic_held);longjmp(stopped,1);}
+static uint64_t ri_audio_normal_wake_generation;
+static bool idle_registered,idle_cancelled,inject_registered;
+static unsigned idle_ms,cleared,idle_calls;
+static void ri_wait(unsigned ms);
+static void clock_interval_to_deadline(unsigned ms,unsigned scale,uint64_t *deadline){assert(scale==NSEC_PER_MSEC && !queue_held && !mic_held && !adsp_held);idle_ms=ms;*deadline=now_ns+ms*1000000ULL;}
+static int assert_wait_deadline(void *event,int interruptible,uint64_t deadline){assert(event==&ri_audio_normal && !interruptible && deadline>now_ns);idle_registered=true;idle_cancelled=false;idle_calls++;if(inject_registered)ri_audio_normal_wake_generation++;return 0;}
+static int clear_wait(void *thread,int reason){assert(thread==(void*)2 && reason==1 && idle_registered);idle_cancelled=true;cleared++;return 0;}
+static void thread_block(void *c){assert(!c && !adsp_held && !queue_held && !mic_held);if(idle_registered){idle_registered=false;if(!idle_cancelled)ri_wait(idle_ms);return;}longjmp(stopped,1);}
 static bool ri_audio_normal_input_pending(void);
 static void ri_audio_normal_disable(void);
 static void ri_audio_auto_session(void){
@@ -71,7 +81,7 @@ static void ri_wait(unsigned ms){assert(!queue_held && !mic_held && !adsp_held);
 static void reset(unsigned n){
  memset(&ri_audio_normal,0,sizeof(ri_audio_normal));memset(&ri_audio_auto,0,sizeof(ri_audio_auto));memset(&ri_mic_live,0,sizeof(ri_mic_live));memset(&ri_audio_queue,0,sizeof(ri_audio_queue));memset(&ri_mic_capture,0,sizeof(ri_mic_capture));
  clean=true;ri_stream.complete=ri_route.muted=ri_ngd.address_valid=ri_ngd.enabled=ri_afe_mute_hold=true;ri_ngd.uncertain=false;
- scenario=n;created=outputs=inputs=waits=0;now_ns=0;thread_fail=false;entry=NULL;
+ scenario=n;created=outputs=inputs=waits=0;idle_registered=idle_cancelled=inject_registered=false;idle_calls=cleared=0;ri_audio_normal_wake_generation=0;now_ns=0;thread_fail=false;entry=NULL;
 }
 int main(void){
  for(unsigned n=0;n<4;n++){
@@ -87,5 +97,10 @@ int main(void){
  }
  reset(4);thread_fail=true;assert(ri_audio_normal_enable()==ENOMEM && ri_audio_normal.blocked && !ri_audio_auto.worker && !ri_mic_live.worker && !ri_audio_normal.worker);
  reset(5);clean=false;assert(ri_audio_normal_enable()==EBUSY && !created && !ri_audio_normal.attempted);
+ reset(6);ri_audio_normal_pause(0);assert(idle_calls==1 && idle_ms==1000 && !cleared);
+ reset(6);ri_audio_queue.armed=true;ri_audio_queue.used=512;now_ns=40000000;ri_audio_auto.last_write=0;ri_audio_normal_pause(0);assert(idle_ms==110);
+ reset(6);ri_audio_normal_wake_generation=1;ri_audio_normal_pause(0);assert(idle_calls==1 && cleared==1 && !waits);
+ reset(7);inject_registered=true;ri_audio_normal_pause(0);assert(idle_calls==1 && cleared==1 && !waits);
+ puts("PASS actual audio idle wait: idle1000ms fallback, short-tail150ms deadline, work arriving before wait registration cancels sleep, no queue/hardware locks across sleep");
  puts("PASS actual iOS coordinator: one route owner, capture priority, 30 play/record alternations, shared stop, input/output faults sticky, thread failure, prerequisite gate, duplicate rejection, lock boundaries");
 }
