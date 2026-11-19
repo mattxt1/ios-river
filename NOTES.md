@@ -5,6 +5,24 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0343 UI/audio PASS; preparing page-cache/trace batch0344 (2026-11-19)
+
+USER343: responsive; folders and Spotlight look right; existing memo/UI sounds
+clear and quicker, navigation works. Normal audio setup/enable completed ONCE;
+service remains ON/healthy, idle hardware muted/routes closed. Do not repeat.
+Two playback sessions455680accepted=completed, no errors; firstDMA782800us is
+backend timing, not UI-to-acoustic latency. No new343mic recording requested.
+64round geometry trace collected (20.793s; not FPS). Icons alpha positive, but
+missing ancestor classes prevent a cause claim. Late screenshots were outside
+cue window and are NOT transition evidence. Closing animation/blackstrip pending.
+
+OFFLINE batch344 stages kernel0342 per-surface physical-page cache plus default
+OFF bounded metadata-only composition trace. Cache actual-source sanitizer tests
+pass including reuse/failure cleanup; trace wrap/chunk/rectangle tests pass.
+No344boot or performance claim. Preserve all343UI/audio/renderer/camera fixes.
+Commit numbered patch BEFORE native build. Local performance/CURRENT_TASK.md
+and batch344 contain evidence;343 remains usable. No pending user test request.
+
 ## Active handoff:0343 temporary boot accepted; folder/Search check pending (2026-11-19)
 
 USERreadyfastboot; verifiedcandidate/pairedUIrollback/full341kernelUIrollback

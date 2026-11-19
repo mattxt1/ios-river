@@ -226,3 +226,33 @@ existing muted setup. Check a normal app recording/replay and subsequent UI
 navigation without manual per-app route changes. Preserve all safety leases.
 Only compare against a fresh healthy reference running the previous image.
 Report observed rates and responsiveness separately from build/test results.
+
+
+### Next candidate: image 0344 (kernel patch 0342)
+
+Image 0343 is user-confirmed responsive with restored folders and Spotlight
+search shapes, clear playback and reduced audio startup delay. The closing
+animation and Spotlight status-bar strip remain unresolved. The 64-round
+SpringBoard geometry trace did not establish a cause: icon alpha stayed positive,
+but some ancestors were not included. It is not an FPS benchmark.
+
+Kernel 0342 caches the physical-page list for each immutable, prepared surface
+backing instead of allocating and walking it on every GPU presentation. The list
+is borrowed only while the caller retains the surface, and freed before backing
+release. Unexpected backing replacement is refused. Existing render fences,
+blit-failure frame drops, scanout pins and pending/show/retire holds are unchanged.
+Counters report cumulative page-list hits/builds alongside existing GPU stats.
+This removes repeated work; actual FPS benefit still requires device measurement.
+
+An optional root-only composition trace records timestamps, swap IDs, layer masks,
+surface IDs and rectangles for present attempts. No pixels or app text are read.
+It is off by default, retains 256 records, and self-stops after 30 seconds or
+1200 attempts. `river-fb-trace --start`, `--stop`, then `--read` controls it.
+Readout requires a frozen trace, uses inline chunks smaller than 4 KiB, and
+returns chronological records. It does not count unique displayed frames.
+Build the helper with the patch's `iokit/Kernel/arm` include directory. Tests:
+`tools/test-river-surface-page-cache.py`, `tools/test-river-composition-trace.py`.
+
+The candidate preserves the verified 0343 UI, audio, renderer and camera-service
+configuration. No forced icon visibility, speculative blending or clock changes
+are included. Runtime animation improvement remains unverified.

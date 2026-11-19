@@ -1,0 +1,606 @@
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -72,11 +72,17 @@
+  * Row hashes of what each flip buffer holds, so a full-screen frame copies
+  * (and cleans) only rows that differ from the buffer's previous content.
+  */
++#include "river_fb_composition_trace.h"
++static IOLock *river_trace_lock;
++static bool river_trace_enabled;
++static uint64_t river_trace_started_ns;
++static struct river_fb_trace_ring river_trace;
+ #define RIVER_FB_ROWS 2270
+ static uint64_t river_flip_hash[2][RIVER_FB_ROWS];
+ static bool river_flip_valid[2];
+ static uint64_t river_present_ns, river_present_rows, river_presents, river_direct;
+ static int river_zc;	/* boot-arg riverzc=1: scan iOS's scanout-pool surface directly */
++static uint64_t river_blit_page_hits, river_blit_page_builds;
+ static int river_blit = -1;	/* boot-arg riverblit=1: present with the GPU 2D blitter (0197) */
+ static bool river_blit_flushed;
+ static bool river_blit_drop_frame;	/* 0198: this present's GPU blit failed: do not flip */
+@@ -327,6 +333,7 @@
+ 		return false;
+ 	}
+ #if defined(RIVER)
++	river_trace_lock = IOLockAlloc(); /* Optional diagnostics; allocation failure leaves it unavailable. */
+ 	/* Boot_Video is deliberately absent: XNU's console assumes 32 bpp.
+ 	 * Keep ABL's already-running scanout and compose in a separate BGRA buffer.
+ 	 * No topaz MDP, DSI, modem, clock or power register is accessed here. */
+@@ -1134,6 +1141,27 @@
+ AppleCLCD::present(const uint8_t *rec)
+ {
+ 	uint32_t mask = get32(rec, 0x104);
++#if defined(RIVER)
++ if (__atomic_load_n(&river_trace_enabled, __ATOMIC_ACQUIRE)) {
++  struct river_fb_trace_record entry = {};
++  absolutetime_to_nanoseconds(mach_absolute_time(), &entry.time_ns);
++  entry.swap_id = get32(rec, 0x50); entry.mask = mask;
++  for (uint32_t i = 0; i < 4; i++) {
++   entry.surface[i] = get32(rec, 0x54 + 4 * i);
++   for (uint32_t j = 0; j < 4; j++) {
++    entry.source_rect[i][j] = get32(rec, 0x64 + 16 * i + 4 * j);
++    entry.destination_rect[i][j] = get32(rec, 0xc4 + 16 * i + 4 * j);
++   }
++  }
++  IOLockLock(river_trace_lock);
++  if (river_trace_enabled) {
++   if (entry.time_ns - river_trace_started_ns >= 30000000000ULL || river_trace.total >= 1200)
++    __atomic_store_n(&river_trace_enabled, false, __ATOMIC_RELEASE);
++   else river_fb_trace_append(&river_trace, &entry);
++  }
++  IOLockUnlock(river_trace_lock);
++ }
++#endif
+ 	static int console_only = -1;
+ 
+ 	/* boot-arg sweetfb_console=1: debugging, the panel keeps showing the kernel console */
+@@ -1227,21 +1255,12 @@
+ 		    sx == 0 && sy == 0 && dx == 0 && dy == 0 && w == 1125 && h == 2436 &&
+ 		    (uint64_t)s->offset + (uint64_t)2435 * s->bytesPerRow + 1125 * 4 <= s->memory->getLength()) {
+ 			uint32_t next = fFitIdx ^ 1;
+-			IOByteCount seg = 0;
+-			uint64_t first = s->memory->getPhysicalSegment(0, &seg, kIOMemoryMapperNone);
+-			uint64_t start = (first & PAGE_MASK) + s->offset;
+-			uint32_t npages = (uint32_t)((start + s->memory->getLength() + PAGE_MASK) / PAGE_SIZE);
+-			uint64_t *pa = first ? (uint64_t *)IOMallocData(npages * sizeof(uint64_t)) : NULL;
+-			bool have = pa != NULL;
+-			for (uint32_t p = 0; have && p < npages; p++) {
+-				uint64_t at = p == 0 ? 0 : (uint64_t)p * PAGE_SIZE - (first & PAGE_MASK);
+-				uint64_t phys = s->memory->getPhysicalSegment(at, &seg, kIOMemoryMapperNone);
+-				pa[p] = phys & ~(uint64_t)PAGE_MASK;
+-				have = phys != 0;
+-			}
++			const uint64_t *pa = NULL;
++			uint32_t npages = 0; uint64_t start = 0; bool pageHit = false;
++			bool have = s->getBlitPages(&pa, &npages, &start, &pageHit);
++			if (have) { if (pageHit) river_blit_page_hits++; else river_blit_page_builds++; }
+ 			int err = have ? river_gpu_blit(pa, npages, start, s->bytesPerRow, 0, 0,
+ 			    fFitPhys[next], fFit[next]->getLength(), 4608, 0, 0, 1125, 2436, 200) : ENOMEM;
+-			if (pa != NULL) IOFreeData(pa, npages * sizeof(uint64_t));
+ 			if (err == 0) {
+ 				if (!fFitActive) {
+ 					IOLog("RIVER MDP: VIG0 overlay fit active, 1125x2436 -> 1048x2270 at x=16\n");
+@@ -1354,25 +1373,14 @@
+ 				}
+ 				river_blit_flushed = true;
+ 			}
+-			IOByteCount seg = 0;
+-			uint64_t first = s->memory->getPhysicalSegment(0, &seg, kIOMemoryMapperNone);
+-			uint64_t start = (first & PAGE_MASK) + s->offset;
+-			uint32_t npages = (uint32_t)((start + s->memory->getLength() + PAGE_MASK) / PAGE_SIZE);
+-			uint64_t *pa = first ? (uint64_t *)IOMallocData(npages * sizeof(uint64_t)) : NULL;
+-			bool have = pa != NULL;
+-			for (uint32_t p = 0; have && p < npages; p++) {
+-				uint64_t at = p == 0 ? 0 : (uint64_t)p * PAGE_SIZE - (first & PAGE_MASK);
+-				uint64_t phys = s->memory->getPhysicalSegment(at, &seg, kIOMemoryMapperNone);
+-				pa[p] = phys & ~(uint64_t)PAGE_MASK;
+-				have = phys != 0;
+-			}
++			const uint64_t *pa = NULL;
++			uint32_t npages = 0; uint64_t start = 0; bool pageHit = false;
++			bool have = s->getBlitPages(&pa, &npages, &start, &pageHit);
++			if (have) { if (pageHit) river_blit_page_hits++; else river_blit_page_builds++; }
+ 			uint64_t t0 = mach_absolute_time();
+ 			int err = have ? river_gpu_blit(pa, npages, start, s->bytesPerRow, (uint32_t)sx, (uint32_t)sy,
+ 			    fFlipPhys[back], fFlip[back]->getLength(), fRowBytes, 0, 0, (uint32_t)w, (uint32_t)h, 200) : ENOMEM;
+ 			uint64_t t1 = mach_absolute_time(), ns;
+-			if (pa != NULL) {
+-				IOFreeData(pa, npages * sizeof(uint64_t));
+-			}
+ 			absolutetime_to_nanoseconds(t1 - t0, &ns);
+ 			if (err == 0) {
+ 				river_blit_ok++;
+@@ -1383,9 +1391,9 @@
+ 			absolutetime_to_nanoseconds(t1 - river_blit_report, &ns);
+ 			if (ns >= 10000000000ULL) {
+ 				if (river_blit_report != 0) {
+-					IOLog("RIVER FB: 10 s: %u GPU presents (avg %llu us), %u dropped, %u GPU-surface layers copied by the CPU\n",
++					IOLog("RIVER FB: 10 s: %u GPU presents (avg %llu us), %u dropped, %u GPU-surface layers copied by the CPU, page lists %llu cached/%llu built\n",
+ 					    river_blit_ok, river_blit_ok ? river_blit_ns / river_blit_ok / 1000 : 0, river_blit_dropped,
+-					    river_blit_cpu);
++					    river_blit_cpu, river_blit_page_hits, river_blit_page_builds);
+ 				}
+ 				river_blit_report = t1;
+ 				river_blit_ok = river_blit_dropped = river_blit_cpu = 0;
+@@ -1812,6 +1820,39 @@
+     __unused IOExternalMethodDispatch *dispatch, __unused OSObject *target,
+     __unused void *reference)
+ {
++#if defined(RIVER)
++ if (selector == RIVER_FB_TRACE_CONTROL || selector == RIVER_FB_TRACE_READ) {
++  IOReturn privilege = clientHasPrivilege(fTask, kIOClientPrivilegeAdministrator);
++  if (privilege != kIOReturnSuccess) return privilege;
++  if (river_trace_lock == NULL) return kIOReturnNotReady;
++  if (args->scalarInputCount != 1 || args->structureInputSize != 0 ||
++      args->structureInputDescriptor != NULL) return kIOReturnBadArgument;
++  if (selector == RIVER_FB_TRACE_CONTROL) {
++   if (args->scalarInput[0] > 1) return kIOReturnBadArgument;
++   IOLockLock(river_trace_lock);
++   __atomic_store_n(&river_trace_enabled, false, __ATOMIC_RELEASE);
++   if (args->scalarInput[0]) {
++    bzero(&river_trace, sizeof(river_trace));
++    absolutetime_to_nanoseconds(mach_absolute_time(), &river_trace_started_ns);
++    __atomic_store_n(&river_trace_enabled, true, __ATOMIC_RELEASE);
++   }
++   IOLockUnlock(river_trace_lock);
++   args->scalarOutputCount = 0; args->structureOutputSize = 0;
++   return kIOReturnSuccess;
++  }
++  if (args->scalarInput[0] > RIVER_FB_TRACE_CAPACITY ||
++      args->structureOutputDescriptor != NULL || args->structureOutput == NULL ||
++      args->structureOutputSize < sizeof(struct river_fb_trace_packet)) return kIOReturnBadArgument;
++  IOLockLock(river_trace_lock);
++  if (river_trace_enabled) { IOLockUnlock(river_trace_lock); return kIOReturnBusy; }
++  struct river_fb_trace_packet *packet = (struct river_fb_trace_packet *)args->structureOutput;
++  bzero(packet, sizeof(*packet));
++  river_fb_trace_read(&river_trace, (uint32_t)args->scalarInput[0], packet);
++  IOLockUnlock(river_trace_lock);
++  args->scalarOutputCount = 0; args->structureOutputSize = sizeof(*packet);
++  return kIOReturnSuccess;
++ }
++#endif
+ 	IOReturn ret = kIOReturnSuccess;
+ 	uint64_t out[2] = { 0, 0 };
+ 	uint32_t outCount = 0;
+diff --git a/iokit/Kernel/arm/SweetSurface.cpp b/iokit/Kernel/arm/SweetSurface.cpp
+--- a/iokit/Kernel/arm/SweetSurface.cpp
++++ b/iokit/Kernel/arm/SweetSurface.cpp
+@@ -1,34 +1,34 @@
+ /*
+- * Built-in IOSurface for SWEET.
+- *
+- * Apple's IOSurface kext is closed. IOSurface.framework (iOS 16.7) finds
+- * IOServiceNameMatching("IOCoreSurfaceRoot"), opens it with type 0 and
+- * talks to the user client below:
+- *
+- *   sel 13  limits: struct out 0x18, u16 at +0x16 must be 1 (ABI version),
+- *           +0 offset alignment mask, +4 bytes-per-row alignment mask
+- *   sel 0   create: scalar [parent id], struct in = serialized property
+- *           dictionary (binary or XML), struct out = lock result (0xa68)
+- *   sel 4   lookup by id: scalar [id], struct out = lock result
+- *   sel 34  lookup by mach port: scalar [port name], struct out = lock result
+- *   sel 35  create mach port: scalars [id, options], scalar out [port name]
+- *   traps   0/1 use count +/- (id, category), 2 lock / 3 unlock
+- *           (id, options, &seed), 4/5 release (id)
+- *
+- * The lock result tells the library where the surface lives in the
+- * caller's address space: +0 pixels, +8 shared state page (registry id,
+- * seed at +0xc), +0x10 timestamps, then id, sizes and geometry (layout in
+- * sweet_surface_fill_result). Every surface is wired kernel memory mapped
+- * into each task that creates or looks it up; mappings are counted per
+- * client and dropped on release or close.
+- *
+- * Values (9/10/11) live in a dictionary per surface, their seed and size in
+- * the state page (+0x20/+0x28); bulk attachments (27: colour space, transfer
+- * function...) are kept at +0x30 of the state page, where the framework reads
+- * them; purgeability (20), accelerator binding (12) and the YCbCr matrix (5)
+- * are remembered. Notifications, ownership and timestamps are accepted and
+- * ignored (logged once per selector).
+- */
++	* Built-in IOSurface for SWEET.
++	*
++	* Apple's IOSurface kext is closed. IOSurface.framework (iOS 16.7) finds
++	* IOServiceNameMatching("IOCoreSurfaceRoot"), opens it with type 0 and
++	* talks to the user client below:
++	*
++	*   sel 13  limits: struct out 0x18, u16 at +0x16 must be 1 (ABI version),
++	*           +0 offset alignment mask, +4 bytes-per-row alignment mask
++	*   sel 0   create: scalar [parent id], struct in = serialized property
++	*           dictionary (binary or XML), struct out = lock result (0xa68)
++	*   sel 4   lookup by id: scalar [id], struct out = lock result
++	*   sel 34  lookup by mach port: scalar [port name], struct out = lock result
++	*   sel 35  create mach port: scalars [id, options], scalar out [port name]
++	*   traps   0/1 use count +/- (id, category), 2 lock / 3 unlock
++	*           (id, options, &seed), 4/5 release (id)
++	*
++	* The lock result tells the library where the surface lives in the
++	* caller's address space: +0 pixels, +8 shared state page (registry id,
++	* seed at +0xc), +0x10 timestamps, then id, sizes and geometry (layout in
++	* sweet_surface_fill_result). Every surface is wired kernel memory mapped
++	* into each task that creates or looks it up; mappings are counted per
++	* client and dropped on release or close.
++	*
++	* Values (9/10/11) live in a dictionary per surface, their seed and size in
++	* the state page (+0x20/+0x28); bulk attachments (27: colour space, transfer
++	* function...) are kept at +0x30 of the state page, where the framework reads
++	* them; purgeability (20), accelerator binding (12) and the YCbCr matrix (5)
++	* are remembered. Notifications, ownership and timestamps are accepted and
++	* ignored (logged once per selector).
++	*/
+ #include "SweetSurface.h"
+ 
+ #if defined(SWEET)
+@@ -164,6 +164,12 @@
+ void
+ SweetSurface::free()
+ {
++#if defined(RIVER)
++	if (riverBlitPageList != NULL) {
++		IOFreeData(riverBlitPageList, (size_t)riverBlitPageCount * sizeof(uint64_t));
++		riverBlitPageList = NULL; riverBlitPageCount = 0;
++	}
++#endif
+ 	if (OSDynamicCast(IOBufferMemoryDescriptor, memory) != NULL) {
+ 		OSAddAtomic64(-(SInt64)allocSize, (volatile SInt64 *)&sweet_surface_wired);
+ 	}
+@@ -177,7 +183,47 @@
+ 	sweet_scanout_free_slot(scanoutSlot);
+ 	scanoutSlot = -1;
+ 	OSObject::free();
++}
++
++#if defined(RIVER)
++bool
++SweetSurface::getBlitPages(const uint64_t **pages, uint32_t *count, uint64_t *start, bool *cacheHit)
++{
++	*pages = NULL; *count = 0; *start = 0; *cacheHit = false;
++	if (memory == NULL) return false;
++	uint64_t length = memory->getLength();
++	if (length == 0 || offset >= length) return false;
++	if (riverBlitPageList != NULL) {
++		/* Refuse unexpected backing replacement instead of using stale pages. */
++		if (riverBlitPageOwner != memory || riverBlitPageLength != length) return false;
++		*cacheHit = true;
++	} else {
++		IOByteCount segment = 0;
++		uint64_t first = memory->getPhysicalSegment(0, &segment, kIOMemoryMapperNone);
++		if (!first) return false;
++		uint64_t low = first & PAGE_MASK;
++		if (length > ~0ULL - low - PAGE_MASK) return false;
++		/* The descriptor length already includes any surface/plane offset. */
++		uint64_t n = (low + length + PAGE_MASK) / PAGE_SIZE;
++		if (n == 0 || n > 0xffffffffULL || n > (~(size_t)0) / sizeof(uint64_t)) return false;
++		uint64_t *list = (uint64_t *)IOMallocData((size_t)n * sizeof(uint64_t));
++		if (list == NULL) return false;
++		list[0] = first & ~(uint64_t)PAGE_MASK;
++		for (uint32_t i = 1; i < n; i++) {
++			uint64_t at = (uint64_t)i * PAGE_SIZE - low;
++			uint64_t phys = memory->getPhysicalSegment(at, &segment, kIOMemoryMapperNone);
++			if (!phys) { IOFreeData(list, (size_t)n * sizeof(uint64_t)); return false; }
++			list[i] = phys & ~(uint64_t)PAGE_MASK;
++		}
++		riverBlitPageOwner = memory; riverBlitPageLength = length;
++		riverBlitFirstOffset = low; riverBlitPageCount = (uint32_t)n;
++		riverBlitPageList = list;
++	}
++	*pages = riverBlitPageList; *count = riverBlitPageCount;
++	*start = riverBlitFirstOffset + offset;
++	return true;
+ }
++#endif
+ 
+ uintptr_t
+ SweetSurface::kernelAddress()
+@@ -281,9 +327,9 @@
+ #endif
+ 
+ /*
+- * Give the surface an id and a table slot; the table holds one retain and a
+- * user count (creators, client mappings, kernel holders). Lock held.
+- */
++	* Give the surface an id and a table slot; the table holds one retain and a
++	* user count (creators, client mappings, kernel holders). Lock held.
++	*/
+ static bool
+ sweet_surface_insert_locked(SweetSurface *s)
+ {
+@@ -396,7 +442,7 @@
+ 
+ SweetSurface *
+ sweet_surface_create_physical(uint64_t phys, uint32_t width, uint32_t height,
+-    uint32_t bytesPerRow, uint32_t pixelFormat)
++				uint32_t bytesPerRow, uint32_t pixelFormat)
+ {
+ 	SweetSurface *s = sweet_surface_alloc();
+ 	if (s == NULL) {
+@@ -421,7 +467,7 @@
+ #if defined(RIVER)
+ SweetSurface *
+ river_surface_create_buffer(uint32_t width, uint32_t height,
+-    uint32_t bytesPerRow, uint32_t pixelFormat)
++				uint32_t bytesPerRow, uint32_t pixelFormat)
+ {
+ 	SweetSurface *s = sweet_surface_alloc();
+ 	if (s == NULL) {
+@@ -710,16 +756,16 @@
+ }
+ 
+ /*
+- * Count one more create/lookup of s by this client, mapping it into the
+- * task the first time. Takes over the caller's user count on s.
+- *
+- * A lookup of a surface this client already has maps nothing and counts
+- * nothing (*existing): IOSurface.framework then gets base address -1 in the
+- * lock result and reuses its cached IOSurfaceClient. Counting it instead
+- * made the framework build a second client for the same id; releasing that
+- * one (traps 4 + 5) unmapped the memory under the first (backboardd
+- * snapshot crash in CGDataProviderCreateWithData).
+- */
++	* Count one more create/lookup of s by this client, mapping it into the
++	* task the first time. Takes over the caller's user count on s.
++	*
++	* A lookup of a surface this client already has maps nothing and counts
++	* nothing (*existing): IOSurface.framework then gets base address -1 in the
++	* lock result and reuses its cached IOSurfaceClient. Counting it instead
++	* made the framework build a second client for the same id; releasing that
++	* one (traps 4 + 5) unmapped the memory under the first (backboardd
++	* snapshot crash in CGDataProviderCreateWithData).
++	*/
+ IOReturn
+ IOSurfaceRootUserClient::addRef(SweetSurface *s, SweetSurfaceRef **refOut, bool *existing)
+ {
+@@ -1018,10 +1064,10 @@
+ }
+ 
+ /*
+- * Make s's pixels the memory a task has already at address (size bytes): the
+- * range is prepared (wired) for as long as the surface lives, and every task
+- * that looks the surface up maps those same pages.
+- */
++	* Make s's pixels the memory a task has already at address (size bytes): the
++	* range is prepared (wired) for as long as the surface lives, and every task
++	* that looks the surface up maps those same pages.
++	*/
+ static IOReturn
+ sweet_surface_use_task_memory(SweetSurface *s, task_t task, uint64_t address, uint64_t size)
+ {
+@@ -1105,11 +1151,11 @@
+ }
+ 
+ /*
+- * Values. Requests start with the surface id (8 bytes). SetValue: then a
+- * serialized array, [value, key] or [dictionary of them all]. RemoveValue and
+- * CopyValue: then a key, NUL-terminated (empty: all). Changes answer the new
+- * seed; CopyValue answers 4 unused bytes, the seed, the serialized value.
+- */
++	* Values. Requests start with the surface id (8 bytes). SetValue: then a
++	* serialized array, [value, key] or [dictionary of them all]. RemoveValue and
++	* CopyValue: then a key, NUL-terminated (empty: all). Changes answer the new
++	* seed; CopyValue answers 4 unused bytes, the seed, the serialized value.
++	*/
+ IOReturn
+ IOSurfaceRootUserClient::valueCall(uint32_t selector, IOExternalMethodArguments *args)
+ {
+@@ -1213,10 +1259,10 @@
+ }
+ 
+ /*
+- * Bulk attachments (colour space, transfer function, ...): 0x70 bytes, then at
+- * +0x70 their size, +0x78 a mask of the fields that changed, +0x80 the surface
+- * id. The fields, by their bit, are these byte ranges of the 0x70.
+- */
++	* Bulk attachments (colour space, transfer function, ...): 0x70 bytes, then at
++	* +0x70 their size, +0x78 a mask of the fields that changed, +0x80 the surface
++	* id. The fields, by their bit, are these byte ranges of the 0x70.
++	*/
+ IOReturn
+ IOSurfaceRootUserClient::bulkAttachments(IOExternalMethodArguments *args)
+ {
+@@ -1257,13 +1303,13 @@
+ }
+ 
+ /*
+- * IOSurfaceWrapClientImage (6: struct of 0x20 bytes: +0 address, +8 width,
+- * +0xc height, +0x10 pixel format, +0x14 bytes per element, +0x18 bytes per
+- * row) and IOSurfaceWrapClientMemory (7: scalars address, size): a surface
+- * made of the caller's own memory (CoreAnimation's GL renderer wraps the
+- * shared memory of images, icons and wallpapers so). The range is prepared
+- * (wired) for as long as the surface lives; every task maps it as usual.
+- */
++	* IOSurfaceWrapClientImage (6: struct of 0x20 bytes: +0 address, +8 width,
++	* +0xc height, +0x10 pixel format, +0x14 bytes per element, +0x18 bytes per
++	* row) and IOSurfaceWrapClientMemory (7: scalars address, size): a surface
++	* made of the caller's own memory (CoreAnimation's GL renderer wraps the
++	* shared memory of images, icons and wallpapers so). The range is prepared
++	* (wired) for as long as the surface lives; every task maps it as usual.
++	*/
+ IOReturn
+ IOSurfaceRootUserClient::wrapClient(uint32_t selector, IOExternalMethodArguments *args)
+ {
+@@ -1342,8 +1388,8 @@
+ 
+ IOReturn
+ IOSurfaceRootUserClient::externalMethod(uint32_t selector, IOExternalMethodArguments *args,
+-    __unused IOExternalMethodDispatch *dispatch, __unused OSObject *target,
+-    __unused void *reference)
++				__unused IOExternalMethodDispatch *dispatch, __unused OSObject *target,
++				__unused void *reference)
+ {
+ 	uint64_t arg0 = args->scalarInputCount > 0 ? args->scalarInput[0] : 0;
+ 
+@@ -1459,7 +1505,7 @@
+ 
+ IOReturn
+ IOSurfaceRootUserClient::trapUseCount(__unused void *id, __unused void *category,
+-    void *, void *, void *, void *)
++				void *, void *, void *, void *)
+ {
+ 	return kIOReturnSuccess;
+ }
+@@ -1495,7 +1541,7 @@
+ 
+ IOReturn
+ IOSurfaceRootUserClient::trapLock(void *id, __unused void *options, void *seedOut,
+-    void *, void *, void *)
++				void *, void *, void *)
+ {
+ 	SweetSurface *s = sweet_surface_held(fLock, fRefs, (uint32_t)(uintptr_t)id);
+ 	if (s == NULL) {
+@@ -1508,7 +1554,7 @@
+ 
+ IOReturn
+ IOSurfaceRootUserClient::trapUnlock(void *id, void *options, void *seedOut,
+-    void *, void *, void *)
++				void *, void *, void *)
+ {
+ 	SweetSurface *s = sweet_surface_held(fLock, fRefs, (uint32_t)(uintptr_t)id);
+ 	if (s == NULL) {
+@@ -1521,12 +1567,12 @@
+ }
+ 
+ /*
+- * The framework drops a surface in two steps: trap 4 under its cache lock,
+- * trap 5 after it. A lookup in between must get a view of its own (not "you
+- * have it already"): trap 5 then takes the detached view away, not that one.
+- * Without this, a lookup racing a release got -1 ("cached") and then lost its
+- * state page under it (backboardd: IOSurfaceClientGetSeed on unmapped memory).
+- */
++	* The framework drops a surface in two steps: trap 4 under its cache lock,
++	* trap 5 after it. A lookup in between must get a view of its own (not "you
++	* have it already"): trap 5 then takes the detached view away, not that one.
++	* Without this, a lookup racing a release got -1 ("cached") and then lost its
++	* state page under it (backboardd: IOSurfaceClientGetSeed on unmapped memory).
++	*/
+ IOReturn
+ IOSurfaceRootUserClient::trapDetach(void *id, void *, void *, void *, void *, void *)
+ {
+diff --git a/iokit/Kernel/arm/SweetSurface.h b/iokit/Kernel/arm/SweetSurface.h
+--- a/iokit/Kernel/arm/SweetSurface.h
++++ b/iokit/Kernel/arm/SweetSurface.h
+@@ -1,10 +1,10 @@
+ /*
+- * Built-in IOSurface for SWEET (see SweetSurface.cpp).
+- *
+- * Shared with SweetFramebuffer.cpp: the framebuffer looks surfaces up by
+- * id when a swap names them and publishes the panel memory itself as the
+- * default framebuffer surface.
+- */
++	* Built-in IOSurface for SWEET (see SweetSurface.cpp).
++	*
++	* Shared with SweetFramebuffer.cpp: the framebuffer looks surfaces up by
++	* id when a swap names them and publishes the panel memory itself as the
++	* default framebuffer surface.
++	*/
+ #ifndef _SWEET_SURFACE_H
+ #define _SWEET_SURFACE_H
+ 
+@@ -50,9 +50,26 @@
+ 	char                      riverMappers[4][17];  /* river: first processes mapping it (creator first) */
+ 	uint8_t                   riverMapperCount;
+ 
+-	bool init() APPLE_KEXT_OVERRIDE { scanoutPhys = 0; scanoutSlot = -1; values = NULL; purgeable = 0; wrapDelta = 0; wrapped = false; gpuTouched = false; gpuFence = 0; return OSObject::init(); }
++	bool init() APPLE_KEXT_OVERRIDE {
++#if defined(RIVER)
++		riverBlitPageList = NULL; riverBlitPageOwner = NULL;
++		riverBlitPageLength = riverBlitFirstOffset = 0; riverBlitPageCount = 0;
++#endif
++		scanoutPhys = 0; scanoutSlot = -1; values = NULL; purgeable = 0; wrapDelta = 0; wrapped = false; gpuTouched = false; gpuFence = 0; return OSObject::init(); }
+ 	void free() APPLE_KEXT_OVERRIDE;
+ 
++#if defined(RIVER)
++	/* Backing descriptors are fixed before publish and prepared until free().
++		* Only the framebuffer workloop builds/uses this page list. It does not
++		* retain surfaces or change GPU fences, mappings, pixels or scanout pins. */
++	uint64_t *riverBlitPageList;
++	IOMemoryDescriptor *riverBlitPageOwner;
++	uint64_t riverBlitPageLength, riverBlitFirstOffset;
++	uint32_t riverBlitPageCount;
++	/* Borrowed until surface release; the caller must hold a surface retain. */
++	bool getBlitPages(const uint64_t **pages, uint32_t *count, uint64_t *start, bool *cacheHit);
++#endif
++
+ 	/* Kernel address of the pixels (mapped on first use), or 0. */
+ 	uintptr_t kernelAddress();
+ };
+@@ -69,24 +86,24 @@
+ #endif
+ 
+ /*
+- * Publish physical memory (the panel framebuffer) as a surface. Returns a
+- * retained surface that stays in the id table until released by the caller
+- * and every user.
+- */
++	* Publish physical memory (the panel framebuffer) as a surface. Returns a
++	* retained surface that stays in the id table until released by the caller
++	* and every user.
++	*/
+ SweetSurface *sweet_surface_create_physical(uint64_t phys, uint32_t width,
+-    uint32_t height, uint32_t bytesPerRow, uint32_t pixelFormat);
++				uint32_t height, uint32_t bytesPerRow, uint32_t pixelFormat);
+ 
+ #if defined(RIVER)
+ /* Cached BGRA composition buffer; never exposed as a physical scanout. */
+ SweetSurface *river_surface_create_buffer(uint32_t width, uint32_t height,
+-    uint32_t bytesPerRow, uint32_t pixelFormat);
++				uint32_t bytesPerRow, uint32_t pixelFormat);
+ #endif
+ 
+ /*
+- * topaz scanout pool: physically contiguous low memory (below 4 GiB, unused by
+- * xnu, which runs in the upper DDR bank) so the MDP can fetch a surface
+- * directly. The framebuffer sets the full-screen geometry it can scan out.
+- */
++	* topaz scanout pool: physically contiguous low memory (below 4 GiB, unused by
++	* xnu, which runs in the upper DDR bank) so the MDP can fetch a surface
++	* directly. The framebuffer sets the full-screen geometry it can scan out.
++	*/
+ void sweet_scanout_set_geometry(uint32_t w1, uint32_t h1, uint32_t w2, uint32_t h2);
+ 
+ /* Send right for the surface in task (IOSurfaceLookupFromMachPort). */
+diff --git a/iokit/Kernel/arm/river_fb_composition_trace.h b/iokit/Kernel/arm/river_fb_composition_trace.h
+--- a/iokit/Kernel/arm/river_fb_composition_trace.h
++++ b/iokit/Kernel/arm/river_fb_composition_trace.h
+@@ -0,0 +1,42 @@
++/* River metadata-only present-attempt trace. Caller serializes ring access.
++ * No pixels, labels, text, or surface memory are read. Not a display FPS counter. */
++#ifndef RIVER_FB_COMPOSITION_TRACE_H
++#define RIVER_FB_COMPOSITION_TRACE_H
++#define RIVER_FB_TRACE_CONTROL 0x52465443u
++#define RIVER_FB_TRACE_READ 0x52465452u
++#define RIVER_FB_TRACE_CAPACITY 256u
++#define RIVER_FB_TRACE_CHUNK 16u
++struct river_fb_trace_record {
++ uint64_t ordinal, time_ns;
++ uint32_t swap_id, mask, surface[4];
++ uint32_t source_rect[4][4], destination_rect[4][4];
++};
++struct river_fb_trace_ring {
++ uint64_t total;
++ struct river_fb_trace_record records[RIVER_FB_TRACE_CAPACITY];
++};
++struct river_fb_trace_packet {
++ uint64_t total;
++ uint32_t version, available, first, count;
++ struct river_fb_trace_record records[RIVER_FB_TRACE_CHUNK];
++};
++static inline void river_fb_trace_append(struct river_fb_trace_ring *ring,
++ const struct river_fb_trace_record *record) {
++ uint64_t n = ring->total;
++ ring->records[n % RIVER_FB_TRACE_CAPACITY] = *record;
++ ring->records[n % RIVER_FB_TRACE_CAPACITY].ordinal = n;
++ ring->total = n + 1;
++}
++static inline void river_fb_trace_read(const struct river_fb_trace_ring *ring,
++ uint32_t first, struct river_fb_trace_packet *out) {
++ out->total = ring->total; out->version = 1;
++ out->available = ring->total < RIVER_FB_TRACE_CAPACITY ? (uint32_t)ring->total : RIVER_FB_TRACE_CAPACITY;
++ out->first = first; out->count = 0;
++ if (first >= out->available) return;
++ uint64_t oldest = ring->total - out->available;
++ while (out->count < RIVER_FB_TRACE_CHUNK && first + out->count < out->available) {
++  uint64_t at = oldest + first + out->count;
++  out->records[out->count++] = ring->records[at % RIVER_FB_TRACE_CAPACITY];
++ }
++}
++#endif
