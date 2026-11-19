@@ -5,6 +5,18 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0340 ready; staging verified over Wi-Fi (2026-11-18)
+
+Priorp0340copycompletedbutreadbacktimedout. ResumedREADONLYviaWiFi192.168.1.232
+(USBunreachable), fullcandidateSHAe920bc040f8f72b3dd42b1f57a54476cdd543a3d20fbaf00420f9644ed5055dc
+andoriginalSHA4eb9f6f2b337812c048a63b1ecccb2f65b256664c9bdf365ec70e0b32552987f
+match. Childprocessload/hashPASS; nocopyrepeat. Localbatch340manifest/evidence
+updated. ImageSHAc85b36388978f1ab44d9852094386f1c69b6ce839fc34c4deca51dbe5ba4ced6.
+AwaituserFASTBOOTreplyforverifiedtemporaryimage0340boot. Kernelremains339.
+Noresumeaudio/UIcontrols, current339normalserviceleftON. Nextfreshhomecheck,
+BOUNDEDcameraqueryFIRST, thenonce-onlymutedAudioinit+normalVoiceMemos/navigation
+insamebootwithNEWevidence. PERFORMANCE.md describescandidateandlimitations.
+
 ## Active handoff:339 audio CLEAR; UI stall repeated/recovered; follow-up preparing (2026-11-18)
 
 USER: scrollingABOUTSAME; normalVoiceMemoscountingCLEAR; navigation/keyboard
