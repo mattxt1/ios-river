@@ -92,7 +92,7 @@ int main(void){
   if(n==0){ri_audio_queue.armed=true;ri_audio_queue.used=1024;ri_mic_live.requested=true;assert(ri_audio_normal_input_pending());}
   if(!setjmp(stopped))entry(NULL,0);
   assert(!ri_audio_normal.worker && !ri_audio_normal.enabled && !ri_audio_auto.worker && !ri_mic_live.worker && !ri_audio_auto.enabled && !ri_mic_live.enabled);
-  if(n==0)assert(outputs==30 && inputs==30 && !ri_audio_normal.blocked);
+  if(n==0)assert(outputs==30 && inputs==30 && !waits && !ri_audio_normal.blocked);
   if(n==1)assert(outputs==1 && !inputs && ri_audio_normal.blocked && ri_audio_normal.error==EIO);
   if(n==2)assert(outputs==1 && inputs==1 && ri_audio_normal.blocked && ri_audio_normal.error==ETIMEDOUT);
   if(n==3)assert(!outputs && !inputs && !ri_audio_normal.blocked);
