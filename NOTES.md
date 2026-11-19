@@ -5,6 +5,18 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0341 temporary boot accepted; fresh UI check pending (2026-11-18)
+
+Userconfirmedfastboot; exactcandidate+UIrollbackimagehashes/productriver/serial
+ZY226HM8QBverified. fastbootbootexit0/send0.621s/boot0.216s. No flash.
+BootinstallsUIcandidateatlegacyloadpath; useverifiedUIrollbackimageFIRSTif
+neededbecauseolderimagesdon'trestorethatlibrary. Asyncfreshhome/nav/keyboard/
+WiFi+Spotlightblur/appclosingcheckpending. No341audioinit/controlsent.
+PreparedNOTRUNlocalbatch341/preflight.py(+UIcandidatefingerprint)andprepare-audio.py
+withnew341evidencenames. Oncehealthyhomeconfirmed: readpreflight, oncemutedsetup,
+--ios-enableONCE, normalVoiceMemos/UIlatencytest+startupstages. Noresultsclaimed.
+Evidenceperformance/batch341/temporary-boot-0341.json;CURRENT_TASK.mdfullhandoff.
+
 ## Active handoff:0341 candidate and UI rollback VERIFIED; awaiting fastboot (2026-11-18)
 
 KernelPATCH0340(nativeexit0/sourcecfc4bdb) SHA77aa949bb37828ccee3a3ed9a95da4cc615093dd49091fd5ef6adbd044909bc3.
