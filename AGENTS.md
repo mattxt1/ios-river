@@ -1,5 +1,13 @@
 # Working on ios-river
 
+- Latest0338 NORMAL iOS Voice Memos record/replay CLEAR PASS: user recognized
+  counting; queuedphysicalmic281READs/zero timestamp gaps/fullcleanup and four
+  normalplaybacksessions/noqueuepressure pass. CURRENTnormalserviceLEFTON for
+  useruse, idlehardwaremuted/routesclosed. Don'tdisablehealthyservice orrepeat
+  initialization. One mutedsetup+ios-enable stillrequired aftereachboot; no
+  bootautomation/full-duplex/endurance claim. Gaincalibrationdeferred; user
+  wants otherwork. ReadnewestNOTES; historicalpendingclaimsbelowaresuperseded.
+
 - Read the latest active handoff in `NOTES.md` before device controls. Older
   entries are historical. Update the handoff after milestones and before stopping.
 - All active work must use canonical `/Users/matttyson/Developer/Codex` paths.

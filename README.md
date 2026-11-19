@@ -28,31 +28,25 @@ Automatic association and lease-renew/endurance reliability remain pending. See 
 and the latest active [NOTES.md](NOTES.md) for evidence and current ownership.
 All active work uses canonical `/Users/matttyson/Developer/Codex` local storage.
 
-Patch0329 delivered an audible5.12second live app PCM trial with responsive
-iOS:240buffers through four owned DMA slots, zero queue underruns/overflows,
-108verified health-lease renewals, renderedEOS and full cleanup. Output muted
-at5.24seconds within the independent6second cap. This is a bounded sustained
-playback milestone; automatic playback/session lifecycle, restart/recovery,
-longer endurance and physical microphone capture remain pending.
-See `NOTES.md` for exact evidence and current consumed device state.
+Patch 0338 passed recording and replay in the stock iOS **Voice Memos** app:
+the user heard their counting clearly. Standard CoreAudio now reaches the
+physical speaker and microphone through one automatic route coordinator.
+The microphone delivered 558,080 real frames with zero timestamp gaps and
+complete cleanup; four playback sessions completed 1,056,768 frames without
+queue pressure, dropped frames or the earlier six-second/three-session caps.
+Normal iOS volume and mute scale playback samples. Audio remains enabled on
+the current temporary boot, with the hardware muted and routes closed at idle.
 
-Patch0330 passed automatic native-write start, sustained-silence drain and
-guarded restart across two sessions, with zero queue underruns/overflows and
-full cleanup. The user missed listening; audibility is unobserved. The backend
-remains supervised and bounded to three sessions.
-
-Patch0334 passed physical microphone capture: 48 exact DSP READ completions
-returned 98,304 mono S16 samples at48kHz (2.048seconds), followed by full
-map/ASM/ADM/AFE/channel/codec/clock/pin cleanup and a physical snapshot read
-through `/dev/hakios-mic`. In a cued repeat, the user recognized clear, crisp
-counting in the recording, and iOS remained responsive. Raw peak was544/32768;
-the review copy used48x digital gain without clipping. Gain calibration and
-continuous microphone input remain pending. The default mic endpoint remains
-tagged synthetic until explicit bounded snapshot capture succeeds.
+The service still needs the known muted initialization and one enable after
+each boot. Simultaneous recording/playback, startup-latency reliability and
+long endurance remain unvalidated. Gain calibration is deferred. See the
+latest [NOTES.md](NOTES.md) for the exact image, evidence and live phone state.
+Earlier bounded speaker and microphone milestones are retained in
+[AUDIO-BRINGUP.md](AUDIO-BRINGUP.md).
 
 ## Status and evidence
 
-| Area | Recorded evidence | Current limits (2026-11-14) |
+| Area | Recorded evidence | Known limits |
 | --- | --- | --- |
 | Boot and storage | Stock Motorola bootloader loads a temporary image via `fastboot boot`; XNU mounts an HFS+ iOS root on eMMC `userdata` (`rd=emmc0s64 rootrw=1`). | Preparing that root overwrites Android user data. Temporary fastboot boot only; physical partitions are never flashed. |
 | CPU and memory | Four Cortex-A53 Gold cores (`cpus=4`) and ~3.38 GiB usable RAM on the full-RAM configuration. | Firmware carveouts stay excluded. Silver cores remain parked. |
@@ -63,8 +57,8 @@ tagged synthetic until explicit bounded snapshot capture succeeds.
 | Battery & Power | Hardware battery monitoring via Qualcomm PM8953 FG/QG and JG30 battery curve (`0267-river-battery-jg30-power-source.patch`). Publishes observed voltage/current/status and estimated capacity to IOKit `IOPMPowerSource`. | Integrated0290/0291 preserve last-valid samples, reject invalid current and remove charger-enable writes from sampling/diagnostics. Host checks and full build pass; live SweetBattery/IOPMPowerSource/IOPS publication agrees at85%,4194–4195mV, external/notcharging/notfull with valid/nonfallback flags. Failure recovery, load/cable/charging validation remains pending; percentage is a load-sensitive estimate. See [BATTERY-STATUS.md](BATTERY-STATUS.md). |
 | Wi-Fi & Networking | 0322 media ioctl correction enables a valid active link; native DHCP BOUND, primary en0/default DNS, ordinary lookup and unbound HTTP200/AppleSuccess verified with a user-confirmed blue checkmark. | Manual joins across multiple boots, Safari/Google and one off/on reconnect pass. Automatic association and lease-renewal/endurance testing remain pending. IPv6 Internet not established. See [WIFI-STATUS.md](WIFI-STATUS.md). |
 | USB & Connectivity | USB CDC-ECM Ethernet and Dropbear root SSH (`192.168.7.2`). Driver implements bus disconnect/reconnect auto-recovery (`0244-river-usb-reconnect.patch`). | USB networking stalled on0326;0327 USB SSH recovered after startup and helper verification passed. Large file-copy timeouts occurred on USB and Wi-Fi; both transports remained responsive. Authenticated Wi-Fi SSH remains the control fallback. The0326 USB root cause remains unresolved. |
-| Audio Subsystem | User heard the patch 0324 chirp and patch 0326 native-app PCM replay; buffers, rendered end-of-stream, mute timing and full teardown passed. | 0329 audible5.12sec live queue passed240buffers, health lease renewal, zero queue underruns/overflows, EOS/mute and cleanup with responsive iOS. Automatic lifecycle, restart/recovery, unrestricted endurance and physical mic remain pending. |
-| Speaker Amplifier HW | Cirrus CS35L41 smart amplifier probed at I2C `0x40` on QUP2 (`0271-river-cs35l41-speaker-amp.patch`). Driver configures the boost converter for 8.5V (`0x00002018 = 0x21`), 4500 mA peak, +17 dB analog power gain (`0x00006c04 = 0x220`). Reset lines released for CS35L41 (GPIO 94) and CS47L35 audio hub (GPIO 68). Tone test sysctl `debug.river_speaker_test` implemented. | Codec FLL/amplifier PLL locks, SLIMbus routing and physical speaker playback are verified. Patch 0324 selects amplifier RX slot 0 to match the codec; patch 0326 replays actual app PCM and restores the route with protective mute. Continuous playback remains pending. **Hardware Safety Interlock:** Idle raw status register `0x00010098` readback shows `irq3 = 0x20000010` (`CS35L41_PLL_UNLOCK = 0x10`). The CS35L41 Class-D output stage is held in protective shutdown by silicon logic until an external locked clock is supplied to ASP from CS47L35 AIF1 or LPASS. Concurrent QUP2 access requires serialization. |
+| Audio Subsystem | Patch 0338: stock Voice Memos records physical input and replays recognizable counting through the speaker; user confirmed clear audio. Four playback sessions, zero microphone timestamp gaps and full route cleanup passed. | One muted initialization/enable required after each boot. Automatic half-duplex routing; simultaneous capture/playback, latency reliability and endurance remain pending. Gain calibration deferred. |
+| Speaker Amplifier HW | Cirrus CS35L41 smart amplifier probed at I2C `0x40` on QUP2 (`0271-river-cs35l41-speaker-amp.patch`). Driver configures the boost converter for 8.5V (`0x00002018 = 0x21`), 4500 mA peak, +17 dB analog power gain (`0x00006c04 = 0x220`). Reset lines released for CS35L41 (GPIO 94) and CS47L35 audio hub (GPIO 68). Tone test sysctl `debug.river_speaker_test` implemented. | Codec FLL/amplifier PLL locks, SLIMbus routing and physical speaker playback are verified. Patch 0324 selects amplifier RX slot 0 to match the codec; patch 0326 replays actual app PCM and restores the route with protective mute. Normal iOS app replay now passes on 0338, with repeated sessions and no diagnostic duration cap. Startup latency and endurance remain pending. **Hardware Safety Interlock:** Idle raw status register `0x00010098` readback shows `irq3 = 0x20000010` (`CS35L41_PLL_UNLOCK = 0x10`). The CS35L41 Class-D output stage is held in protective shutdown by silicon logic until an external locked clock is supplied to ASP from CS47L35 AIF1 or LPASS. Concurrent QUP2 access requires serialization. |
 | Haptics & Buttons | Awinic AW8697 haptic driver on QUP2 (`0x5a`). Verified on-device vibration pulses (`/usr/local/bin/vibrate 50`). Physical volume and power keys mapped via SPMI / TLMM. | Touch feedback and sysctl vibration work. Core Haptics subsystem reports synthetic profile. |
 | Camera & Torch | Hardware mapping established from device tree (PMI632 flash/torch, OV12A10 rear, S5K4H7 front). Experimental torch pulse interlocked for safety. | Camera pipeline (CCI, VFE, CSI-PHY) not yet brought up in XNU. |
 | Local Toolchain | Fully native offline XNU kernel compilation on macOS via `tools/river-local-build.sh` using pinned `darwin-xnu-build` and macOS 13.5 KDK. Packaging via `mkpayload` / `package-river-audio.py`. | Removes reliance on remote GitHub Actions runners for kernel builds. |

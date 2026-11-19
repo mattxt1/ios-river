@@ -3,11 +3,26 @@
 > Current results are summarized first. Earlier dated sections below are
 > historical records and may describe superseded candidates or pending checks.
 
-Physical speaker output and a short segment of native iOS app PCM are now
-confirmed acoustically. On0326, AVAudioPlayer/device-write samples were staged
-and replayed through the DSP route; the user heard the sound and iOS stayed
-responsive. Continuous app playback and physical microphone capture remain
-pending. The normal driver still discards output and synthesizes input.
+## Current result:0338 normal iOS app audio (2026-11-18)
+
+The user recorded counting in stock Voice Memos and heard clear replay.
+One coordinator connects standard CoreAudio to physical speaker and microphone
+routes without per-app control commands. Four playback sessions completed
+1,056,768 frames; physical input delivered558,080frames with281exactREAD
+completions/fourownedslots, zero invalid/gapped/backward timestamps, no clipping,
+complete frame accounting and full route/codec/clock cleanup. Audio is left
+enabled for normal use on the current temporary boot; idle hardware is muted.
+
+0338 corrects the access-token request layout that blocked TCC/file setup and
+adds a5.46second bounded startup queue for the installed nonretryingHAL writer.
+No microphone-consent state or signature policy was changed. Normal volume/mute
+scale PCM; the independent750ms verified-health mute lease remains. The earlier
+six-second/three-session diagnostic caps do not apply to normal mode.
+
+Known limits: half-duplex only, manual muted initialization/enable after each
+boot, latency/broader-app/endurance validation pending. Gain tuning is deferred.
+Read newest NOTES.md before controls; do not rerun one-shot initialization or
+disable the healthy service as routine cleanup. The sections below are history.
 
 ##0329 audible sustained live app PCM verified (2026-11-16)
 

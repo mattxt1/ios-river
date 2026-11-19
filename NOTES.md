@@ -5,6 +5,75 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0338 NORMAL iOS Voice Memos record/replay CLEAR PASS (2026-11-18)
+
+USER: "Records and plays my counting clearly" in stockcom.apple.VoiceMemos.
+This is standardAVFoundation/CoreAudio->HakiosAudio->physicalmic/speaker in
+one338boot, NO rawcdevrecord command, NO manuallyswapped per-app services,
+NO microphone consent/database override.0338benignaccess-tokenABIcheckpassed;
+VoiceMemoslog nowacquirescapture ANDaudiofilesession/recordingStarted, unlike
+337TCCerror6/file-17508. No customapp/installer/signature bypass involved.
+
+Physicalmic:281submitted/281exactREADcompletions, fourownedDMA slots,
+575488produced=558080consumed+17408explicitdiscards+0queued; startup8192real
+framesdiscarded.558080frames=11.6267sec actualphysicalcdevinput.277forwarded
+validtimestamps, invalid0/gaps0/backwards0/maxdeviation1us, starvation0,
+overrun0/readfault0, peak3824/noclipping atdigitalgain0/analog12dB. Cleanclose,
+allmap/ASM/ADM/AFE/source/channel0, codec+clocks+pinsrestored, poison0/error0.
+Uservoiceclear. Firstphysicalqueued-input hardwarevalidation PASSED.
+
+Normalplayback:4sessions/3restarts,1,056,768accepted=completedframes (22.016sec
+total), no atlimit/cutoff/blocked/error. Completedreplay sessions exceedthe
+old6sec cap permonitor. Last49livebuffers+4preroll=53exactcompletions/rendered
+EOS; allmaps/routes/channelsclosed, amplifierprotectivelymutedatidle. Normal
+queuecapacity262144/highwater50176, backpressure0/dropped0/discarded0/overrun0/
+underrun0. No claim bitexact all-app render orlatency/endurance solved;337user
+reported delayed/inconsistentringtone and338startupbufferfixneedsbroaderuse.
+
+CURRENT PHONE338: NORMALSERVICELEFTENABLED1/worker1/blocked0/error0 foruser
+normalappuse, bothdirectionsidle/physicalroutesclean. DoNOTdisable healthy
+service asroutinecleanup. DoNOTrepeatprepare/enable/legacydiagnostics. Apps
+requestcapture/playback automaticallywith singlehalfduplexowner; no simultaneous
+record+play promise. Gaincalibrationdeferred peruserpriority; no extra audiotest
+loop requested. Userwantsmoveontootherwork; audiointegration milestoneachieved.
+
+Privateevidence work/ios-audio-token-abi/voice-memos-user-confirmed-result.json,
+voice-memos-first-input-result.json, app-session-monitor.jsonl, scopedVoiceMemos
+log, finalcodec/channelcaptures. Manifest outputs/ios-audio-token-abi-wifi-build-manifest.json.
+Verifiedimage/source/kernelSHA asbelow. Service setup isONCE AFTEREACHBOOT,
+stillmanualhostknownmutedinitialization+ios-enable; automaticbootinit NOTdone.
+Temporarybootonly; noflash. Keepthisworkingphone/image usable; no newbootfor
+calibration. Remaininglimits: halfduplex, startupdelay/broaderapp/endurance,
+micrestartacousticsbeyondthissession, rebootstartupautomation. No falseclaim
+allhardware/subsystemsproductionready. CurrentcontroltransportUSBworking.
+
+## Active handoff:0338 access-token API PASS; normal audio enabled; app retry pending (2026-11-18)
+
+User confirmed home responsive/WiFi connected. Read-only USB resumeverification
+passed fresh allzeroaudio states/all4installedhelperbytes. Benign ownclass
+API test now genericNULL0/errno0/invalidsentinel1 andtargetedselfsame: actual
+untargetedABI failure from337 corrected ondevice. NO microphone/filepermission
+requested orprivacywrites byprobe. Evidence token-api-verification.json and
+ token-api-benign-probe-0398b80.txt underwork/ios-audio-token-abi.
+
+prepare-device.py ONCEpassed fullmutedmetadata/stage/auth/handshake/core/map/
+ASM/AFE/ADM/silence/SLIM/NGD codec_address_verified; nouncertainty. Usercued,
+enable-ios.py ONCEsucceeded normalattempted1/enabled1/worker1/blocked0/error0;
+normaloutputring262144 verified. CURRENTPHONE338 normalcombinedserviceON,
+initiallyroutesidle/ampmuted/inputopens0/sessions0. DoNOT repeatprepare/enable
+orlegacy swaps. Userasked stockVoiceMemos normalmicconsent, count10-15sec,
+stop/replay atadjustedvolume; replyPENDING. Keepgain0; no calibrations.
+
+monitor-apps.py running read-only CPUmetadata, app-session-monitor.jsonl,
+willios-disableONCEonbackendfault. ScopedVoiceMemosONLYaudio/recorderrors50sec
+log running voice-memos-audio-errors.txt (exactremotehelperbytesverified).
+Don'treadADSP-lockstatusduringactiveroute; --ios/--auto/--queue/--mic-live short
+locksareokay. Afteruserreplyinspectactualinputframes/pipeline/timestamps/
+cleanup, outputexactcompletion/framebalance/faults plusrecognizablevoice.
+PermissionAPIpass isnotyetapprecordingpass; no claim end-to-end success yet.
+No furtherbootneededunlessnewhardkernelerroridentified. All338changesalready
+batched. Leavehealthyserviceenabledforusernormaluseafteractualappvalidation.
+
 ## Active handoff:0338 correction built/verified/temporarily booted; home pending (2026-11-18)
 
 Userfastbootready confirmed; River product/serialZY226HM8QB reverified. Temporary

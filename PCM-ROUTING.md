@@ -1,6 +1,18 @@
 # Shared PCM and physical routing continuation
 
-## Current result through patch0329
+## Current result:0338 normal iOS Voice Memos (2026-11-18)
+
+User confirmed clear counting recorded and replayed through stock Voice Memos.
+Physical input passed281exactREADcompletions/fourownedslots,558080delivered
+frames, zero timestamp gaps and full cleanup. Normal playback completed four
+sessions/1056768frames with no queue pressure or dropped frames. One coordinator
+switches physical routes automatically between normal app capture and playback;
+normal iOS volume/mute is applied in PCM. The current boot's service is left
+enabled; hardware is muted/routes closed at idle. Manual initialization after
+reboot, half-duplex, startup latency and endurance remain limits. See newest
+NOTES.md for the live state and exact evidence; don't repeat consumed setup.
+
+## Historical result through patch0329
 
 User heard a5.12second live AVAudioPlayer/device-write PCM stream and confirmed
 responsive iOS.240livebuffers through4DMA slots, zero queue underruns/overflows,
