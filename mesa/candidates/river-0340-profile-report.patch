@@ -1,0 +1,58 @@
+--- a/src/gallium/drivers/freedreno/sweetgl/eagl.c
++++ b/src/gallium/drivers/freedreno/sweetgl/eagl.c
+@@ -1452,7 +1452,7 @@
+ 	uint64_t gl = 0, glwait = 0, calls = 0;
+ 	int top[6] = {-1, -1, -1, -1, -1, -1};
+ 	uint64_t topt[6] = {0};
+-	for (int i = 0; i < SGL_SLOTS; i++) {
++	for (int i = 0; sgl_profile_enabled && i < SGL_SLOTS; i++) {
+ 		uint64_t t = atomic_exchange_explicit(&prof_slot_t[i], 0, memory_order_relaxed) * tb.numer / tb.denom;
+ 		uint32_t n = atomic_exchange_explicit(&prof_slot_n[i], 0, memory_order_relaxed);
+ 		if (n == 0) {
+@@ -1487,12 +1487,19 @@
+ 		return;
+ 	}
+ 	uint64_t ca = dthread > gl + surf ? dthread - gl - surf : 0;
+-	sweet_drm_log("sweetgl prof: per frame (us): wall %llu = GPU wait %llu + between %llu; render thread CPU %llu = "
+-	    "Mesa/GL %llu + sweetgl surfaces %llu + CoreAnimation %llu; not running %llu; %llu GL calls, %llu surface binds",
+-	    (wait_ns + between_ns) / frames / 1000, wait_ns / frames / 1000, between_ns / frames / 1000,
+-	    dthread / frames / 1000, gl / frames / 1000, surf / frames / 1000, ca / frames / 1000,
+-	    (wait_ns + between_ns > dthread ? wait_ns + between_ns - dthread : 0) / frames / 1000,
+-	    calls / frames, surfn / frames);
++	if (sgl_profile_enabled) {
++		sweet_drm_log("sweetgl prof: per frame (us): wall %llu = GPU wait %llu + between %llu; render thread CPU %llu = "
++		    "Mesa/GL %llu + sweetgl surfaces %llu + CoreAnimation %llu; not running %llu; %llu GL calls, %llu surface binds",
++		    (wait_ns + between_ns) / frames / 1000, wait_ns / frames / 1000, between_ns / frames / 1000,
++		    dthread / frames / 1000, gl / frames / 1000, surf / frames / 1000, ca / frames / 1000,
++		    (wait_ns + between_ns > dthread ? wait_ns + between_ns - dthread : 0) / frames / 1000,
++		    calls / frames, surfn / frames);
++	} else {
++		sweet_drm_log("sweetgl prof: per frame (us): wall %llu = GPU wait %llu + between %llu; "
++		    "render thread CPU %llu; GL timing disabled (SWEETGL_PROFILE=1 to enable); %llu surface binds",
++		    (wait_ns + between_ns) / frames / 1000, wait_ns / frames / 1000, between_ns / frames / 1000,
++		    dthread / frames / 1000, surfn / frames);
++	}
+ 	(void)glwait;
+ 	if (frames > 0) {
+ 		sweet_drm_log("sweetgl prof: per frame: %llu texture barriers (= context flushes) %llu us; %llu GPU submits, "
+@@ -1502,12 +1509,14 @@
+ 		    "Mesa draw call %llu; backboardd CPU %.0f%% of a core", prep / frames / 1000, refresh / frames / 1000,
+ 		    refreshn / frames, mdraw / frames / 1000, span_ns ? 100.0 * (double)dproc / (double)span_ns : 0.0);
+ 	}
+-	char line[400];
+-	int o = snprintf(line, sizeof(line), "sweetgl prof: top GL calls per frame (us):");
+-	for (int k = 0; k < 6 && top[k] >= 0 && o < (int)sizeof(line); k++) {
+-		o += snprintf(line + o, sizeof(line) - o, " %s %llu", sgl_slot_names[top[k]], topt[k] / frames / 1000);
+-	}
+-	sweet_drm_log("%s", line);
++	if (sgl_profile_enabled) {
++		char line[400];
++		int o = snprintf(line, sizeof(line), "sweetgl prof: top GL calls per frame (us):");
++		for (int k = 0; k < 6 && top[k] >= 0 && o < (int)sizeof(line); k++) {
++			o += snprintf(line + o, sizeof(line) - o, " %s %llu", sgl_slot_names[top[k]], topt[k] / frames / 1000);
++		}
++		sweet_drm_log("%s", line);
++	}
+ }
+ 
+ /*

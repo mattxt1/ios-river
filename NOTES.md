@@ -5,6 +5,36 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:339 audio CLEAR; UI stall repeated/recovered; follow-up preparing (2026-11-18)
+
+USER: scrollingABOUTSAME; normalVoiceMemoscountingCLEAR; navigation/keyboard
+stalledagain. Healthycuedsample33.5/30.1/29.3rendererflushes/s,0GPU-copydrops,
+notuniquepanelframes/notprovenimprovement. CPUaggregated76%onecore; activestack
+PowerlogCore/SQLite, causeunproven; nodaemonpolicychanged. Mic645120realframes,
+324exactREADs,0timestampgaps; playback543744accepted=completed,0drops/underruns.
+Routesclosed/fullcleanup; normalserviceLEFTON. No morequality/gainloopsneeded.
+
+StallSpringBoard26againCoreMediaFigXPCRemoteClientCreate->CMCapturediscovery
+syncwait. Capturedbatch339/ui-stallallthreads BEFORE SIGTERMSpringBoard26ONCE;
+USERconfirmednavigation/keyboardrecovered. Backboardd/audioNOTrestarted.
+Isolatedcamera-listprobe (NOrecording) foundcapturesourcebootstrapadvertised
+andtimedout5secs(exit124). Readallthree278B MediaToolboxSubServerConfiguration:
+StartRecorderServer=false, StartWirelessDisplayServer=true. Donotenablerecorder
+(itwasdisabledtoavoidNULLGLportraitprewarm). Endpointcausalitystillhypothesis.
+
+Follow-upimageREVISION340 preparing: exactkernel339 retained; removeONLY
+com.apple.coremedia.capturesource frommediaserverdMachServices, preserveall
+CoreAudio/allotherjobs/config. Repackerstrictdeepcomparetakesoptionalcandidate
+launchdplist. Hosttestsrejectunrelatededits/recorderenabled/missingconfigs.
+Newrenderer p0340 onlycorrectsprofile-disabledloglabels/noGL/CAattribution;
+nativedylibbuildPASS, trace/dispatchregressionsPASS. Willstageunique p0340lib,
+verifyoriginalunchangedandfullcandidatehash, packagefromexact338basewith339
+kernel/cameraplistandnewrendererpath, thenaskfastbootONLYwhenverified.
+No newkernelpatch0340exists; distinguishimage revision340fromkernelpatch339.
+Localperformance/batch340 holdsprobe/configcandidate/nativeMesa log/artifacts.
+NextboottestboundeddiscoveryFIRST (expectedbootstrapnotfound/queryreturnsfast)
+thenone-timeaudioinit+normalVoiceMemos+navigation, allinsameboot. NoFPSclaim.
+
 ## Active handoff:339 temporary boot accepted; home check pending (2026-11-18)
 
 Userconfirmedfastboot; exactimageSHA/productriver/serialZY226HM8QB verified.

@@ -16,6 +16,7 @@ import tempfile
 
 import adt
 import mkpayload
+from river_camera_service import validate_capture_removal
 
 NAMES = ('RiverGPUFW', 'RiverWCNSSMeta', 'RiverWCNSSImage', 'RiverWCNSSNV', 'RiverFiles')
 
@@ -44,7 +45,7 @@ def require(condition, message):
         raise ValueError(message)
 
 
-def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None, network_state=None, ipconfig=None, wifi_check=None):
+def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None, network_state=None, ipconfig=None, wifi_check=None, launchd=None):
     require(blob[:8] == b'RIVFILES', 'Invalid RiverFiles magic')
     count, = struct.unpack_from('<I', blob, 8)
     require(count <= 64 and 12 + count * 128 <= len(blob), 'Invalid file table')
@@ -56,10 +57,16 @@ def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None, ne
     network_state_found = 0
     ipconfig_found = 0
     wifi_check_found = 0
+    launchd_found = 0
     for i in range(count):
         name, mode, off, size, reserved = struct.unpack_from('<112sIIII', blob, 12 + 128 * i)
         require(off + size <= len(blob), 'File outside container')
         data = blob[off:off + size]
+        if name.split(b'\0')[0] == b'/System/Library/xpc/launchd.plist':
+            launchd_found += 1
+            if launchd is not None:
+                validate_capture_removal(data, launchd)
+                data = launchd
         if name.split(b'\0')[0] == b'/usr/local/bin/river-codec-clock':
             found += 1
             data = replacement
@@ -89,6 +96,8 @@ def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None, ne
                 data = wifi_check
         entries.append((name, mode, data, reserved))
     require(found == 1, 'Expected exactly one existing clock helper')
+    if launchd is not None:
+        require(launchd_found == 1, 'Expected exactly one existing launchd configuration')
     require(adsp_found <= 1, 'Duplicate ADSP helper')
     if adsp is not None and not adsp_found:
         entries.append((b'/usr/local/bin/river-adsp-status', 0o755, adsp, 0))
@@ -124,6 +133,8 @@ def main():
     ap.add_argument('--kernel', type=Path, required=True)
     ap.add_argument('--clock-helper', type=Path, required=True)
     ap.add_argument('--renderer-library-name', help='Already staged sweetgl-pNNNN.dylib; preserves the original fallback library')
+    ap.add_argument('--camera-launchd-plist', type=Path,
+                    help='Optional launchd configuration changing only the disabled capture-source advertisement')
     ap.add_argument('--adsp-helper', type=Path)
     ap.add_argument('--wifi-check-helper', type=Path, help='Optional bounded connectivity probe')
     ap.add_argument('--ipconfig-helper', type=Path, help='Optional read-only native DHCP/media reader')
@@ -208,7 +219,8 @@ def main():
     wifi_check = args.wifi_check_helper.read_bytes() if args.wifi_check_helper else None
     if wifi_check is not None:
         require(wifi_check[:8] == bytes.fromhex('cffaedfe0c000001'), 'Expected arm64 connectivity probe')
-    blobs['RiverFiles'] = replace_helper(prior_files, replacement, adsp_helper, wifi_helper, net_helper, network_state, ipconfig, wifi_check)
+    launchd = args.camera_launchd_plist.read_bytes() if args.camera_launchd_plist else None
+    blobs['RiverFiles'] = replace_helper(prior_files, replacement, adsp_helper, wifi_helper, net_helper, network_state, ipconfig, wifi_check, launchd)
     # Compare the actual containers: every unrelated file and metadata survives.
     def files(blob):
         result = {}
@@ -220,6 +232,8 @@ def main():
         return result
     before, after = files(prior_files), files(blobs['RiverFiles'])
     changed = {b'/usr/local/bin/river-codec-clock': replacement}
+    if launchd is not None:
+        changed[b'/System/Library/xpc/launchd.plist'] = launchd
     for name, data in [(b'/usr/local/bin/river-adsp-status', adsp_helper),
                        (b'/usr/local/bin/river-wifi-monitor-state', wifi_helper),
                        (b'/usr/local/bin/river-net', net_helper),
@@ -277,6 +291,9 @@ def main():
                     cmdline_bytes=len(cmdline), kernel_payload_segments_verified=True,
                     clock_helper_sha256=digest(replacement), temporary_boot_only=True)
     manifest['unrelated_riverfiles_verified'] = True
+    if launchd is not None:
+        manifest['camera_launchd_sha256'] = digest(launchd)
+        manifest['only_capture_source_advertisement_changed'] = True
     if args.renderer_library_name is not None:
         manifest['staged_renderer_path'] = '/usr/local/lib/' + args.renderer_library_name
     if wifi_check is not None:

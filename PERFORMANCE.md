@@ -1,5 +1,44 @@
 # River performance: first combined candidate
 
+## 0339 device results and follow-up
+
+The fresh 0339 boot passed home/navigation/keyboard checks. During the cued
+Settings scrolling sample, three complete renderer windows reported 33.5,
+30.1 and 29.3 flushes/s; corresponding GPU-copy windows recorded zero drops.
+These are throughput proxies. The user felt scrolling was about the same;
+there is no healthy previous-build control establishing an improvement.
+Background `aggregated` used 76% of one core during the 45-second CPU sample;
+its sampled active stack includes PowerlogCore and SQLite. One stack does not
+establish the cause of that sustained work. No daemon policy was changed.
+
+Normal Voice Memos counting was clear, confirmed by the user. Microphone input
+delivered 645120 real frames (13.44 s), with 324 exact DSP completions and zero
+timestamp gaps/invalid/backwards values. Playback accepted and completed
+543744 frames with zero queue drops/overflows/underruns. Cleanup passed.
+The normal audio service remains enabled.
+
+Afterward navigation/keyboard stalled again. SpringBoard's main thread was in
+the same synchronous camera-discovery path. A single UI-only restart restored
+navigation, confirmed by the user. The earlier scrolling sample precedes this
+stall; subsequent unmarked samples cannot be treated as healthy measurements.
+
+An isolated, five-second-bounded video-device discovery probe also timed out.
+Bootstrap lookup found `com.apple.coremedia.capturesource` advertised, while
+all three installed MediaToolbox recorder configurations have
+`StartRecorderServer=false`. This supports a targeted availability experiment;
+the exact causal endpoint still needs the changed-image test.
+
+The follow-up candidate removes only that media-job service advertisement.
+It leaves all audio services, all other jobs, the disabled recorder setting,
+kernel 0339 and the working audio implementation intact. The repacker rejects
+any unrelated launchd edit. Booting a prior verified image restores the original
+configuration. First run the bounded discovery probe and verify it returns
+promptly, then repeat normal Voice Memos and navigation in that same boot.
+
+The follow-up renderer also labels detailed GL timing as unavailable when
+profiling is off. The 0339 logger's zero GL timings and implied CoreAnimation
+partition must not be interpreted as measurements. Coarse counters remain valid.
+
 Patch 0339 has passed its native kernel build. Its paired Mesa renderer has
 also built for iOS arm64. Hardware performance validation is pending. Preserve
 the verified 0338 image and its original renderer as the fallback.
