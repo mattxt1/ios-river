@@ -5,6 +5,35 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## 0349 Spotlight follow-up and capture readiness (2026-11-19)
+
+Traced the captured user return address to the self-task deallocation trap
+and the VM map removal path in the exact 0349 native source. VM map removal
+can wait for an entry in transition or for a kernel wiring to clear. The old
+user stacks do not identify either wait. The kernel warning immediately
+around the freeze symbolicates to RiverGPU BO_IMPORT asking to prepare an
+already read-only descriptor for read/write access (RiverGPU.cpp:279).
+The same warning appeared repeatedly in both responsive and degraded
+sessions, so it does not identify the stuck deallocation.
+
+Built and deployed a signed, readback-verified, PID-scoped stackshot helper
+at `/private/var/tmp/river-stackshot-7a8331573d18`. The on-device suite
+returned successful stackshots with thread wait records for the healthy
+compositor and for the missing-wallpaper state. Source, captures and the
+trusted Wi-Fi capture script remain local at
+`/Users/matttyson/Developer/Codex/2026-11-19/continue-ios-river-read-this-handoff/work/spotlight`.
+
+The user opened Spotlight normally in both retests on unchanged 0349.
+In the intervening Today View/App Library sequence, App Library lost its
+wallpaper. Its diagnostic capture showed ongoing framebuffer presentation
+and did not contain the old compositor deallocation stack. Record the
+wallpaper loss separately. No change to VM removal, GPU import or the
+boot image was made. A fresh persistent Spotlight stall is needed to
+capture the actual blocked kernel path before selecting a fix.
+
+The user's five near-term milestones and display-fit priority are recorded
+at the top of PERFORMANCE.md.
+
 ## 0349 persistent Spotlight freeze (2026-11-19)
 
 The user reported a full UI freeze opening Spotlight from Home. Trusted

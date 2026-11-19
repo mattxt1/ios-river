@@ -1,4 +1,35 @@
-# River performance: first combined candidate
+# River performance
+
+## Near-term priorities (November 19)
+
+1. Capture and eliminate recurring pauses in repeatable normal-use flows.
+   Spotlight's persistent freeze is the current case. Track Today View,
+   App Library and scroll deceleration separately.
+2. Measure presentation timing and evaluate a lower-resolution GPU-scaled
+   profile against the same gestures at the existing resolution. Log
+   individual presentation intervals and missed refreshes.
+3. Finish automatic audio and Wi-Fi startup and recovery.
+4. Complete normal brightness control, accurate battery and charging behavior,
+   and system haptics.
+5. Expand app compatibility through complete Files, media, notification and
+   sensor workflows.
+
+### Display fit
+
+Display fit is an explicit usability priority alongside presentation timing.
+The default River path crops the 1125×2436 iPhone X canvas to the 1080×2270
+panel. A centered aspect-preserving fit would display approximately
+1048×2270, with about 16 pixels per side. Validate the full canvas, edge touch
+and gestures, safe-area and notch placement, portrait and landscape, and
+lock/wake on device. Test the lower-resolution profile with the same fit and
+input transform so rendering load can be compared independently.
+
+The prior CPU probe fit a still frame but flickered during scrolling. The
+VIG0 test produced a blue screen. The A5xx scaler probe left its destination
+unchanged. See the October 23 display-fit entry in NOTES.md. These results
+favor validating a GPU composition pass and corresponding touch geometry
+before enabling a new display mode.
+
 
 ## Current checkpoint: image 0345, November 19
 
