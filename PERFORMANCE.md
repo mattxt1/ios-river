@@ -1,0 +1,78 @@
+# River performance: first combined candidate
+
+Patch 0339 has passed its native kernel build. Its paired Mesa renderer has
+also built for iOS arm64. Hardware performance validation is pending. Preserve
+the verified 0338 image and its original renderer as the fallback.
+
+## What the stalled session showed
+
+SpringBoard's main thread was waiting synchronously for camera discovery
+through AVFoundation, CMCapture and CoreMedia. A single SpringBoard restart
+restored navigation and the keyboard, confirmed by the user. This distinguishes
+that UI stall from low rendering throughput; the specific unavailable endpoint
+and a permanent fix remain unverified. Audio and backboardd were not restarted.
+
+A roughly 24-second diagnostic sample also found substantial background CPU:
+aggregated 67%, coreduetd 47%, biomed 39%, where 100% means one core. These
+samples came from the degraded session. They establish investigation targets,
+not normal idle costs, a proven cause, or an FPS baseline. No background service
+was disabled or given a CPU limit.
+
+## Changes combined in 0339
+
+- Schedule framebuffer callbacks against fixed deadlines. Previously the next
+  16.667 ms delay began after presentation work, extending each interval.
+  Skip expired deadlines rather than scheduling catch-up bursts. Retain existing
+  presentation, GPU fences and pending/show/retire surface ownership. Expose
+  callback/skipped/max-lateness counters; `riverframeclock=0` restores the old
+  timer behavior.
+- Wake the normal audio coordinator on producer requests instead of polling
+  every 2 ms while idle. Register the wait before rechecking the wake generation
+  to prevent missed requests. Keep short-tail drain deadlines, active DSP
+  behavior, mute lease and cleanup unchanged.
+- Avoid diagnostic-only GL state queries when tracing is off. Make generated
+  per-call timing and atomic accounting opt-in with `SWEETGL_PROFILE=1`.
+  Keep coarse renderer timing and all real drawing/synchronization operations.
+
+Tests execute the actual deadline helper, coordinator, queue, clear body and
+generated dispatch wrappers. They cover work-induced timer drift, late/long
+pauses, wake registration races, playback/capture alternation, stop/fault
+handling, retained audio frames, trace gates, return values and profiling
+on/off. Tests and successful builds do not establish a device FPS improvement.
+
+## Reference projects and limits
+
+[ios-sailfish](https://github.com/joranv1/ios-sailfish) reports CPU-bound rendering
+and investigates presentation overhead. Its lower logical resolution and A530
+hardware differ from River's iPhone X geometry and A506. Its clock settings and
+rendering rates cannot be treated as River measurements.
+
+[Apollo's frame-scheduling change](https://github.com/aTechGeekDev/ios-apollo/blob/1f75f381e31da96de537653fbac2252d2eb80418/xnu/patches/0148-apollo-fb-vsync-schedule-ddr-top.patch)
+uses fixed deadlines and a separate presentation worker. River's first batch
+adopts the smaller deadline change while preserving its established surface
+ownership. Moving presentation to another worker remains a separate change
+requiring ownership, display-power and queue validation.
+
+[Apollo's CPU policy](https://github.com/aTechGeekDev/ios-apollo/blob/1f75f381e31da96de537653fbac2252d2eb80418/xnu/patches/0160-apollo-cpu-budget-touch-boost.patch)
+is a useful reference for budgeting persistently hot background work. River
+needs fresh healthy CPU samples and foreground/audio exemptions before adapting
+such a policy. Broad process blocking and another platform's clock registers
+are not included. [Apollo's Metal work](https://github.com/aTechGeekDev/ios-apollo/blob/1f75f381e31da96de537653fbac2252d2eb80418/userland/metal/SWEET.md)
+targets A6xx and does not provide a ready A506 acceleration path.
+
+## Fresh-boot validation
+
+First verify home navigation, switching apps and keyboard entry. Treat a UI
+stall as invalid context for scrolling measurements and capture its stacks
+before recovery. After healthy startup settles, collect separate idle and
+active CPU samples. Use consistent Home page swipes and Settings scrolling,
+with phase boundaries recorded by the host. Read the existing renderer and
+GPU-present logs along with deadline counters. Renderer flushes and GPU
+presents are throughput proxies, not unique panel frames or frame-time
+percentiles; exclude idle windows from scrolling comparisons.
+
+Initialize the normal audio service once on the fresh boot, preserving its
+existing muted setup. Check a normal app recording/replay and subsequent UI
+navigation without manual per-app route changes. Preserve all safety leases.
+Only compare against a fresh healthy reference running the previous image.
+Report observed rates and responsiveness separately from build/test results.
