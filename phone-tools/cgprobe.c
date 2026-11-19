@@ -1574,7 +1574,7 @@ static void ui_trace_snapshot(void)
  for(unsigned long i=0;i<n && ui_trace_nodes<512;i++)ui_trace_view(((id(*)(id,SEL,unsigned long))objc_msgSend)(windows,sel_registerName("objectAtIndex:"),i),0);
  size_t sent=0;
  while(sent<ui_trace_used){ssize_t k=write(ui_trace_fd,ui_trace_buffer+sent,ui_trace_used-sent);if(k<=0)break;sent+=(size_t)k;}
- if(sent==ui_trace_used && ++ui_trace_round<16) {
+ if(sent==ui_trace_used && ++ui_trace_round<64) {
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW,100*NSEC_PER_MSEC),dispatch_get_main_queue(),^{ui_trace_snapshot();});
  } else {close(ui_trace_fd);ui_trace_fd=-1;}
 }

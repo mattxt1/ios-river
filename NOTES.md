@@ -5,6 +5,30 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0342 audio noticeably improved PASS; folder repair ready to package (2026-11-18)
+
+USER: noticeablylessdelay, clearaudio+navworks. Backendlatestcodec619929us,
+output768728us/firstDMA768942us(vs0341samples1.35s/5.23s); notcontrolledacoustic
+benchmark.4playsessions963584accepted=completed, mic264exactREADs/521216real
+frames/0timestampgaps-invalid-backwards/fullcleanup. ServiceLEFTON/healthy.
+SearchfieldlooksRIGHT; foldersfullytransparentregressionacknowledged.
+
+Actualfolderrepairhooktest+iOSbuild/signaturePASS. UI343restoresclosedbitmap
+andONEexpandedbackground, nativeopacity/visibility/positivecornerradiusretained.
+Searchchangeskept; no arbitraryFloatyFolderchildpainting. Longerbounded64round
+100msgeometrytrace(defaultOFF), max64KiB/round512nodes; presentationframe/radius/
+backgroundalpha/opaque/contentsBOOLadded, no text/contentsdata. Runtimeunvalidated.
+
+Cued342tracecapturedandFULL16roundfilecollected(localbatch342/river-ui-geometry-
+26-804147671667.txt,500875B; firstpartialpreserved). Rootmobileflaghelperused
+fchown501:501 soSpringBoardcanunlinksticky/tmpflag; consumed/no repeat. Samples
+20mainiconsnotexplicitlyhidden/zeroalpha; exactpopmoment/compositorstateNOT
+established. No animationfixcauseclaim. geometry-summary.json compactanalysis.
+BlackSpotlightstatusbarstripunresolved. NoUIrestart/hotlibchangeon342.
+NextpackageUI343withSAMEvalidatedkernel341/renderer/cameracfg; preparedfolder
+repairsource59db92d pluslongertrace. Existing341candidatefullkernel/UIrollback.
+Needverifiedimagebeforeaskfastboot. Current342audioinitconsumed, DON'Trepeat.
+
 ## Active handoff:0342 Search PASS/folder regression; audio ON awaiting listening (2026-11-18)
 
 USER342responsive/SearchinSpotlightlooksRIGHT; closed+openfoldersFULLYtransparent.

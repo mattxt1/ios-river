@@ -1,5 +1,32 @@
 # River performance: first combined candidate
 
+## 0342 device result and folder repair
+
+The user reports noticeably less audio delay, clear recording/playback, and
+working navigation. The latest backend sample reached codec readiness at
+0.620 seconds and first DMA publication at 0.769 seconds after first non-silent
+PCM. Earlier 0341 samples were 1.354 and 5.226 seconds to DMA publication. These
+are observations of app use, not a controlled acoustic latency benchmark.
+Four playback sessions accepted/completed 963584 frames. Microphone input
+completed 264 READs and delivered 521216 real frames, with zero invalid,
+backwards or gapped timestamps. Cleanup passed. The normal service stays on.
+
+The user confirms Spotlight's search field now looks right. Both closed and
+open folders became transparent after removing their fallback surfaces. That
+was a regression. The repair restores the closed icon's known bitmap plate and
+paints one expanded folder background layer, preserving native opacity,
+visibility and any positive native corner radius. It keeps FloatyFolder's
+arbitrary children unpainted, avoiding the older multiple-background workaround.
+The actual hook passed a small Objective-C geometry model test and an iOS build;
+visual correctness still needs the next boot. Search restoration is retained.
+
+A cued one-shot geometry trace captured 16 rounds. The sampled main icon views
+were not marked hidden or zero-alpha, but the exact moment of their late
+appearance and the compositor state were not established. This does not prove
+an animation cause or justify forcing icon visibility. The default-off next
+trace has a longer bounded window and presentation-frame/corner metadata.
+The black status-bar strip remains unresolved.
+
 ## 0341 observations and 0342 candidate
 
 The user confirmed Spotlight blur works on image 0341. App-closing animation
