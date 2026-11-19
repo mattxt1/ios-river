@@ -5,6 +5,27 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0349 boot authorized; host device access blocked (2026-11-19)
+
+User has phone ready in fastboot and authorizes temporary0349boot/testing and
+baseline collection before the usability milestones. Exact candidate/rollback
+hashes,599byte embedded XNU line/nativefeedback mode and helper hash pass.
+macOS IOUSB sees Fastboot river S with the expected serial. Session fastboot
+devices is empty; bounded serial getvar was cancelled while waiting. SSH toUSB
+address explicitly fails Operation not permitted. Guarded boot runner stops on
+missing accessible device BEFORE sending any image. No boot/flash/control or
+audio setup succeeded. Phone remains in reported fastboot, not confirmed0349.
+
+New tools/river-hardware-session.py provides pinned preflight, temporary boot,
+read-only baseline capture and optional wait-stack capture. Simulated absent/
+wrong device, wrong product, bad hash, boot-only command and failure guards pass.
+Local evidence outputs/hardware/device-0349, latest boot attempt ends inaccessible.
+User can run boot from a permitted Mac Terminal; after healthy home/navigation/
+keyboard confirmation run collect --home-ready. Captures remain outside Git.
+Actual battery/brightness/haptics validation and freeze baseline remain pending;
+keep audio off under the prior instruction. Do not retry boot blindly after an
+ambiguous transfer timeout. HARDWARE.md describes capture semantics and gates.
+
 ## Active handoff: comparative research; usability first (2026-11-19)
 
 User reports frequent brief freezes and little perceived progress over many boots.

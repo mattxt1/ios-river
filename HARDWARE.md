@@ -93,6 +93,25 @@ operation, calibrated charge percentage or panel luminance.
 
 ## Device validation sequence
 
+`tools/river-hardware-session.py preflight` verifies the pinned0349 and rollback
+image hashes, helper hash and embedded XNU command line. `boot` additionally
+checks the expected serial/product and issues only temporary `fastboot boot`.
+It records command results under this task's outputs/hardware/device-0349.
+After visually confirming fresh navigation/keyboard, `collect --home-ready`
+verifies the installed bridge, stages/readback-verifies the read-only helper,
+and captures battery/framework, audio status, kernel and two CPU snapshots.
+It performs no audio initialization, haptic request, brightness or charger write.
+`stacks --home-ready` captures SpringBoard/backboardd/Preferences stacks and
+kernel logs when diagnosing a pause. It is a point-in-time sample, not a stall
+detector or a frame-rate measurement. A nonzero/timeout result stops dependent
+operations. Use `--manifest` outside this task's current directory layout.
+
+On November19, macOS IOUSB identified the expected Fastboot River serial, but
+the session's fastboot returned no accessible devices and SSH explicitly failed
+with Operation not permitted. The guarded boot therefore stopped before sending
+an image. Boot and device validation remain pending execution from a permitted
+Terminal/session; preflight and simulated boot guards passed.
+
 1. Verify the candidate and full 0345 rollback hashes. Verify product River;
    use temporary `fastboot boot` only, never flash. Do not initialize audio.
 2. Confirm fresh home/navigation/keyboard/Wi-Fi responsiveness before controls.
