@@ -5,6 +5,50 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## 0349 device qualification and responsiveness baseline (2026-11-19)
+
+User confirmed Home, Settings navigation and Spotlight typing. USB SSH still
+timed out. Trusted Wi-Fi SSH at 192.168.1.232 verified the exact installed
+0349 bridge and captured kernel logs, battery/charger and IOPS state, and CPU
+and stack samples. Removed the collector's dependency on the unavailable iOS
+`uname` command and reran successfully. The audio backend reported
+attempted=0 and enabled=0. No audio controls were sent.
+
+- Settings brightness applies immediately and smoothly and survives lock/wake.
+  Successful DSI writes appear in the kernel log. Control Center shows the
+  brightness level but the brightness slider cannot be dragged. Its volume
+  slider works.
+- Connected baseline read 3719 mV, 0 mA and 16% estimated, external power
+  present and charging inactive. The user unplugged and reconnected USB.
+  The timed series finished before the disconnected sample, which was
+  captured separately at 3550 mV, −651 mA and 5% estimated, external=0,
+  path=0x02. The later reconnected sample read 3680 mV, −158 mA and 13%
+  estimated, external=1, path=0x95. All three show state 7, command 0 and
+  charging=0. Kernel samples independently corroborate external=0 then 1.
+- AW8691 initialized and the helper reported ready=1. No tactile response
+  was felt in Spotlight typing or Home icon long-press. A hash-verified
+  standalone UIKit impact command and a separate direct 100 ms request
+  both exited successfully. The user felt neither pulse.
+- The user reports intermittent hitching during scroll deceleration and
+  1–2 second freezes when swiping Home pages. The initial 58.4-second CPU
+  interval recorded coreduetd 55%, biomed 46% and aggregated 45% of one core.
+  Captured point-in-time SpringBoard, backboardd and Preferences stacks.
+  A separate cued Home swipe run captured 19 SpringBoard and 19 backboardd
+  stacks and a post-run kernel ring. In its 38.5-second CPU interval,
+  aggregated used 82%, SpringBoard 73% and backboardd 60% of one core.
+  During this run the user saw a long freeze entering Today View and a
+  smaller hitch entering App Library. Ordinary Home page swipes stayed
+  responsive in this run. SpringBoard logged five bursts of unbalanced
+  widget-controller appearance transitions. Three full 10-second windows
+  inside the sampled interval recorded 282, 347 and 242 GPU presents with
+  zero reported drops. Frame gaps and the exact cause remain unmeasured.
+  Retain Today View entry as the first reproduction case.
+
+Private evidence in the original task workspace under
+`outputs/hardware/device-0349/20261119T215037971458Z-collect` and
+`outputs/hardware/device-0349/20261119T215304822890Z-stacks`. Leave the device
+on 0349. See HARDWARE.md for the live power, brightness and haptics status.
+
 ## 0349 temporary boot accepted; system and hardware qualification pending (2026-11-19)
 
 The new session used approved USB access to enumerate the expected River serial,

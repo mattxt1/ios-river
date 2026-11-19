@@ -95,7 +95,6 @@ def collect(directory, manifest, host, stacks):
     sha = capture('installed-ui-sha', '/usr/local/bin/river-file-sha339 /usr/local/lib/libcgprobe.dylib')
     require(sha.decode().split()[0] == UI_SHA, 'Installed UI is not the 0349 candidate')
     capture('kernel-before', '/usr/local/bin/river-kmsg', 30)
-    capture('identity', 'uname -a')
     processes = capture('processes-start', '/usr/local/bin/psx').decode()
     if stacks:
         for row in processes.splitlines():

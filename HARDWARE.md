@@ -2,9 +2,9 @@
 
 The November 19 candidate adds patches 0346–0349 and an opt-in SpringBoard
 bridge. The prepared 0349 image was sent and accepted via temporary fastboot
-boot. River XNU subsequently enumerated over USB Ethernet. Home readiness and
-hardware behavior still need validation. No audio initialization, enable,
-playback or capture was performed.
+boot. The user confirmed Home, navigation and typing. Trusted Wi-Fi SSH
+verified the installed bridge and collected the hardware baseline. No audio
+initialization, enable, playback or capture was performed.
 
 The final **0349** kernel build, iOS arm64 library/helper builds and host checks
 pass. The applied source hashes match the host-tested inputs. Local candidate:
@@ -27,6 +27,27 @@ The actuator is the probed **AW8691**, chip ID 0x91, on QUP2 address **0x5b**;
 older README references to AW8697/0x5a were incorrect. QUP2 remains shared
 with the speaker amplifier and uses the existing transaction lock. The new
 feedback endpoint does not initialize or enable the audio backend.
+
+## 0349 device results
+
+- **Battery.** The connected read-only sysctl reported 3719 mV, 0 mA and 16%
+  estimated charge. SweetBattery and IOPS agreed on external power and no
+  charging. The unplugged sample read 3550 mV, −651 mA, 5% estimated,
+  external=0 and path=0x02. After reconnect, the sample read 3680 mV, −158 mA,
+  13% estimated, external=1 and path=0x95. Charger state stayed 7, the enable
+  command stayed zero, and charging remained off. These snapshots establish
+  the external-power state transition and the estimator's load sensitivity.
+- **Brightness.** The user confirmed the Settings slider dims and brightens
+  the display smoothly, applies immediately and retains brightness after
+  lock/wake. Kernel logs contain successful DSI panel-level transfers.
+  Control Center reflects the brightness level but its brightness slider
+  cannot be dragged. Its volume slider responds.
+- **Haptics.** The kernel identified and initialized AW8691 and the observer
+  returned native mode=1 and haptic ready=1. The user felt nothing while
+  typing in Spotlight or long-pressing a Home icon. A verified standalone
+  UIKit impact request and a separate direct 100 ms motor request completed,
+  but the user felt neither. The direct helper confirms submission only.
+  Core Haptics reports supports_haptics=false.
 
 ## Enabling the candidate
 
@@ -111,8 +132,9 @@ The original session lacked USB access. In the continuation, approved USB
 access let the guarded runner verify the expected serial and product and send
 0349 on November 19. Fastboot reported success and macOS subsequently saw
 River XNU USB Ethernet. SSH reached the Dropbear banner once and stalled
-during key exchange. The known Wi-Fi fallback timed out. No authenticated
-session was available for the on-device checks below.
+during key exchange. The known Wi-Fi fallback initially timed out and worked
+after Home was confirmed and the user joined Wi-Fi. The authenticated
+collector captured kernel, process, framework and battery evidence.
 
 1. Verify the candidate and full 0345 rollback hashes. Verify product River;
    use temporary `fastboot boot` only, never flash. Do not initialize audio.

@@ -1,19 +1,15 @@
 # Working on ios-river
 
-- New-chat continuation: read `RESUME-0349.md` first. The user is moving chats
-  because device access is blocked and no permission control appears here.
-  They want the agent to boot/test0349 directly; do not ask them to boot manually.
-  Existing boot/testing authorization persists; verify access and actual state.
+- Read the newest NOTES.md and HARDWARE.md before device work. The agent
+  temporarily booted 0349 directly, and the user confirmed Home, navigation
+  and typing. Trusted Wi-Fi SSH worked when USB SSH was unreliable.
+  `RESUME-0349.md` records the historical pre-boot handoff and exact artifacts.
+  Continue in the Nov19 checkout on branch codex/power-backlight-haptics.
+  Exclude telephony from the current work.
 
-- Latest task: battery/backlight/native-feedback candidate0349. Phone remains
-  last-known0345; SSH denied by session permissions, no device controls or
-  audio setup/test succeeded. Read the newest NOTES.md and HARDWARE.md.
-  Full Core Haptics, charging enable/policy and calibrated SOC remain open.
-  Work on branch codex/power-backlight-haptics in the Nov19 task checkout.
-
-- Current image 0345: user confirms Spotlight, settled Search pill and folders
+- On image 0345 the user confirmed Spotlight, settled Search pill and folders
   look good. No more audio testing tonight (November 19); do not initialize or
-  enable audio on this boot tonight. Latest clear/quicker playback/navigation
+  enable audio on 0349 tonight. Latest clear/quicker playback/navigation
   confirmation is 0344, whose enabled service ended at reboot. Record and push
   the checkpoint before further changes. Late home-screen icons remain open;
   no animation/FPS improvement claim. Read the newest NOTES.md handoff.
