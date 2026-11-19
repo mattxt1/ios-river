@@ -5,6 +5,21 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff: comparative research; usability first (2026-11-19)
+
+User reports frequent brief freezes and little perceived progress over many boots.
+They request a comprehensive comparison with ongoing HackiOS work and explicitly
+exclude telephony from current priorities. See HACKIOS-COMPARISON-2026-11-19.md.
+Survey covers native HakiOS/UniXNU, Apollo (two distinct implementations),
+Sailfish, Spes, Bergamota/Chlorophyll, Flame, Topaz and early/hosted projects.
+Some current logs supersede old README claims; no independent hardware testing
+of other ports. Recommended next work: capture and fix actual recurring waits,
+measure unique frame intervals/tails, finish automatic native lifecycle and
+brightness/power/haptic user flows. Do not equate 60Hz scanout, host tests or
+short successful navigation checks with solved responsiveness. No code import,
+build or device controls during research. Phone still LAST KNOWN0345; candidate
+0349 remains UNBOOTED, and existing no-audio-tonight instruction still applies.
+
 ## Active handoff: verified0349 hardware candidate; SSH blocked (2026-11-19)
 
 The final candidate is PREPARED, NOT BOOTED. Branch codex/power-backlight-haptics
