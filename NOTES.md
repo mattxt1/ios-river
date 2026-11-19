@@ -5,6 +5,22 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:339 staged and verified; awaiting fastboot (2026-11-18)
+
+Userconfirmed338preparationhome responsive/WiFi. Installedseparate20,074,720B
+/usr/local/lib/sweetgl-p0339.dylib SHA256fc65dac95cd0b4ea1d128b70f778864a29ed34be22208755527507214fae4790.
+Originalsweetgl.dylib20,058,240B before/afterSHA256identical
+4eb9f6f2b337812c048a63b1ecccb2f65b256664c9bdf365ec70e0b32552987f.
+Preloadedchildprocesslaunch/hashcheckexit0/noloadererror; nothardwareFPSproof.
+Newperformanceimage27,068,416B/cmdline583/kernel339/nativeandrendererbuildsPASS,
+SHA25635a1c49fbbaa0401b83063907ea8dab0a0ea71185edf5d02836620c0cd5f953c.
+Candidate selectedONLYnewimage;338fallbackretainsoriginallib. Localbatch339
+manifest/evidenceupdated. AwaituserfastbootreplyforverifiedtemporarybootONLY.
+Noaudioinit/controlthis338preparationboot. Nextfresh339home/responsiveness,
+clockmarker/CPU/renderingtiming, thenonce-onlymutednormalaudiosetupwithNEW
+339evidencenames. Don'texecuteold0338runnerwithconsumedevidencefilenames.
+NoFPSgainclaimyet. PERFORMANCE.md hasresearchandmeasurementmethod.
+
 ## Active handoff:339 kernel/renderer builds PASS; preparing combined boot (2026-11-18)
 
 Kernel339 source7782c372 nativebuildexit0 SHA256
