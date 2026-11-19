@@ -1,5 +1,17 @@
 # River performance: first combined candidate
 
+## Current checkpoint: image 0345, November 19
+
+The user confirms Spotlight, the settled home-screen Search pill and folders
+look good on 0345. The capsule-clipping change is visually validated. The
+switcher source cache passes its host model; an animation or FPS improvement
+has not been established. Other icons still appeared late on 0344.
+
+No more audio testing tonight, at the user's request. Image 0345 has not had
+its once-only audio setup/enable; the latest clear/quicker playback and working
+navigation confirmation is from 0344. No microphone retest is needed solely
+for these UI changes. Commit and push this checkpoint before further changes.
+
 ## 0342 device result and folder repair
 
 The user reports noticeably less audio delay, clear recording/playback, and

@@ -1,12 +1,11 @@
 # Working on ios-river
 
-- Latest0338 NORMAL iOS Voice Memos record/replay CLEAR PASS: user recognized
-  counting; queuedphysicalmic281READs/zero timestamp gaps/fullcleanup and four
-  normalplaybacksessions/noqueuepressure pass. CURRENTnormalserviceLEFTON for
-  useruse, idlehardwaremuted/routesclosed. Don'tdisablehealthyservice orrepeat
-  initialization. One mutedsetup+ios-enable stillrequired aftereachboot; no
-  bootautomation/full-duplex/endurance claim. Gaincalibrationdeferred; user
-  wants otherwork. ReadnewestNOTES; historicalpendingclaimsbelowaresuperseded.
+- Current image 0345: user confirms Spotlight, settled Search pill and folders
+  look good. No more audio testing tonight (November 19); do not initialize or
+  enable audio on this boot tonight. Latest clear/quicker playback/navigation
+  confirmation is 0344, whose enabled service ended at reboot. Record and push
+  the checkpoint before further changes. Late home-screen icons remain open;
+  no animation/FPS improvement claim. Read the newest NOTES.md handoff.
 
 - Read the latest active handoff in `NOTES.md` before device controls. Older
   entries are historical. Update the handoff after milestones and before stopping.

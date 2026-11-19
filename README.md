@@ -12,12 +12,13 @@ parts of the port. Do not rely on the device to protect personal data or use it
 for sensitive accounts. Battery capacity remains a voltage/current estimate;
 charging-policy validation is incomplete.
 
-Updated November 16, 2026. Physical speaker playback is confirmed, including
-an audible short replay of native iOS AVAudioPlayer PCM on patch 0326. Buffers,
-renderedEOS, immediate mute within750ms, full cleanup and responsive iOS all
-passed. Continuous app playback and physical microphone capture remain
-pending; the normal device backend still discards output and synthesizes input.
-See [AUDIO-BRINGUP.md](AUDIO-BRINGUP.md).
+Updated November 19, 2026. Stock iOS Voice Memos records and plays clear
+physical microphone/speaker audio through automatic half-duplex routing.
+Codec startup changes reduced the user-observed delay. Image 0345 passes the
+Spotlight, home Search-pill and folder appearance checks. Late home-screen
+icons during app closing remain unresolved, and no controlled FPS improvement
+is claimed. See [PERFORMANCE.md](PERFORMANCE.md) and
+[AUDIO-BRINGUP.md](AUDIO-BRINGUP.md).
 
 On patch 0322, a confirmed blue Wi-Fi checkmark now agrees with native DHCP BOUND,
 primary en0 routing, a usable default resolver, ordinary DNS lookup, and an
@@ -34,8 +35,9 @@ physical speaker and microphone through one automatic route coordinator.
 The microphone delivered 558,080 real frames with zero timestamp gaps and
 complete cleanup; four playback sessions completed 1,056,768 frames without
 queue pressure, dropped frames or the earlier six-second/three-session caps.
-Normal iOS volume and mute scale playback samples. Audio remains enabled on
-the current temporary boot, with the hardware muted and routes closed at idle.
+Normal iOS volume and mute scale playback samples. Subsequent playback checks
+through image 0344 confirm clear, quicker audio and working navigation. Current
+image 0345 has not had audio setup or testing; see the latest handoff.
 
 The service still needs the known muted initialization and one enable after
 each boot. Simultaneous recording/playback, startup-latency reliability and
@@ -52,7 +54,7 @@ Earlier bounded speaker and microphone milestones are retained in
 | CPU and memory | Four Cortex-A53 Gold cores (`cpus=4`) and ~3.38 GiB usable RAM on the full-RAM configuration. | Firmware carveouts stay excluded. Silver cores remain parked. |
 | Graphics & Display | Adreno 506 hardware acceleration via Mesa Freedreno, RiverGPU, and an EAGL/OpenGL ES adapter (`riverenv=backboardd:DYLD_INSERT_LIBRARIES=/usr/local/lib/sweetgl.dylib`). Display path runs at 60 Hz flip (`sweetfb_hz=60`, `riverblit=1`, `riverfbinv=0`). | 60 Hz display scanout confirmed. Metal is translated via OpenGL ES / Freedreno. |
 | Backlight & Sleep/Wake | Hardware TLMM PWM backlight driver integrated with CoreBrightness (`0269-river-backlight-corebrightness.patch`, `riverbl=1`). Tested smooth dimming, display sleep blanking, and instant wake. | Native iOS brightness slider and display wake/sleep operational. |
-| Touch & UI Interaction | Synaptics touch controller operational (`riverinput=1`, `rivertouchlatch=0`). Lockscreen unlocks cleanly at 60 fps without touch regressions. | Canvas is cropped iPhone X geometry; UI elements are fully interactive. |
+| Touch & UI Interaction | Synaptics touch controller operational (`riverinput=1`, `rivertouchlatch=0`). Lockscreen unlock and touch interaction have been verified; controlled app FPS measurements remain pending. | Canvas is cropped iPhone X geometry; UI elements are fully interactive. |
 | Home & SpringBoard | SpringBoard lockscreen, home screen, settings navigation, and app launch operational. App switcher functional with replica layer. | PosterBoard background load requires initial settle time on boot. |
 | Battery & Power | Hardware battery monitoring via Qualcomm PM8953 FG/QG and JG30 battery curve (`0267-river-battery-jg30-power-source.patch`). Publishes observed voltage/current/status and estimated capacity to IOKit `IOPMPowerSource`. | Integrated0290/0291 preserve last-valid samples, reject invalid current and remove charger-enable writes from sampling/diagnostics. Host checks and full build pass; live SweetBattery/IOPMPowerSource/IOPS publication agrees at85%,4194–4195mV, external/notcharging/notfull with valid/nonfallback flags. Failure recovery, load/cable/charging validation remains pending; percentage is a load-sensitive estimate. See [BATTERY-STATUS.md](BATTERY-STATUS.md). |
 | Wi-Fi & Networking | 0322 media ioctl correction enables a valid active link; native DHCP BOUND, primary en0/default DNS, ordinary lookup and unbound HTTP200/AppleSuccess verified with a user-confirmed blue checkmark. | Manual joins across multiple boots, Safari/Google and one off/on reconnect pass. Automatic association and lease-renewal/endurance testing remain pending. IPv6 Internet not established. See [WIFI-STATUS.md](WIFI-STATUS.md). |

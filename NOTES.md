@@ -5,6 +5,30 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff: image 0345 visuals pass; checkpoint before further work (2026-11-19)
+
+The user confirms Spotlight, the settled home-screen Search pill and folders
+look good on image 0345. They requested no more audio testing tonight and a
+commit/push before further work. No 0345 audio initialization, enable, playback
+or capture test has been sent. Do not run the prepared setup scripts tonight.
+Audio was last confirmed clear and quicker, with working navigation, on 0344.
+Its enabled service did not survive the subsequent reboot; normal app audio on
+0345 still requires the once-only muted setup and enable at a later session.
+
+The other icons still appeared late on 0344. That issue remains open; 0345
+contains a switcher wallpaper source-view cache, not a proven animation fix.
+The 0344 trace captured 139 single-canvas present attempts (mask 1, surfaces
+2/4); it did not establish an upstream animation cause or an FPS improvement.
+No new trace or performance comparison has been collected on 0345. The older
+Spotlight status-bar strip has not been separately rechecked.
+
+Current image 0345: UI source 393058d, kernel patch 0342/source 7041a59.
+Image SHA256: 5abd9cfbfe7aef83b9ea68dbd14e7a4eebc2b8b09f1caa66e62a42532f5e9415.
+Local evidence and manifests: performance/batch345. Current UI and kernel
+sources, tests and documentation are included in this checkpoint. Build outputs,
+recordings, firmware, Apple artifacts and SSH identities remain outside Git.
+Resume remaining animation/performance work only after this checkpoint push.
+
 ## Active handoff:0345 temporary boot accepted; fresh UI check pending (2026-11-19)
 
 USER confirms0344iconsSTILLappearLATE; noanimationimprovementclaim. ThenUSER
