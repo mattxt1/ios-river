@@ -157,8 +157,10 @@ int main(){
  fb.setPanelLevel(2);assert(transfers==1); /* actual desired value wins over stale worker argument */
  fb.fPowerOff=true;fb.setPanelLevel(0x999);assert(last_level==0&&fb.fBlSent==0);
  fb.fBlLevel=0x123;AppleCLCD::blWork(&fb,nullptr);assert(last_level==0&&transfers==2);
- fb.fPowerOff=false;transfer_ok=false;AppleCLCD::blWork(&fb,nullptr);assert(last_level==0x123&&fb.fBlSent==0);
+ fb.fPowerOff=false;transfer_ok=false;AppleCLCD::blWork(&fb,nullptr);assert(last_level==0x123&&fb.fBlSent==UINT_MAX);
  transfer_ok=true;AppleCLCD::blWork(&fb,nullptr);assert(fb.fBlSent==0x123&&transfers==4);
+ fb.fBlLevel=0x234;transfer_ok=false;AppleCLCD::blWork(&fb,nullptr);assert(fb.fBlSent==UINT_MAX&&transfers==5);
+ fb.fBlLevel=0x123;transfer_ok=true;AppleCLCD::blWork(&fb,nullptr);assert(last_level==0x123&&fb.fBlSent==0x123&&transfers==6);
  for(uint64_t v: {0ULL,1ULL,250ULL<<16,500ULL<<16,UINT64_MAX}){
   OSNumber n(v);OSDictionary d;d.n=&n;assert(fb.setProperties(&d)==kIOReturnSuccess);
   uint64_t bounded=v>(500u<<16)?(500u<<16):v;
