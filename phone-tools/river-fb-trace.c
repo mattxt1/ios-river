@@ -13,12 +13,19 @@ int main(int argc,char **argv) {
  if(argc!=2 || (strcmp(argv[1],"--start") && strcmp(argv[1],"--stop") && strcmp(argv[1],"--read"))) {
   fprintf(stderr,"usage: river-fb-trace --start|--stop|--read\n");return 2;
  }
- io_service_t service=IOServiceGetMatchingService(kIOMasterPortDefault,IOServiceMatching("AppleCLCD"));
+ io_service_t service=IOServiceGetMatchingService(MACH_PORT_NULL,IOServiceMatching("AppleCLCD"));
  io_connect_t connection=0;if(!service){fprintf(stderr,"AppleCLCD unavailable\n");return 1;}
  kern_return_t kr=IOServiceOpen(service,mach_task_self(),0,&connection);IOObjectRelease(service);
  if(kr){fprintf(stderr,"open: 0x%x\n",kr);return 1;}
  if(strcmp(argv[1],"--read")) {
   uint64_t command=!strcmp(argv[1],"--start");
+  uint64_t first=0;struct river_fb_trace_packet probe={0};size_t probeSize=sizeof(probe);
+  kr=IOConnectCallMethod(connection,RIVER_FB_TRACE_READ,&first,1,NULL,0,NULL,NULL,&probe,&probeSize);
+  if((kr==kIOReturnBusy && command) || (kr!=kIOReturnBusy &&
+      (kr || probeSize!=sizeof(probe) || probe.version!=1))) {
+   fprintf(stderr,"trace already running or compatible kernel unavailable (0x%x)\n",kr);
+   IOServiceClose(connection);return 1;
+  }
   kr=IOConnectCallScalarMethod(connection,RIVER_FB_TRACE_CONTROL,&command,1,NULL,NULL);
   if(!kr)printf("trace %s\n",command?"started (30s/1200 attempts maximum)":"stopped");
  } else {
