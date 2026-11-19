@@ -5,6 +5,16 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:339 temporary boot accepted; home check pending (2026-11-18)
+
+Userconfirmedfastboot; exactimageSHA/productriver/serialZY226HM8QB verified.
+fastbootbootexit0/send0.620s/boot0.216s. No flash. Asyncrequestforfreshhome,
+Settingsnavigation/searchkeyboard/WiFi pending; notyetclaimsuccessfulUIboot.
+No339audioinit/controlsent. Candidategraphicsstaged+hashverified, original
+unchanged (previousentry). Localperformance/batch339/temporary-boot-0339.json.
+Nextreadonlyfreshownership/helper/clockpreflight, once-onlymutedAudioinitwith
+new339evidencenames, thenhealthyUI/scrolling/CPUandnormalaudio checks.
+
 ## Active handoff:339 staged and verified; awaiting fastboot (2026-11-18)
 
 Userconfirmed338preparationhome responsive/WiFi. Installedseparate20,074,720B
