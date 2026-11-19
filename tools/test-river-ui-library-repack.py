@@ -8,7 +8,7 @@ path = Path(__file__).with_name('river-repack-audio-diagnostics.py')
 tree = ast.parse(path.read_text())
 ns = {'struct': struct}
 exec(compile(ast.Module(body=[n for n in tree.body if isinstance(n, ast.FunctionDef)
-     and n.name in ('require', 'replace_helper')], type_ignores=[]), str(path), 'exec'), ns)
+     and n.name in ('require', 'replace_helper', 'select_native_feedback')], type_ignores=[]), str(path), 'exec'), ns)
 
 
 def pack(entries):
@@ -46,3 +46,11 @@ except ValueError:
 else:
     raise AssertionError('Duplicate UI library accepted')
 print('PASS actual UI library add/replace/rollback, duplicate rejection and unrelated file/metadata preservation')
+select=ns['select_native_feedback']
+assert select(b'rd=emmc0s64')==b'rd=emmc0s64 riverfeedback=1'
+assert len(select(b'x'*583))==599
+for invalid in [b'riverfeedback=0',b'rd=emmc0s64 riverfeedback=1',b'x'*592]:
+    try:select(invalid)
+    except ValueError:pass
+    else:raise AssertionError('Duplicate/overlength feedback command line accepted')
+print('PASS native feedback opt-in preserves existing command line and rejects duplicates/608-byte overflow')

@@ -28,6 +28,11 @@ xcrun --sdk iphoneos clang -arch arm64 -mios-version-min=16.0 -O2 -Wall -Wextra 
 codesign -f -s - "$out/libRiverHardware.dylib"
 codesign --verify --strict "$out/libRiverHardware.dylib"
 shasum -a 256 "$out/libRiverHardware.dylib"
+xcrun --sdk iphoneos clang -arch arm64 -mios-version-min=16.0 -O2 -Wall -Wextra \
+ -Wno-deprecated-declarations -fobjc-arc -framework Foundation -framework UIKit \
+ -framework CoreHaptics -framework IOKit "$repo/phone-tools/river-hardware-check.m" -o "$out/river-hardware-check"
+codesign -f -s - "$out/river-hardware-check"
+codesign --verify --strict "$out/river-hardware-check"
 if [ "${2:-}" = --with-ui ]; then
  xcrun --sdk iphoneos clang -arch arm64 -mios-version-min=16.0 -O2 -Wall \
   -Wno-deprecated-declarations -c "$repo/phone-tools/cgprobe.c" -o "$out/cgprobe.o"

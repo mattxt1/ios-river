@@ -5,6 +5,33 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff: battery/backlight/native feedback candidate (2026-11-19)
+
+Branch `codex/power-backlight-haptics` starts from the locally verified river
+checkpoint3e868f2. Patches0346–0348 add read-only charger validity/publication,
+DSI backlight ordering/retry eligibility and an opt-in bounded AW8691 native
+feedback endpoint. Combined SpringBoard UI/bridge library preserves0345 UI
+source. UIKit generator coverage is a candidate, not full system/Core Haptics
+integration; charge enable/policy and learned SOC remain unfinished.
+
+ASan/UBSan host observer/poll, backlight, endpoint/play and actual ObjC hook
+checks PASS. Legacy battery regression and UI/repack tests PASS. iOS16 arm64
+bridge, combined UI library and status helper compile/signature PASS.
+Native kernel sourceec9445d built successfully in an isolated copy of the
+verified0342 job. Initial dSYM stderr filter was denied by the sandbox;
+executed the same dsymutil directly, renamed DWARF and resumed successfully.
+Kernel SHAb3c3a3efd29bd77b34915884c54fcd2ff448500e5bfbcde691f88feebcff5de7.
+Manifest: current workspace work/build/river-ec9445d13c1a-9MnR0q/native-build-complete.json.
+
+Phone remains LAST KNOWN0345. Read-only USB SSH attempt was denied by host
+session permissions (Operation not permitted); no device action succeeded,
+no reboot/flash/hot replace and no audio init/enable/test. Prepare/verify the
+0348 temporary image against exact0345 rollback before asking for fastboot.
+New candidate requires healthy-home confirmation then read-only reporting,
+brightness and cued native feedback checks. See HARDWARE.md. Keep artifacts,
+firmware, SSH credentials and captures outside Git. Current checkout is in
+this task's work/ios-river, not the earlier Nov12 checkout.
+
 ## Active handoff: image 0345 visuals pass; checkpoint before further work (2026-11-19)
 
 The user confirms Spotlight, the settled home-screen Search pill and folders

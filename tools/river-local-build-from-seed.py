@@ -72,6 +72,17 @@ for path in changed:
     objects=list((build/'build/xnu.obj').rglob(Path(path).stem+extension))
     for obj in objects:
         obj.unlink()
+# The host sandbox cannot open bash process-substitution descriptors. Keep
+# the exact dsymutil invocation and expose its diagnostics directly instead
+# of filtering stderr through /dev/fd. This changes no kernel implementation.
+makeinc=build/'xnu/makedefs/MakeInc.kernel'
+make_text=makeinc.read_text()
+filtered='\t$(_v)$(BASH) -c "$(DSYMUTIL) $(DSYMUTIL_FLAGS) $< -o $@ $(_vstdout) 2> >(grep -v \'^warning:.*could not find object file symbol for symbol\' 1>&2)"'
+direct='\t$(_v)$(DSYMUTIL) $(DSYMUTIL_FLAGS) $< -o $@ $(_vstdout)'
+if make_text.count(filtered)==1:
+    makeinc.write_text(make_text.replace(filtered,direct,1))
+elif make_text.count(direct)!=1:
+    raise SystemExit('Unexpected dsymutil recipe; refusing a guessed build adaptation')
 for name in ('clang','clang++'):
     compiler=subprocess.check_output(['xcrun','-find',name],text=True).strip()
     wrapper=job/'ccache-bin'/name
@@ -93,6 +104,8 @@ manifest={
     'new_patches':{p.name:digest(p) for p in after[len(before_names):]},
     'changed_source_sha256':{p:digest(build/'xnu'/p) for p in sorted(changed)},
     'build_log':str(log),'exit':result.returncode,
+    'dsymutil_direct_diagnostics':True,
+    'makeinc_kernel_sha256':digest(makeinc),
 }
 kernel=build/'fakeroot/System/Library/Kernels/kernel.development.sweet'
 if result.returncode==0 and kernel.is_file():

@@ -1,5 +1,11 @@
 # Working on ios-river
 
+- Latest task: battery/backlight/native-feedback candidate0348. Phone remains
+  last-known0345; SSH denied by session permissions, no device controls or
+  audio setup/test succeeded. Read the newest NOTES.md and HARDWARE.md.
+  Full Core Haptics, charging enable/policy and calibrated SOC remain open.
+  Work on branch codex/power-backlight-haptics in the Nov19 task checkout.
+
 - Current image 0345: user confirms Spotlight, settled Search pill and folders
   look good. No more audio testing tonight (November 19); do not initialize or
   enable audio on this boot tonight. Latest clear/quicker playback/navigation
