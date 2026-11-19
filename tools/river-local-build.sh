@@ -20,6 +20,10 @@ job=$(mktemp -d "$RIVER_LOCAL_BUILD_ROOT/river-${rev:0:12}-XXXXXX")
 printf 'Source commit: %s\nBuild directory: %s\n' "$rev" "$job"
 mkdir -p "$job/input" "$job/bin" "$job/ccache-bin"
 git -C "$repo" archive "$rev" xnu/patches | tar -xf - -C "$job/input"
+if [ -n "${RIVER_LOCAL_BUILD_SEED:-}" ]; then
+ python3 "$repo/tools/river-local-build-from-seed.py" "$RIVER_LOCAL_BUILD_SEED" "$job" "$rev"
+ exit
+fi
 git init -q "$job/dxb"
 git -C "$job/dxb" fetch -q --depth 1 https://github.com/blacktop/darwin-xnu-build.git 663906528d1cd5ea8fde7de6f16de73db9511549
 git -C "$job/dxb" checkout -q --detach FETCH_HEAD

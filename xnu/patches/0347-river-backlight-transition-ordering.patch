@@ -1,0 +1,73 @@
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -874,9 +874,24 @@
+ void
+ AppleCLCD::setPanelLevel(uint32_t level)
+ {
+-	uint8_t cmd[3] = { 0x51, (uint8_t)(level >> 8), (uint8_t)level };   /* MSB first */
+ 	IOLockLock(fBlLock);
++#if defined(RIVER)
++	/* A queued brightness task may run after a sleep request. Re-read the
++	 * desired state INSIDE the DSI lock, so it cannot relight a sleeping panel
++	 * or overwrite a newer slider/wake value. Lock order: fBlLock -> fLock. */
++	IOLockLock(fLock);
++	level = fPowerOff ? 0 : fBlLevel;
++	bool unchanged = level == fBlSent;
++	IOLockUnlock(fLock);
++	if (unchanged) { IOLockUnlock(fBlLock); return; }
++#endif
++	uint8_t cmd[3] = { 0x51, (uint8_t)(level >> 8), (uint8_t)level };
+ 	bool done = dsiDcsLong(cmd, sizeof(cmd));
++#if defined(RIVER)
++	IOLockLock(fLock);
++	if (done) fBlSent = level; /* failed DMA must remain eligible for retry */
++	IOLockUnlock(fLock);
++#endif
+ 	IOLockUnlock(fBlLock);
+ 	static uint32_t logs;
+ 	if (logs++ < 8 || !done) {
+@@ -899,7 +914,10 @@
+ 		return kIOReturnUnsupported;
+ 	}
+ 	uint64_t v = n->unsigned64BitValue();
++	const uint64_t maximum = (uint64_t)SWEET_FB_MAX_NITS << 16;
++	if (v > maximum) v = maximum; /* clamp before multiply/truncation */
+ 	setProperty("IOMFBBrightnessLevel", v, 32);
++	setProperty("IOMFBLinearBrightnessLevel", v, 32);
+ 	/* 0..SWEET_FB_MAX_NITS nits -> DBV 1..max_bl (river 12-bit Tianma panel 1..0xfff) */
+ #if defined(RIVER)
+ 	const uint64_t max_bl = 0xfffull;
+@@ -935,10 +953,15 @@
+ 	uint32_t level = fb->fBlLevel;
+ 	bool off = fb->fPowerOff;
+ 	IOLockUnlock(fb->fLock);
++#if defined(RIVER)
++	(void)off;
++	fb->setPanelLevel(level);
++#else
+ 	if (!off && level != fb->fBlSent) {
+ 		fb->fBlSent = level;
+ 		fb->setPanelLevel(level);
+ 	}
++#endif
+ }
+ 
+ static void
+@@ -1581,6 +1604,8 @@
+ 			fDsi = NULL;
+ 		}
+ 		if (fDsi != NULL) {
++			setProperty("RiverHardwareBacklight", true);
++			setProperty("RiverBacklightMaxNits", (unsigned long long)SWEET_FB_MAX_NITS, 32);
+ 			setProperty("IOMFBBrightnessLevel", (unsigned long long)(300u << 16), 32);
+ 			setProperty("IOMFBLinearBrightnessLevel", (unsigned long long)(300u << 16), 32);
+ 			/*
+@@ -1934,7 +1959,6 @@
+ 			if (changed && fFB->fDsi != NULL) {
+ #if defined(RIVER)
+ 				/* river (bl_ctrl_dcs): backlight to 0 / back, panel stays in video mode */
+-				fFB->fBlSent = off ? 0 : level;
+ 				fFB->setPanelLevel(off ? 0 : level);
+ #else
+ 				if (off) {
