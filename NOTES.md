@@ -7,6 +7,12 @@
 
 ## Active handoff:0349 boot authorized; host device access blocked (2026-11-19)
 
+User is starting a new chat because permission controls are absent here. Read
+RESUME-0349.md for exact checkout, images/hashes, state, authorizations and next
+steps. AGENTS.md points new agents to it. No further device attempt was made
+while preparing the handoff;0349remains unbooted. Resume the existing checkout
+on this Mac so the unpushed commits and private candidate files are available.
+
 Follow-up: user explicitly refuses manual boot and requires normal device work
 through this chat. Do not redirect them to execute the boot themselves. Replug
 is visible to macOS IOUSB, but fastboot still lists nothing. Additional diagnosis:
@@ -32,7 +38,8 @@ New tools/river-hardware-session.py provides pinned preflight, temporary boot,
 read-only baseline capture and optional wait-stack capture. Simulated absent/
 wrong device, wrong product, bad hash, boot-only command and failure guards pass.
 Local evidence outputs/hardware/device-0349, latest boot attempt ends inaccessible.
-User can run boot from a permitted Mac Terminal; after healthy home/navigation/
+The manual-Terminal suggestion was superseded by the user's refusal: the next
+agent must run boot directly in a permitted session. After healthy home/navigation/
 keyboard confirmation run collect --home-ready. Captures remain outside Git.
 Actual battery/brightness/haptics validation and freeze baseline remain pending;
 keep audio off under the prior instruction. Do not retry boot blindly after an

@@ -1,5 +1,10 @@
 # Working on ios-river
 
+- New-chat continuation: read `RESUME-0349.md` first. The user is moving chats
+  because device access is blocked and no permission control appears here.
+  They want the agent to boot/test0349 directly; do not ask them to boot manually.
+  Existing boot/testing authorization persists; verify access and actual state.
+
 - Latest task: battery/backlight/native-feedback candidate0349. Phone remains
   last-known0345; SSH denied by session permissions, no device controls or
   audio setup/test succeeded. Read the newest NOTES.md and HARDWARE.md.
