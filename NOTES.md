@@ -5,6 +5,20 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0344 temporary boot accepted; fresh home check pending (2026-11-19)
+
+USERreadyfastboot. Exact0344candidate+full343rollbackSHA/productriver/serial
+ZY226HM8QB verified. Temporaryfastbootbootexit0/send0.620s/boot0.216s; NOflash.
+ImageSHA3248412de8e0cc65736be167188029bdcf6d167f5df80b722278955e2e4f0086.
+Kernel0342/source7041a59, UI343 preserved. Asyncuserfreshhome/WiFi/nav/keyboard/
+folders/Searchappearance pending. No344audioinit ortracecontrol sent. Prepared
+batch344/preflight.py andprepare-audio.py NOTRUN; new344evidence names. Once
+healthyhome confirmed: readonlyfreshchecks+helperhashes, mutedsetupONCE and
+--ios-enableONCE. LeavehealthyserviceON. Thencombinedscroll/cachecounter and
+cuedcompositiontrace duringappclosing, existingaudio playback/keyboardcheck.
+No performance, closing-animation or blackstatusbarstrip fix claim. Current
+phoneis0344, NOT343. Evidencebatch344/temporary-boot-0344.json. Fullhandoffbelow.
+
 ## Active handoff:0344 candidate VERIFIED; awaiting fastboot (2026-11-19)
 
 Native kernel0342exit0/source7041a59 SHA
