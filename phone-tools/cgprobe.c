@@ -449,8 +449,29 @@ static void probe_search_pill_layout(id self, SEL cmd)
 static void (*original_folder_bg_layout)(id, SEL);
 static void probe_folder_bg_layout(id self, SEL cmd)
 {
- /* Native material and animated corner geometry must have one owner. */
- if(original_folder_bg_layout) original_folder_bg_layout(self,cmd);
+ if(original_folder_bg_layout)original_folder_bg_layout(self,cmd);
+ if(!strstr(object_getClassName(self),"FolderBackgroundView"))return;
+ CGRect bounds=((CGRect(*)(id,SEL))objc_msgSend)(self,sel_registerName("bounds"));
+ if(bounds.size.width<10 || bounds.size.height<10)return;
+ id layer=((id(*)(id,SEL))objc_msgSend)(self,sel_registerName("layer"));
+ if(!layer)return;
+ /* One fallback surface: never paint FloatyFolder's arbitrary children.
+  * Preserve native visibility/opacity and any animated corner geometry. */
+ ((void(*)(id,SEL,id))objc_msgSend)(layer,sel_registerName("setFilters:"),nil);
+ CGFloat radius=((CGFloat(*)(id,SEL))objc_msgSend)(layer,sel_registerName("cornerRadius"));
+ if(radius<=0)((void(*)(id,SEL,CGFloat))objc_msgSend)(layer,sel_registerName("setCornerRadius:"),bounds.size.width<120?14.0:30.0);
+ ((void(*)(id,SEL,BOOL))objc_msgSend)(layer,sel_registerName("setMasksToBounds:"),YES);
+ CGColorSpaceRef space=CGColorSpaceCreateDeviceRGB();
+ CGFloat values[4]={1,1,1,bounds.size.width<120?0.32:0.38};
+ CGColorRef color=CGColorCreate(space,values);
+ ((void(*)(id,SEL,CGColorRef))objc_msgSend)(layer,sel_registerName("setBackgroundColor:"),color);
+ CGColorRelease(color);CGColorSpaceRelease(space);
+ const char *names[]={"_tintView","_blurView"};
+ for(unsigned i=0;i<2;i++) {
+  Ivar iv=class_getInstanceVariable(object_getClass(self),names[i]);
+  id old=iv?object_getIvar(self,iv):nil;
+  if(old)((void(*)(id,SEL,BOOL))objc_msgSend)(old,sel_registerName("setHidden:"),YES);
+ }
 }
 
 static void (*original_floaty_folder_layout)(id, SEL);
@@ -463,8 +484,17 @@ static void probe_floaty_folder_layout(id self, SEL cmd)
 static void (*original_folder_icon_img_layout)(id, SEL);
 static void probe_folder_icon_img_layout(id self, SEL cmd)
 {
- /* Native material and animated corner geometry must have one owner. */
- if(original_folder_icon_img_layout) original_folder_icon_img_layout(self,cmd);
+	if (original_folder_icon_img_layout) original_folder_icon_img_layout(self, cmd);
+	if (strcmp(object_getClassName(self), "SBFolderIconImageView") != 0) return;
+	/* Preserve the native preview grid; replace only the material/solid plate. */
+	const char *names[] = {"_backgroundView", "_solidColorBackgroundView"};
+	for (unsigned i = 0; i < 2; i++) {
+		Ivar iv = class_getInstanceVariable(object_getClass(self), names[i]);
+		id bg = iv ? object_getIvar(self, iv) : nil;
+		if (bg && !((BOOL (*)(id, SEL))objc_msgSend)(bg, sel_registerName("isHidden")))
+			((void (*)(id, SEL, BOOL))objc_msgSend)(bg, sel_registerName("setHidden:"), YES);
+	}
+	style_plate(self, 14, 0.35);
 }
 
 static void (*original_search_backdrop_layout)(id, SEL);
@@ -1516,12 +1546,19 @@ static void ui_trace_view(id v,unsigned depth)
   id presentation=l?((id(*)(id,SEL))objc_msgSend)(l,sel_registerName("presentationLayer")):nil;
   id keys=l?((id(*)(id,SEL))objc_msgSend)(l,sel_registerName("animationKeys")):nil;
   unsigned long animations=keys?((unsigned long(*)(id,SEL))objc_msgSend)(keys,sel_registerName("count")):0;
-  ui_trace_line("depth=%u class=%s address=%p frame=%.1f,%.1f,%.1f,%.1f hidden=%d alpha=%.3f layer_opacity=%.3f presentation_opacity=%.3f animations=%lu\n",
+  CGRect pf=presentation?((CGRect(*)(id,SEL))objc_msgSend)(presentation,sel_registerName("frame")):CGRectZero;
+  CGColorRef background=l?((CGColorRef(*)(id,SEL))objc_msgSend)(l,sel_registerName("backgroundColor")):NULL;
+  ui_trace_line("depth=%u class=%s address=%p frame=%.1f,%.1f,%.1f,%.1f hidden=%d alpha=%.3f layer_opacity=%.3f presentation_opacity=%.3f animations=%lu presentation_frame=%.1f,%.1f,%.1f,%.1f corner_radius=%.3f background_alpha=%.3f opaque=%d contents=%d\n",
    depth,name,v,f.origin.x,f.origin.y,f.size.width,f.size.height,
    ((BOOL(*)(id,SEL))objc_msgSend)(v,sel_registerName("isHidden")),
    ((CGFloat(*)(id,SEL))objc_msgSend)(v,sel_registerName("alpha")),
    l?((float(*)(id,SEL))objc_msgSend)(l,sel_registerName("opacity")):0,
-   presentation?((float(*)(id,SEL))objc_msgSend)(presentation,sel_registerName("opacity")):-1,animations);
+   presentation?((float(*)(id,SEL))objc_msgSend)(presentation,sel_registerName("opacity")):-1,animations,
+   pf.origin.x,pf.origin.y,pf.size.width,pf.size.height,
+   l?((CGFloat(*)(id,SEL))objc_msgSend)(l,sel_registerName("cornerRadius")):0,
+   background?CGColorGetAlpha(background):0,
+   ((BOOL(*)(id,SEL))objc_msgSend)(v,sel_registerName("isOpaque")),
+   l&&((id(*)(id,SEL))objc_msgSend)(l,sel_registerName("contents"))!=nil);
  }
  id children=((id(*)(id,SEL))objc_msgSend)(v,sel_registerName("subviews"));
  unsigned long n=children?((unsigned long(*)(id,SEL))objc_msgSend)(children,sel_registerName("count")):0;

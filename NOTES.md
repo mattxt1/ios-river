@@ -5,6 +5,35 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0342 Search PASS/folder regression; audio ON awaiting listening (2026-11-18)
+
+USER342responsive/SearchinSpotlightlooksRIGHT; closed+openfoldersFULLYtransparent.
+Removingallfolderfallbackwasregression. KeepSearchrestoration. CurrentUSBSSH7.2
+WORKS; priorWiFi1.232timedoutBEFOREcontrols. PreflightUSBnewnamesPASSEDfresh
+ownership/UI19f688.../rendererp0340/helperhashes; fixedclockmarkerretained.
+MutedsetupONCEcompletedcodecaddressverified/uncertain0. ios-enableONCEpassed,
+normalserviceON/healthy/queue262144. No activeappaudioyet(latestcachedcounters0).
+DoNOTrepeatsetup/disablehealthyservice. PendingUSERlatency/VoiceMemoclear/navtest
+onCURRENT342; mustgetresultbeforeanotherboot. NoUIrestart/hotlibdeployment.
+
+FoldercorrectionPREPAREDphone-tools/cgprobe.c, localbatch343. Restoresclosedicon
+knownbitmapplateonly; expandedSBFolderBackgroundViewpaintsONEownlayer, keeps
+nativepositivecornerradius/opacity/visibility, hidesonlyoldnonworkingtint/blur
+children. FloatyFolderstillnative(noarbitrarychildpainting/multipleplates).
+Searchpass-throughkept. ActualfolderhookObjectiveCmodeltestPASS(nativealpha/
+hidden/radiuspreserved,invalidsize/classrefused), iOSnativecompile/signaturePASS.
+Geometrytraceaddsmodel/presentationframe,corner/backgroundalpha/opaque/contents
+BOOL(no text/contentsvalues). DefaultOFF; current342hasoldertracewithoutnewfields.
+No343imagepackagedyet; no newkernelrequiredif342SPIchangevalidates.
+
+Needonceuseraudiofeedback: readonlystartupstages/cleanup andgeometrytrace for
+appclosinginSAME342bootbeforefolderrepairboot. CueuserAlreadyopeningclosing
+Settingsrepeat20s thenhostrput/tmp/river_ui_traceflag(emptyfile,mode600), consume
+2spoll/16snapshots100ms, collectscopedprefixglobfiles. DiagnoseUIstatevsGPUdelay
+beforenewanimationfix. Don'tcalltraceFPSmeasurement. Maincurrenttestpending.
+Localperformance/CURRENT_TASK.mdhandsofffullpaths/hashes. Userfolderregression
+acknowledgedhonestly; old341candidatefullkernel/UIrollbackavailableifneeded.
+
 ## Active handoff:0342 temporary boot accepted; fresh UI check pending (2026-11-18)
 
 UserconfirmedFASTBOOT; exact342image+full341rollbackhashes/productriver/serial
