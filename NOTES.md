@@ -5,6 +5,27 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:339 kernel/renderer builds PASS; preparing combined boot (2026-11-18)
+
+Kernel339 source7782c372 nativebuildexit0 SHA256
+ db2ead839ac6d0861f390e5a1baf467766a33c7f0f80b5feb5b60ce7b25eac89.
+Newrenderer fullMesa26.2.5 localrebuildPASS, actualclear/generateddispatch
+checksPASS. Trace-onlyGLqueries gated; per-slotprofilingoptinSWEETGL_PROFILE=1;
+coarseframestats/fences/surfaceownershipretained. Fullsourceexport/provenance
+inmesa/candidates/river-0339*. Originalrootgraphicslibrarymuststayuntouched.
+Newrepacker selectsunique /usr/local/lib/sweetgl-p0339.dylib for339only;
+actualselectionambiguity/overflow/unrelatedargument testsPASS.
+
+UserreportedphonealreadyFASTBOOT, soUSB/WiFiSSHtimedout; nofilewasstaged.
+Temporarybootofexactverified338image performedafterproductriver/serialcheck
+(onlyfastbootboot, noflash), forfilestaging. Awaitfreshresponsivehome/WiFi.
+Noaudioinitialization/controlsentthisfreshboot. Combinedimagecannotcarry20MB
+rendererwithin38MBlimit; stageuniquecandidate+verifyfullremoteSHA256 andoldlib
+before/afterSHA, thenuserfastbootfor339. AllperformancetestingonONE339boot.
+DoNOTboot339untilrenderer-stagingverified. NoFPSgainclaimyet. Original338
+stalledsessionnotbaseline; UIrecoverywasconfirmedbeforeuserwentfastboot.
+Localperformance/CURRENT_TASK.md andbatch339 holdartifacts/evidence/nextsteps.
+
 ## Active handoff:339performance candidate prepared; not built/deployed (2026-11-18)
 
 Current338audioleftON/healthy; usercouldnotexitVoiceMemos/keyboardmissing.

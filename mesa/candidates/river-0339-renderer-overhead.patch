@@ -1,0 +1,1115 @@
+--- a/src/gallium/drivers/freedreno/sweetgl/eagl.c
++++ b/src/gallium/drivers/freedreno/sweetgl/eagl.c
+@@ -1331,14 +1331,17 @@
+ sgl_Clear(void *rctx, GLbitfield mask)
+ {
+ 	SGL_CUR(rctx);
+-	GLint fb = 0;
+-	glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fb);
+-	GLfloat cc[4] = {0};
+-	GLint sc[4] = {0};
+-	glGetFloatv(GL_COLOR_CLEAR_VALUE, cc);
+-	glGetIntegerv(GL_SCISSOR_BOX, sc);
+-	WTRACE("Clear fb %d mask %#x color %.3g,%.3g,%.3g,%.3g scissor %d %d,%d %dx%d", fb, mask, cc[0], cc[1], cc[2], cc[3],
+-	    glIsEnabled(GL_SCISSOR_TEST), sc[0], sc[1], sc[2], sc[3]);
++	/* State reads below serve tracing only; keep them off the normal path. */
++	if (trace_left > 0 && win_left > 0) {
++		GLint fb = 0;
++		glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fb);
++		GLfloat cc[4] = {0};
++		GLint sc[4] = {0};
++		glGetFloatv(GL_COLOR_CLEAR_VALUE, cc);
++		glGetIntegerv(GL_SCISSOR_BOX, sc);
++		WTRACE("Clear fb %d mask %#x color %.3g,%.3g,%.3g,%.3g scissor %d %d,%d %dx%d", fb, mask, cc[0], cc[1], cc[2], cc[3],
++		    glIsEnabled(GL_SCISSOR_TEST), sc[0], sc[1], sc[2], sc[3]);
++	}
+ 	glClear(mask);
+ 	SGL_POST(10);
+ }
+@@ -1409,6 +1412,9 @@
+ static _Atomic uint64_t prof_slot_t[SGL_SLOTS];
+ static _Atomic uint32_t prof_slot_n[SGL_SLOTS];
+ static _Atomic uint64_t prof_surf_t, prof_surf_n;
++
++/* Opt in before process launch; coarse frame timing remains enabled. */
++int sgl_profile_enabled;
+ 
+ void
+ sgl_prof_add(int slot, uint64_t t0)
+@@ -2473,6 +2479,8 @@
+ void
+ sweetgl_eagl_install(void)
+ {
++	const char *p = getenv("SWEETGL_PROFILE");
++	sgl_profile_enabled = p && p[0] == '1';
+ 	const char *e = getenv("SWEETGL_GLERR");
+ 	sgl_check_errors = e && e[0] == '1';
+ 	const char *t = getenv("SWEETGL_TRACE");
+--- a/src/gallium/drivers/freedreno/sweetgl/eagl.h
++++ b/src/gallium/drivers/freedreno/sweetgl/eagl.h
+@@ -28,7 +28,8 @@
+ 
+ void sgl_unsupported(int slot, const char *name);
+ 
+-/* per-slot CPU profile (river): time from entry to return of each GLI call */
++/* SWEETGL_PROFILE=1: opt-in per-slot timing; set once before dispatch starts. */
++extern int sgl_profile_enabled;
+ void sgl_prof_add(int slot, uint64_t t0);
+ 
+ extern void *const sgl_dispatch[SGL_SLOTS];
+--- a/src/gallium/drivers/freedreno/sweetgl/dispatch.c
++++ b/src/gallium/drivers/freedreno/sweetgl/dispatch.c
+@@ -2,21 +2,21 @@
+ #include "eagl.h"
+ 
+ static long unsupported_0(void) { sgl_unsupported(0, "?"); return 0; }
+-static void w_1(void *rctx, GLenum func, GLclampf ref) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glAlphaFunc(func, ref); sgl_prof_add(1, t0_); SGL_POST(1); }
++static void w_1(void *rctx, GLenum func, GLclampf ref) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glAlphaFunc(func, ref); if (sgl_profile_enabled) sgl_prof_add(1, t0_); SGL_POST(1); }
+ static long unsupported_2(void) { sgl_unsupported(2, "?"); return 0; }
+ static long unsupported_3(void) { sgl_unsupported(3, "?"); return 0; }
+ static long unsupported_4(void) { sgl_unsupported(4, "?"); return 0; }
+-static void ps_5(void *rctx, GLenum target, GLuint texture) { uint64_t t0_ = mach_absolute_time(); sgl_BindTexture(rctx, target, texture); sgl_prof_add(5, t0_); }
++static void ps_5(void *rctx, GLenum target, GLuint texture) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; sgl_BindTexture(rctx, target, texture); if (sgl_profile_enabled) sgl_prof_add(5, t0_); }
+ static long unsupported_6(void) { sgl_unsupported(6, "?"); return 0; }
+-static void w_7(void *rctx, GLenum sfactor, GLenum dfactor) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glBlendFunc(sfactor, dfactor); sgl_prof_add(7, t0_); SGL_POST(7); }
++static void w_7(void *rctx, GLenum sfactor, GLenum dfactor) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glBlendFunc(sfactor, dfactor); if (sgl_profile_enabled) sgl_prof_add(7, t0_); SGL_POST(7); }
+ static long unsupported_8(void) { sgl_unsupported(8, "?"); return 0; }
+ static long unsupported_9(void) { sgl_unsupported(9, "?"); return 0; }
+-static void ps_10(void *rctx, GLbitfield mask) { uint64_t t0_ = mach_absolute_time(); sgl_Clear(rctx, mask); sgl_prof_add(10, t0_); }
++static void ps_10(void *rctx, GLbitfield mask) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; sgl_Clear(rctx, mask); if (sgl_profile_enabled) sgl_prof_add(10, t0_); }
+ static long unsupported_11(void) { sgl_unsupported(11, "?"); return 0; }
+-static void w_12(void *rctx, GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glClearColor(red, green, blue, alpha); sgl_prof_add(12, t0_); SGL_POST(12); }
++static void w_12(void *rctx, GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glClearColor(red, green, blue, alpha); if (sgl_profile_enabled) sgl_prof_add(12, t0_); SGL_POST(12); }
+ static long unsupported_13(void) { sgl_unsupported(13, "?"); return 0; }
+ static long unsupported_14(void) { sgl_unsupported(14, "?"); return 0; }
+-static void w_15(void *rctx, GLint s) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glClearStencil(s); sgl_prof_add(15, t0_); SGL_POST(15); }
++static void w_15(void *rctx, GLint s) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glClearStencil(s); if (sgl_profile_enabled) sgl_prof_add(15, t0_); SGL_POST(15); }
+ static long unsupported_16(void) { sgl_unsupported(16, "?"); return 0; }
+ static long unsupported_17(void) { sgl_unsupported(17, "?"); return 0; }
+ static long unsupported_18(void) { sgl_unsupported(18, "?"); return 0; }
+@@ -38,43 +38,43 @@
+ static long unsupported_34(void) { sgl_unsupported(34, "?"); return 0; }
+ static long unsupported_35(void) { sgl_unsupported(35, "?"); return 0; }
+ static long unsupported_36(void) { sgl_unsupported(36, "?"); return 0; }
+-static void w_37(void *rctx, GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glColor4f(red, green, blue, alpha); sgl_prof_add(37, t0_); SGL_POST(37); }
++static void w_37(void *rctx, GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glColor4f(red, green, blue, alpha); if (sgl_profile_enabled) sgl_prof_add(37, t0_); SGL_POST(37); }
+ static long unsupported_38(void) { sgl_unsupported(38, "?"); return 0; }
+ static long unsupported_39(void) { sgl_unsupported(39, "?"); return 0; }
+ static long unsupported_40(void) { sgl_unsupported(40, "?"); return 0; }
+ static long unsupported_41(void) { sgl_unsupported(41, "?"); return 0; }
+ static long unsupported_42(void) { sgl_unsupported(42, "?"); return 0; }
+-static void w_43(void *rctx, GLubyte red, GLubyte green, GLubyte blue, GLubyte alpha) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glColor4ub(red, green, blue, alpha); sgl_prof_add(43, t0_); SGL_POST(43); }
++static void w_43(void *rctx, GLubyte red, GLubyte green, GLubyte blue, GLubyte alpha) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glColor4ub(red, green, blue, alpha); if (sgl_profile_enabled) sgl_prof_add(43, t0_); SGL_POST(43); }
+ static long unsupported_44(void) { sgl_unsupported(44, "?"); return 0; }
+ static long unsupported_45(void) { sgl_unsupported(45, "?"); return 0; }
+ static long unsupported_46(void) { sgl_unsupported(46, "?"); return 0; }
+ static long unsupported_47(void) { sgl_unsupported(47, "?"); return 0; }
+ static long unsupported_48(void) { sgl_unsupported(48, "?"); return 0; }
+-static void w_49(void *rctx, GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glColorMask(red, green, blue, alpha); sgl_prof_add(49, t0_); SGL_POST(49); }
++static void w_49(void *rctx, GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glColorMask(red, green, blue, alpha); if (sgl_profile_enabled) sgl_prof_add(49, t0_); SGL_POST(49); }
+ static long unsupported_50(void) { sgl_unsupported(50, "?"); return 0; }
+-static void w_51(void *rctx, GLint size, GLenum type, GLsizei stride, const GLvoid *ptr) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glColorPointer(size, type, stride, ptr); sgl_prof_add(51, t0_); SGL_POST(51); }
++static void w_51(void *rctx, GLint size, GLenum type, GLsizei stride, const GLvoid *ptr) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glColorPointer(size, type, stride, ptr); if (sgl_profile_enabled) sgl_prof_add(51, t0_); SGL_POST(51); }
+ static long unsupported_52(void) { sgl_unsupported(52, "?"); return 0; }
+ static long unsupported_53(void) { sgl_unsupported(53, "?"); return 0; }
+-static void w_54(void *rctx, GLenum target, GLint level, GLenum internalformat, GLint x, GLint y, GLsizei width, GLsizei height, GLint border) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glCopyTexImage2D(SGL_TGT(target), level, internalformat, x, y, width, height, border); sgl_prof_add(54, t0_); SGL_POST(54); }
++static void w_54(void *rctx, GLenum target, GLint level, GLenum internalformat, GLint x, GLint y, GLsizei width, GLsizei height, GLint border) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glCopyTexImage2D(SGL_TGT(target), level, internalformat, x, y, width, height, border); if (sgl_profile_enabled) sgl_prof_add(54, t0_); SGL_POST(54); }
+ static long unsupported_55(void) { sgl_unsupported(55, "?"); return 0; }
+-static void w_56(void *rctx, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint x, GLint y, GLsizei width, GLsizei height) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glCopyTexSubImage2D(SGL_TGT(target), level, xoffset, yoffset, x, y, width, height); sgl_prof_add(56, t0_); SGL_POST(56); }
+-static void w_57(void *rctx, GLenum mode) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glCullFace(mode); sgl_prof_add(57, t0_); SGL_POST(57); }
++static void w_56(void *rctx, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint x, GLint y, GLsizei width, GLsizei height) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glCopyTexSubImage2D(SGL_TGT(target), level, xoffset, yoffset, x, y, width, height); if (sgl_profile_enabled) sgl_prof_add(56, t0_); SGL_POST(56); }
++static void w_57(void *rctx, GLenum mode) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glCullFace(mode); if (sgl_profile_enabled) sgl_prof_add(57, t0_); SGL_POST(57); }
+ static long unsupported_58(void) { sgl_unsupported(58, "?"); return 0; }
+-static void ps_59(void *rctx, GLsizei n, const GLuint *textures) { uint64_t t0_ = mach_absolute_time(); sgl_DeleteTextures(rctx, n, textures); sgl_prof_add(59, t0_); }
+-static void w_60(void *rctx, GLenum func) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glDepthFunc(func); sgl_prof_add(60, t0_); SGL_POST(60); }
+-static void w_61(void *rctx, GLboolean flag) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glDepthMask(flag); sgl_prof_add(61, t0_); SGL_POST(61); }
++static void ps_59(void *rctx, GLsizei n, const GLuint *textures) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; sgl_DeleteTextures(rctx, n, textures); if (sgl_profile_enabled) sgl_prof_add(59, t0_); }
++static void w_60(void *rctx, GLenum func) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glDepthFunc(func); if (sgl_profile_enabled) sgl_prof_add(60, t0_); SGL_POST(60); }
++static void w_61(void *rctx, GLboolean flag) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glDepthMask(flag); if (sgl_profile_enabled) sgl_prof_add(61, t0_); SGL_POST(61); }
+ static long unsupported_62(void) { sgl_unsupported(62, "?"); return 0; }
+-static void w_63(void *rctx, GLenum cap) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glDisable(cap); sgl_prof_add(63, t0_); SGL_POST(63); }
+-static void w_64(void *rctx, GLenum cap) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glDisableClientState(cap); sgl_prof_add(64, t0_); SGL_POST(64); }
+-static void ps_65(void *rctx, GLenum mode, GLint first, GLsizei count) { uint64_t t0_ = mach_absolute_time(); sgl_DrawArrays(rctx, mode, first, count); sgl_prof_add(65, t0_); }
++static void w_63(void *rctx, GLenum cap) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glDisable(cap); if (sgl_profile_enabled) sgl_prof_add(63, t0_); SGL_POST(63); }
++static void w_64(void *rctx, GLenum cap) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glDisableClientState(cap); if (sgl_profile_enabled) sgl_prof_add(64, t0_); SGL_POST(64); }
++static void ps_65(void *rctx, GLenum mode, GLint first, GLsizei count) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; sgl_DrawArrays(rctx, mode, first, count); if (sgl_profile_enabled) sgl_prof_add(65, t0_); }
+ static long unsupported_66(void) { sgl_unsupported(66, "?"); return 0; }
+-static void ps_67(void *rctx, GLenum mode, GLsizei count, GLenum type, const GLvoid *indices) { uint64_t t0_ = mach_absolute_time(); sgl_DrawElements(rctx, mode, count, type, indices); sgl_prof_add(67, t0_); }
++static void ps_67(void *rctx, GLenum mode, GLsizei count, GLenum type, const GLvoid *indices) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; sgl_DrawElements(rctx, mode, count, type, indices); if (sgl_profile_enabled) sgl_prof_add(67, t0_); }
+ static long unsupported_68(void) { sgl_unsupported(68, "?"); return 0; }
+ static long unsupported_69(void) { sgl_unsupported(69, "?"); return 0; }
+ static long unsupported_70(void) { sgl_unsupported(70, "?"); return 0; }
+ static long unsupported_71(void) { sgl_unsupported(71, "?"); return 0; }
+-static void w_72(void *rctx, GLenum cap) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glEnable(cap); sgl_prof_add(72, t0_); SGL_POST(72); }
+-static void w_73(void *rctx, GLenum cap) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glEnableClientState(cap); sgl_prof_add(73, t0_); SGL_POST(73); }
++static void w_72(void *rctx, GLenum cap) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glEnable(cap); if (sgl_profile_enabled) sgl_prof_add(72, t0_); SGL_POST(72); }
++static void w_73(void *rctx, GLenum cap) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glEnableClientState(cap); if (sgl_profile_enabled) sgl_prof_add(73, t0_); SGL_POST(73); }
+ static long unsupported_74(void) { sgl_unsupported(74, "?"); return 0; }
+ static long unsupported_75(void) { sgl_unsupported(75, "?"); return 0; }
+ static long unsupported_76(void) { sgl_unsupported(76, "?"); return 0; }
+@@ -90,46 +90,46 @@
+ static long unsupported_86(void) { sgl_unsupported(86, "?"); return 0; }
+ static long unsupported_87(void) { sgl_unsupported(87, "?"); return 0; }
+ static long unsupported_88(void) { sgl_unsupported(88, "?"); return 0; }
+-static void w_89(void *rctx) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glFinish(); sgl_prof_add(89, t0_); SGL_POST(89); }
+-static void ps_90(void *rctx) { uint64_t t0_ = mach_absolute_time(); sgl_Flush(rctx); sgl_prof_add(90, t0_); }
+-static void w_91(void *rctx, GLenum pname, GLfloat param) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glFogf(pname, param); sgl_prof_add(91, t0_); SGL_POST(91); }
+-static void w_92(void *rctx, GLenum pname, const GLfloat *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glFogfv(pname, params); sgl_prof_add(92, t0_); SGL_POST(92); }
++static void w_89(void *rctx) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glFinish(); if (sgl_profile_enabled) sgl_prof_add(89, t0_); SGL_POST(89); }
++static void ps_90(void *rctx) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; sgl_Flush(rctx); if (sgl_profile_enabled) sgl_prof_add(90, t0_); }
++static void w_91(void *rctx, GLenum pname, GLfloat param) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glFogf(pname, param); if (sgl_profile_enabled) sgl_prof_add(91, t0_); SGL_POST(91); }
++static void w_92(void *rctx, GLenum pname, const GLfloat *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glFogfv(pname, params); if (sgl_profile_enabled) sgl_prof_add(92, t0_); SGL_POST(92); }
+ static long unsupported_93(void) { sgl_unsupported(93, "?"); return 0; }
+ static long unsupported_94(void) { sgl_unsupported(94, "?"); return 0; }
+-static void w_95(void *rctx, GLenum mode) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glFrontFace(mode); sgl_prof_add(95, t0_); SGL_POST(95); }
++static void w_95(void *rctx, GLenum mode) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glFrontFace(mode); if (sgl_profile_enabled) sgl_prof_add(95, t0_); SGL_POST(95); }
+ static long unsupported_96(void) { sgl_unsupported(96, "?"); return 0; }
+ static long unsupported_97(void) { sgl_unsupported(97, "?"); return 0; }
+-static void w_98(void *rctx, GLsizei n, GLuint *textures) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGenTextures(n, textures); sgl_prof_add(98, t0_); SGL_POST(98); }
+-static void w_99(void *rctx, GLenum pname, GLboolean *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetBooleanv(pname, params); sgl_prof_add(99, t0_); SGL_POST(99); }
++static void w_98(void *rctx, GLsizei n, GLuint *textures) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGenTextures(n, textures); if (sgl_profile_enabled) sgl_prof_add(98, t0_); SGL_POST(98); }
++static void w_99(void *rctx, GLenum pname, GLboolean *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetBooleanv(pname, params); if (sgl_profile_enabled) sgl_prof_add(99, t0_); SGL_POST(99); }
+ static long unsupported_100(void) { sgl_unsupported(100, "?"); return 0; }
+ static long unsupported_101(void) { sgl_unsupported(101, "?"); return 0; }
+-static GLenum w_102(void *rctx) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLenum r = glGetError(); sgl_prof_add(102, t0_); SGL_POST(102); return r; }
+-static void w_103(void *rctx, GLenum pname, GLfloat *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetFloatv(pname, params); sgl_prof_add(103, t0_); SGL_POST(103); }
+-static void w_104(void *rctx, GLenum pname, GLint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetIntegerv(pname, params); sgl_prof_add(104, t0_); SGL_POST(104); }
+-static void w_105(void *rctx, GLenum light, GLenum pname, GLfloat *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetLightfv(light, pname, params); sgl_prof_add(105, t0_); SGL_POST(105); }
++static GLenum w_102(void *rctx) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLenum r = glGetError(); if (sgl_profile_enabled) sgl_prof_add(102, t0_); SGL_POST(102); return r; }
++static void w_103(void *rctx, GLenum pname, GLfloat *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetFloatv(pname, params); if (sgl_profile_enabled) sgl_prof_add(103, t0_); SGL_POST(103); }
++static void w_104(void *rctx, GLenum pname, GLint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetIntegerv(pname, params); if (sgl_profile_enabled) sgl_prof_add(104, t0_); SGL_POST(104); }
++static void w_105(void *rctx, GLenum light, GLenum pname, GLfloat *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetLightfv(light, pname, params); if (sgl_profile_enabled) sgl_prof_add(105, t0_); SGL_POST(105); }
+ static long unsupported_106(void) { sgl_unsupported(106, "?"); return 0; }
+ static long unsupported_107(void) { sgl_unsupported(107, "?"); return 0; }
+ static long unsupported_108(void) { sgl_unsupported(108, "?"); return 0; }
+ static long unsupported_109(void) { sgl_unsupported(109, "?"); return 0; }
+-static void w_110(void *rctx, GLenum face, GLenum pname, GLfloat *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetMaterialfv(face, pname, params); sgl_prof_add(110, t0_); SGL_POST(110); }
++static void w_110(void *rctx, GLenum face, GLenum pname, GLfloat *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetMaterialfv(face, pname, params); if (sgl_profile_enabled) sgl_prof_add(110, t0_); SGL_POST(110); }
+ static long unsupported_111(void) { sgl_unsupported(111, "?"); return 0; }
+ static long unsupported_112(void) { sgl_unsupported(112, "?"); return 0; }
+ static long unsupported_113(void) { sgl_unsupported(113, "?"); return 0; }
+ static long unsupported_114(void) { sgl_unsupported(114, "?"); return 0; }
+-static void w_115(void *rctx, GLenum pname, GLvoid **params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetPointerv(pname, params); sgl_prof_add(115, t0_); SGL_POST(115); }
++static void w_115(void *rctx, GLenum pname, GLvoid **params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetPointerv(pname, params); if (sgl_profile_enabled) sgl_prof_add(115, t0_); SGL_POST(115); }
+ static long unsupported_116(void) { sgl_unsupported(116, "?"); return 0; }
+-static const GLubyte * ps_117(void *rctx, GLenum name) { uint64_t t0_ = mach_absolute_time(); const GLubyte * r = sgl_GetString(rctx, name); sgl_prof_add(117, t0_); return r; }
+-static void w_118(void *rctx, GLenum target, GLenum pname, GLfloat *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetTexEnvfv(SGL_TGT(target), pname, params); sgl_prof_add(118, t0_); SGL_POST(118); }
+-static void w_119(void *rctx, GLenum target, GLenum pname, GLint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetTexEnviv(SGL_TGT(target), pname, params); sgl_prof_add(119, t0_); SGL_POST(119); }
++static const GLubyte * ps_117(void *rctx, GLenum name) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; const GLubyte * r = sgl_GetString(rctx, name); if (sgl_profile_enabled) sgl_prof_add(117, t0_); return r; }
++static void w_118(void *rctx, GLenum target, GLenum pname, GLfloat *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetTexEnvfv(SGL_TGT(target), pname, params); if (sgl_profile_enabled) sgl_prof_add(118, t0_); SGL_POST(118); }
++static void w_119(void *rctx, GLenum target, GLenum pname, GLint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetTexEnviv(SGL_TGT(target), pname, params); if (sgl_profile_enabled) sgl_prof_add(119, t0_); SGL_POST(119); }
+ static long unsupported_120(void) { sgl_unsupported(120, "?"); return 0; }
+ static long unsupported_121(void) { sgl_unsupported(121, "?"); return 0; }
+ static long unsupported_122(void) { sgl_unsupported(122, "?"); return 0; }
+-static void w_123(void *rctx, GLenum target, GLint level, GLenum format, GLenum type, GLvoid *pixels) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetTexImage(SGL_TGT(target), level, format, type, pixels); sgl_prof_add(123, t0_); SGL_POST(123); }
++static void w_123(void *rctx, GLenum target, GLint level, GLenum format, GLenum type, GLvoid *pixels) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetTexImage(SGL_TGT(target), level, format, type, pixels); if (sgl_profile_enabled) sgl_prof_add(123, t0_); SGL_POST(123); }
+ static long unsupported_124(void) { sgl_unsupported(124, "?"); return 0; }
+-static void w_125(void *rctx, GLenum target, GLint level, GLenum pname, GLint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetTexLevelParameteriv(SGL_TGT(target), level, pname, params); sgl_prof_add(125, t0_); SGL_POST(125); }
+-static void w_126(void *rctx, GLenum target, GLenum pname, GLfloat *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetTexParameterfv(SGL_TGT(target), pname, params); sgl_prof_add(126, t0_); SGL_POST(126); }
+-static void w_127(void *rctx, GLenum target, GLenum pname, GLint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetTexParameteriv(SGL_TGT(target), pname, params); sgl_prof_add(127, t0_); SGL_POST(127); }
+-static void w_128(void *rctx, GLenum target, GLenum mode) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glHint(SGL_TGT(target), mode); sgl_prof_add(128, t0_); SGL_POST(128); }
++static void w_125(void *rctx, GLenum target, GLint level, GLenum pname, GLint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetTexLevelParameteriv(SGL_TGT(target), level, pname, params); if (sgl_profile_enabled) sgl_prof_add(125, t0_); SGL_POST(125); }
++static void w_126(void *rctx, GLenum target, GLenum pname, GLfloat *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetTexParameterfv(SGL_TGT(target), pname, params); if (sgl_profile_enabled) sgl_prof_add(126, t0_); SGL_POST(126); }
++static void w_127(void *rctx, GLenum target, GLenum pname, GLint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetTexParameteriv(SGL_TGT(target), pname, params); if (sgl_profile_enabled) sgl_prof_add(127, t0_); SGL_POST(127); }
++static void w_128(void *rctx, GLenum target, GLenum mode) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glHint(SGL_TGT(target), mode); if (sgl_profile_enabled) sgl_prof_add(128, t0_); SGL_POST(128); }
+ static long unsupported_129(void) { sgl_unsupported(129, "?"); return 0; }
+ static long unsupported_130(void) { sgl_unsupported(130, "?"); return 0; }
+ static long unsupported_131(void) { sgl_unsupported(131, "?"); return 0; }
+@@ -144,25 +144,25 @@
+ static long unsupported_140(void) { sgl_unsupported(140, "?"); return 0; }
+ static long unsupported_141(void) { sgl_unsupported(141, "?"); return 0; }
+ static long unsupported_142(void) { sgl_unsupported(142, "?"); return 0; }
+-static GLboolean w_143(void *rctx, GLenum cap) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLboolean r = glIsEnabled(cap); sgl_prof_add(143, t0_); SGL_POST(143); return r; }
++static GLboolean w_143(void *rctx, GLenum cap) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLboolean r = glIsEnabled(cap); if (sgl_profile_enabled) sgl_prof_add(143, t0_); SGL_POST(143); return r; }
+ static long unsupported_144(void) { sgl_unsupported(144, "?"); return 0; }
+-static GLboolean w_145(void *rctx, GLuint texture) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLboolean r = glIsTexture(texture); sgl_prof_add(145, t0_); SGL_POST(145); return r; }
+-static void w_146(void *rctx, GLenum pname, GLfloat param) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glLightModelf(pname, param); sgl_prof_add(146, t0_); SGL_POST(146); }
+-static void w_147(void *rctx, GLenum pname, const GLfloat *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glLightModelfv(pname, params); sgl_prof_add(147, t0_); SGL_POST(147); }
++static GLboolean w_145(void *rctx, GLuint texture) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLboolean r = glIsTexture(texture); if (sgl_profile_enabled) sgl_prof_add(145, t0_); SGL_POST(145); return r; }
++static void w_146(void *rctx, GLenum pname, GLfloat param) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glLightModelf(pname, param); if (sgl_profile_enabled) sgl_prof_add(146, t0_); SGL_POST(146); }
++static void w_147(void *rctx, GLenum pname, const GLfloat *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glLightModelfv(pname, params); if (sgl_profile_enabled) sgl_prof_add(147, t0_); SGL_POST(147); }
+ static long unsupported_148(void) { sgl_unsupported(148, "?"); return 0; }
+ static long unsupported_149(void) { sgl_unsupported(149, "?"); return 0; }
+-static void w_150(void *rctx, GLenum light, GLenum pname, GLfloat param) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glLightf(light, pname, param); sgl_prof_add(150, t0_); SGL_POST(150); }
+-static void w_151(void *rctx, GLenum light, GLenum pname, const GLfloat *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glLightfv(light, pname, params); sgl_prof_add(151, t0_); SGL_POST(151); }
++static void w_150(void *rctx, GLenum light, GLenum pname, GLfloat param) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glLightf(light, pname, param); if (sgl_profile_enabled) sgl_prof_add(150, t0_); SGL_POST(150); }
++static void w_151(void *rctx, GLenum light, GLenum pname, const GLfloat *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glLightfv(light, pname, params); if (sgl_profile_enabled) sgl_prof_add(151, t0_); SGL_POST(151); }
+ static long unsupported_152(void) { sgl_unsupported(152, "?"); return 0; }
+ static long unsupported_153(void) { sgl_unsupported(153, "?"); return 0; }
+ static long unsupported_154(void) { sgl_unsupported(154, "?"); return 0; }
+-static void w_155(void *rctx, GLfloat width) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glLineWidth(width); sgl_prof_add(155, t0_); SGL_POST(155); }
++static void w_155(void *rctx, GLfloat width) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glLineWidth(width); if (sgl_profile_enabled) sgl_prof_add(155, t0_); SGL_POST(155); }
+ static long unsupported_156(void) { sgl_unsupported(156, "?"); return 0; }
+-static void w_157(void *rctx) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glLoadIdentity(); sgl_prof_add(157, t0_); SGL_POST(157); }
++static void w_157(void *rctx) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glLoadIdentity(); if (sgl_profile_enabled) sgl_prof_add(157, t0_); SGL_POST(157); }
+ static long unsupported_158(void) { sgl_unsupported(158, "?"); return 0; }
+-static void w_159(void *rctx, const GLfloat *m) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glLoadMatrixf(m); sgl_prof_add(159, t0_); SGL_POST(159); }
++static void w_159(void *rctx, const GLfloat *m) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glLoadMatrixf(m); if (sgl_profile_enabled) sgl_prof_add(159, t0_); SGL_POST(159); }
+ static long unsupported_160(void) { sgl_unsupported(160, "?"); return 0; }
+-static void w_161(void *rctx, GLenum opcode) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glLogicOp(opcode); sgl_prof_add(161, t0_); SGL_POST(161); }
++static void w_161(void *rctx, GLenum opcode) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glLogicOp(opcode); if (sgl_profile_enabled) sgl_prof_add(161, t0_); SGL_POST(161); }
+ static long unsupported_162(void) { sgl_unsupported(162, "?"); return 0; }
+ static long unsupported_163(void) { sgl_unsupported(163, "?"); return 0; }
+ static long unsupported_164(void) { sgl_unsupported(164, "?"); return 0; }
+@@ -171,47 +171,47 @@
+ static long unsupported_167(void) { sgl_unsupported(167, "?"); return 0; }
+ static long unsupported_168(void) { sgl_unsupported(168, "?"); return 0; }
+ static long unsupported_169(void) { sgl_unsupported(169, "?"); return 0; }
+-static void w_170(void *rctx, GLenum face, GLenum pname, GLfloat param) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glMaterialf(face, pname, param); sgl_prof_add(170, t0_); SGL_POST(170); }
+-static void w_171(void *rctx, GLenum face, GLenum pname, const GLfloat *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glMaterialfv(face, pname, params); sgl_prof_add(171, t0_); SGL_POST(171); }
++static void w_170(void *rctx, GLenum face, GLenum pname, GLfloat param) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glMaterialf(face, pname, param); if (sgl_profile_enabled) sgl_prof_add(170, t0_); SGL_POST(170); }
++static void w_171(void *rctx, GLenum face, GLenum pname, const GLfloat *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glMaterialfv(face, pname, params); if (sgl_profile_enabled) sgl_prof_add(171, t0_); SGL_POST(171); }
+ static long unsupported_172(void) { sgl_unsupported(172, "?"); return 0; }
+ static long unsupported_173(void) { sgl_unsupported(173, "?"); return 0; }
+-static void w_174(void *rctx, GLenum mode) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glMatrixMode(mode); sgl_prof_add(174, t0_); SGL_POST(174); }
++static void w_174(void *rctx, GLenum mode) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glMatrixMode(mode); if (sgl_profile_enabled) sgl_prof_add(174, t0_); SGL_POST(174); }
+ static long unsupported_175(void) { sgl_unsupported(175, "?"); return 0; }
+-static void w_176(void *rctx, const GLfloat *m) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glMultMatrixf(m); sgl_prof_add(176, t0_); SGL_POST(176); }
++static void w_176(void *rctx, const GLfloat *m) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glMultMatrixf(m); if (sgl_profile_enabled) sgl_prof_add(176, t0_); SGL_POST(176); }
+ static long unsupported_177(void) { sgl_unsupported(177, "?"); return 0; }
+ static long unsupported_178(void) { sgl_unsupported(178, "?"); return 0; }
+ static long unsupported_179(void) { sgl_unsupported(179, "?"); return 0; }
+ static long unsupported_180(void) { sgl_unsupported(180, "?"); return 0; }
+ static long unsupported_181(void) { sgl_unsupported(181, "?"); return 0; }
+-static void w_182(void *rctx, GLfloat nx, GLfloat ny, GLfloat nz) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glNormal3f(nx, ny, nz); sgl_prof_add(182, t0_); SGL_POST(182); }
++static void w_182(void *rctx, GLfloat nx, GLfloat ny, GLfloat nz) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glNormal3f(nx, ny, nz); if (sgl_profile_enabled) sgl_prof_add(182, t0_); SGL_POST(182); }
+ static long unsupported_183(void) { sgl_unsupported(183, "?"); return 0; }
+ static long unsupported_184(void) { sgl_unsupported(184, "?"); return 0; }
+ static long unsupported_185(void) { sgl_unsupported(185, "?"); return 0; }
+ static long unsupported_186(void) { sgl_unsupported(186, "?"); return 0; }
+ static long unsupported_187(void) { sgl_unsupported(187, "?"); return 0; }
+-static void w_188(void *rctx, GLenum type, GLsizei stride, const GLvoid *ptr) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glNormalPointer(type, stride, ptr); sgl_prof_add(188, t0_); SGL_POST(188); }
++static void w_188(void *rctx, GLenum type, GLsizei stride, const GLvoid *ptr) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glNormalPointer(type, stride, ptr); if (sgl_profile_enabled) sgl_prof_add(188, t0_); SGL_POST(188); }
+ static long unsupported_189(void) { sgl_unsupported(189, "?"); return 0; }
+ static long unsupported_190(void) { sgl_unsupported(190, "?"); return 0; }
+ static long unsupported_191(void) { sgl_unsupported(191, "?"); return 0; }
+ static long unsupported_192(void) { sgl_unsupported(192, "?"); return 0; }
+ static long unsupported_193(void) { sgl_unsupported(193, "?"); return 0; }
+ static long unsupported_194(void) { sgl_unsupported(194, "?"); return 0; }
+-static void ps_195(void *rctx, GLenum pname, GLint param) { uint64_t t0_ = mach_absolute_time(); sgl_PixelStorei(rctx, pname, param); sgl_prof_add(195, t0_); }
++static void ps_195(void *rctx, GLenum pname, GLint param) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; sgl_PixelStorei(rctx, pname, param); if (sgl_profile_enabled) sgl_prof_add(195, t0_); }
+ static long unsupported_196(void) { sgl_unsupported(196, "?"); return 0; }
+ static long unsupported_197(void) { sgl_unsupported(197, "?"); return 0; }
+ static long unsupported_198(void) { sgl_unsupported(198, "?"); return 0; }
+-static void w_199(void *rctx, GLfloat size) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glPointSize(size); sgl_prof_add(199, t0_); SGL_POST(199); }
++static void w_199(void *rctx, GLfloat size) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glPointSize(size); if (sgl_profile_enabled) sgl_prof_add(199, t0_); SGL_POST(199); }
+ static long unsupported_200(void) { sgl_unsupported(200, "?"); return 0; }
+-static void w_201(void *rctx, GLfloat factor, GLfloat units) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glPolygonOffset(factor, units); sgl_prof_add(201, t0_); SGL_POST(201); }
++static void w_201(void *rctx, GLfloat factor, GLfloat units) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glPolygonOffset(factor, units); if (sgl_profile_enabled) sgl_prof_add(201, t0_); SGL_POST(201); }
+ static long unsupported_202(void) { sgl_unsupported(202, "?"); return 0; }
+ static long unsupported_203(void) { sgl_unsupported(203, "?"); return 0; }
+ static long unsupported_204(void) { sgl_unsupported(204, "?"); return 0; }
+-static void w_205(void *rctx) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glPopMatrix(); sgl_prof_add(205, t0_); SGL_POST(205); }
++static void w_205(void *rctx) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glPopMatrix(); if (sgl_profile_enabled) sgl_prof_add(205, t0_); SGL_POST(205); }
+ static long unsupported_206(void) { sgl_unsupported(206, "?"); return 0; }
+ static long unsupported_207(void) { sgl_unsupported(207, "?"); return 0; }
+ static long unsupported_208(void) { sgl_unsupported(208, "?"); return 0; }
+ static long unsupported_209(void) { sgl_unsupported(209, "?"); return 0; }
+-static void w_210(void *rctx) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glPushMatrix(); sgl_prof_add(210, t0_); SGL_POST(210); }
++static void w_210(void *rctx) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glPushMatrix(); if (sgl_profile_enabled) sgl_prof_add(210, t0_); SGL_POST(210); }
+ static long unsupported_211(void) { sgl_unsupported(211, "?"); return 0; }
+ static long unsupported_212(void) { sgl_unsupported(212, "?"); return 0; }
+ static long unsupported_213(void) { sgl_unsupported(213, "?"); return 0; }
+@@ -237,8 +237,8 @@
+ static long unsupported_233(void) { sgl_unsupported(233, "?"); return 0; }
+ static long unsupported_234(void) { sgl_unsupported(234, "?"); return 0; }
+ static long unsupported_235(void) { sgl_unsupported(235, "?"); return 0; }
+-static void w_236(void *rctx, GLenum mode) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glReadBuffer(mode); sgl_prof_add(236, t0_); SGL_POST(236); }
+-static void w_237(void *rctx, GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, GLvoid *pixels) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glReadPixels(x, y, width, height, format, type, pixels); sgl_prof_add(237, t0_); SGL_POST(237); }
++static void w_236(void *rctx, GLenum mode) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glReadBuffer(mode); if (sgl_profile_enabled) sgl_prof_add(236, t0_); SGL_POST(236); }
++static void w_237(void *rctx, GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, GLvoid *pixels) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glReadPixels(x, y, width, height, format, type, pixels); if (sgl_profile_enabled) sgl_prof_add(237, t0_); SGL_POST(237); }
+ static long unsupported_238(void) { sgl_unsupported(238, "?"); return 0; }
+ static long unsupported_239(void) { sgl_unsupported(239, "?"); return 0; }
+ static long unsupported_240(void) { sgl_unsupported(240, "?"); return 0; }
+@@ -249,15 +249,15 @@
+ static long unsupported_245(void) { sgl_unsupported(245, "?"); return 0; }
+ static long unsupported_246(void) { sgl_unsupported(246, "?"); return 0; }
+ static long unsupported_247(void) { sgl_unsupported(247, "?"); return 0; }
+-static void w_248(void *rctx, GLfloat angle, GLfloat x, GLfloat y, GLfloat z) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glRotatef(angle, x, y, z); sgl_prof_add(248, t0_); SGL_POST(248); }
++static void w_248(void *rctx, GLfloat angle, GLfloat x, GLfloat y, GLfloat z) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glRotatef(angle, x, y, z); if (sgl_profile_enabled) sgl_prof_add(248, t0_); SGL_POST(248); }
+ static long unsupported_249(void) { sgl_unsupported(249, "?"); return 0; }
+-static void w_250(void *rctx, GLfloat x, GLfloat y, GLfloat z) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glScalef(x, y, z); sgl_prof_add(250, t0_); SGL_POST(250); }
+-static void w_251(void *rctx, GLint x, GLint y, GLsizei width, GLsizei height) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glScissor(x, y, width, height); sgl_prof_add(251, t0_); SGL_POST(251); }
++static void w_250(void *rctx, GLfloat x, GLfloat y, GLfloat z) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glScalef(x, y, z); if (sgl_profile_enabled) sgl_prof_add(250, t0_); SGL_POST(250); }
++static void w_251(void *rctx, GLint x, GLint y, GLsizei width, GLsizei height) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glScissor(x, y, width, height); if (sgl_profile_enabled) sgl_prof_add(251, t0_); SGL_POST(251); }
+ static long unsupported_252(void) { sgl_unsupported(252, "?"); return 0; }
+-static void w_253(void *rctx, GLenum mode) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glShadeModel(mode); sgl_prof_add(253, t0_); SGL_POST(253); }
+-static void w_254(void *rctx, GLenum func, GLint ref, GLuint mask) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glStencilFunc(func, ref, mask); sgl_prof_add(254, t0_); SGL_POST(254); }
+-static void w_255(void *rctx, GLuint mask) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glStencilMask(mask); sgl_prof_add(255, t0_); SGL_POST(255); }
+-static void w_256(void *rctx, GLenum fail, GLenum zfail, GLenum zpass) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glStencilOp(fail, zfail, zpass); sgl_prof_add(256, t0_); SGL_POST(256); }
++static void w_253(void *rctx, GLenum mode) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glShadeModel(mode); if (sgl_profile_enabled) sgl_prof_add(253, t0_); SGL_POST(253); }
++static void w_254(void *rctx, GLenum func, GLint ref, GLuint mask) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glStencilFunc(func, ref, mask); if (sgl_profile_enabled) sgl_prof_add(254, t0_); SGL_POST(254); }
++static void w_255(void *rctx, GLuint mask) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glStencilMask(mask); if (sgl_profile_enabled) sgl_prof_add(255, t0_); SGL_POST(255); }
++static void w_256(void *rctx, GLenum fail, GLenum zfail, GLenum zpass) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glStencilOp(fail, zfail, zpass); if (sgl_profile_enabled) sgl_prof_add(256, t0_); SGL_POST(256); }
+ static long unsupported_257(void) { sgl_unsupported(257, "?"); return 0; }
+ static long unsupported_258(void) { sgl_unsupported(258, "?"); return 0; }
+ static long unsupported_259(void) { sgl_unsupported(259, "?"); return 0; }
+@@ -290,11 +290,11 @@
+ static long unsupported_286(void) { sgl_unsupported(286, "?"); return 0; }
+ static long unsupported_287(void) { sgl_unsupported(287, "?"); return 0; }
+ static long unsupported_288(void) { sgl_unsupported(288, "?"); return 0; }
+-static void w_289(void *rctx, GLint size, GLenum type, GLsizei stride, const GLvoid *ptr) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glTexCoordPointer(size, type, stride, ptr); sgl_prof_add(289, t0_); SGL_POST(289); }
+-static void w_290(void *rctx, GLenum target, GLenum pname, GLfloat param) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glTexEnvf(SGL_TGT(target), pname, param); sgl_prof_add(290, t0_); SGL_POST(290); }
+-static void w_291(void *rctx, GLenum target, GLenum pname, const GLfloat *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glTexEnvfv(SGL_TGT(target), pname, params); sgl_prof_add(291, t0_); SGL_POST(291); }
+-static void w_292(void *rctx, GLenum target, GLenum pname, GLint param) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glTexEnvi(SGL_TGT(target), pname, param); sgl_prof_add(292, t0_); SGL_POST(292); }
+-static void w_293(void *rctx, GLenum target, GLenum pname, const GLint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glTexEnviv(SGL_TGT(target), pname, params); sgl_prof_add(293, t0_); SGL_POST(293); }
++static void w_289(void *rctx, GLint size, GLenum type, GLsizei stride, const GLvoid *ptr) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glTexCoordPointer(size, type, stride, ptr); if (sgl_profile_enabled) sgl_prof_add(289, t0_); SGL_POST(289); }
++static void w_290(void *rctx, GLenum target, GLenum pname, GLfloat param) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glTexEnvf(SGL_TGT(target), pname, param); if (sgl_profile_enabled) sgl_prof_add(290, t0_); SGL_POST(290); }
++static void w_291(void *rctx, GLenum target, GLenum pname, const GLfloat *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glTexEnvfv(SGL_TGT(target), pname, params); if (sgl_profile_enabled) sgl_prof_add(291, t0_); SGL_POST(291); }
++static void w_292(void *rctx, GLenum target, GLenum pname, GLint param) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glTexEnvi(SGL_TGT(target), pname, param); if (sgl_profile_enabled) sgl_prof_add(292, t0_); SGL_POST(292); }
++static void w_293(void *rctx, GLenum target, GLenum pname, const GLint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glTexEnviv(SGL_TGT(target), pname, params); if (sgl_profile_enabled) sgl_prof_add(293, t0_); SGL_POST(293); }
+ static long unsupported_294(void) { sgl_unsupported(294, "?"); return 0; }
+ static long unsupported_295(void) { sgl_unsupported(295, "?"); return 0; }
+ static long unsupported_296(void) { sgl_unsupported(296, "?"); return 0; }
+@@ -302,15 +302,15 @@
+ static long unsupported_298(void) { sgl_unsupported(298, "?"); return 0; }
+ static long unsupported_299(void) { sgl_unsupported(299, "?"); return 0; }
+ static long unsupported_300(void) { sgl_unsupported(300, "?"); return 0; }
+-static void ps_301(void *rctx, GLenum target, GLint level, GLint internalFormat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const GLvoid *pixels) { uint64_t t0_ = mach_absolute_time(); sgl_TexImage2D(rctx, target, level, internalFormat, width, height, border, format, type, pixels); sgl_prof_add(301, t0_); }
+-static void w_302(void *rctx, GLenum target, GLenum pname, GLfloat param) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glTexParameterf(SGL_TGT(target), pname, param); sgl_prof_add(302, t0_); SGL_POST(302); }
+-static void w_303(void *rctx, GLenum target, GLenum pname, const GLfloat *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glTexParameterfv(SGL_TGT(target), pname, params); sgl_prof_add(303, t0_); SGL_POST(303); }
+-static void ps_304(void *rctx, GLenum target, GLenum pname, GLint param) { uint64_t t0_ = mach_absolute_time(); sgl_TexParameteri(rctx, target, pname, param); sgl_prof_add(304, t0_); }
+-static void w_305(void *rctx, GLenum target, GLenum pname, const GLint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glTexParameteriv(SGL_TGT(target), pname, params); sgl_prof_add(305, t0_); SGL_POST(305); }
++static void ps_301(void *rctx, GLenum target, GLint level, GLint internalFormat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const GLvoid *pixels) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; sgl_TexImage2D(rctx, target, level, internalFormat, width, height, border, format, type, pixels); if (sgl_profile_enabled) sgl_prof_add(301, t0_); }
++static void w_302(void *rctx, GLenum target, GLenum pname, GLfloat param) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glTexParameterf(SGL_TGT(target), pname, param); if (sgl_profile_enabled) sgl_prof_add(302, t0_); SGL_POST(302); }
++static void w_303(void *rctx, GLenum target, GLenum pname, const GLfloat *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glTexParameterfv(SGL_TGT(target), pname, params); if (sgl_profile_enabled) sgl_prof_add(303, t0_); SGL_POST(303); }
++static void ps_304(void *rctx, GLenum target, GLenum pname, GLint param) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; sgl_TexParameteri(rctx, target, pname, param); if (sgl_profile_enabled) sgl_prof_add(304, t0_); }
++static void w_305(void *rctx, GLenum target, GLenum pname, const GLint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glTexParameteriv(SGL_TGT(target), pname, params); if (sgl_profile_enabled) sgl_prof_add(305, t0_); SGL_POST(305); }
+ static long unsupported_306(void) { sgl_unsupported(306, "?"); return 0; }
+-static void ps_307(void *rctx, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid *pixels) { uint64_t t0_ = mach_absolute_time(); sgl_TexSubImage2D(rctx, target, level, xoffset, yoffset, width, height, format, type, pixels); sgl_prof_add(307, t0_); }
++static void ps_307(void *rctx, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid *pixels) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; sgl_TexSubImage2D(rctx, target, level, xoffset, yoffset, width, height, format, type, pixels); if (sgl_profile_enabled) sgl_prof_add(307, t0_); }
+ static long unsupported_308(void) { sgl_unsupported(308, "?"); return 0; }
+-static void w_309(void *rctx, GLfloat x, GLfloat y, GLfloat z) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glTranslatef(x, y, z); sgl_prof_add(309, t0_); SGL_POST(309); }
++static void w_309(void *rctx, GLfloat x, GLfloat y, GLfloat z) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glTranslatef(x, y, z); if (sgl_profile_enabled) sgl_prof_add(309, t0_); SGL_POST(309); }
+ static long unsupported_310(void) { sgl_unsupported(310, "?"); return 0; }
+ static long unsupported_311(void) { sgl_unsupported(311, "?"); return 0; }
+ static long unsupported_312(void) { sgl_unsupported(312, "?"); return 0; }
+@@ -335,15 +335,15 @@
+ static long unsupported_331(void) { sgl_unsupported(331, "?"); return 0; }
+ static long unsupported_332(void) { sgl_unsupported(332, "?"); return 0; }
+ static long unsupported_333(void) { sgl_unsupported(333, "?"); return 0; }
+-static void w_334(void *rctx, GLint size, GLenum type, GLsizei stride, const GLvoid *ptr) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glVertexPointer(size, type, stride, ptr); sgl_prof_add(334, t0_); SGL_POST(334); }
+-static void w_335(void *rctx, GLint x, GLint y, GLsizei width, GLsizei height) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glViewport(x, y, width, height); sgl_prof_add(335, t0_); SGL_POST(335); }
+-static void w_336(void *rctx, GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glBlendFuncSeparate(sfactorRGB, dfactorRGB, sfactorAlpha, dfactorAlpha); sgl_prof_add(336, t0_); SGL_POST(336); }
+-static void w_337(void *rctx, GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glBlendColor(red, green, blue, alpha); sgl_prof_add(337, t0_); SGL_POST(337); }
+-static void w_338(void *rctx, GLenum mode) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glBlendEquation(mode); sgl_prof_add(338, t0_); SGL_POST(338); }
++static void w_334(void *rctx, GLint size, GLenum type, GLsizei stride, const GLvoid *ptr) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glVertexPointer(size, type, stride, ptr); if (sgl_profile_enabled) sgl_prof_add(334, t0_); SGL_POST(334); }
++static void w_335(void *rctx, GLint x, GLint y, GLsizei width, GLsizei height) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glViewport(x, y, width, height); if (sgl_profile_enabled) sgl_prof_add(335, t0_); SGL_POST(335); }
++static void w_336(void *rctx, GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glBlendFuncSeparate(sfactorRGB, dfactorRGB, sfactorAlpha, dfactorAlpha); if (sgl_profile_enabled) sgl_prof_add(336, t0_); SGL_POST(336); }
++static void w_337(void *rctx, GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glBlendColor(red, green, blue, alpha); if (sgl_profile_enabled) sgl_prof_add(337, t0_); SGL_POST(337); }
++static void w_338(void *rctx, GLenum mode) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glBlendEquation(mode); if (sgl_profile_enabled) sgl_prof_add(338, t0_); SGL_POST(338); }
+ static long unsupported_339(void) { sgl_unsupported(339, "?"); return 0; }
+ static long unsupported_340(void) { sgl_unsupported(340, "?"); return 0; }
+-static void w_341(void *rctx, GLenum texture) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glClientActiveTexture(texture); sgl_prof_add(341, t0_); SGL_POST(341); }
+-static void w_342(void *rctx, GLenum texture) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glActiveTexture(texture); sgl_prof_add(342, t0_); SGL_POST(342); }
++static void w_341(void *rctx, GLenum texture) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glClientActiveTexture(texture); if (sgl_profile_enabled) sgl_prof_add(341, t0_); SGL_POST(341); }
++static void w_342(void *rctx, GLenum texture) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glActiveTexture(texture); if (sgl_profile_enabled) sgl_prof_add(342, t0_); SGL_POST(342); }
+ static long unsupported_343(void) { sgl_unsupported(343, "?"); return 0; }
+ static long unsupported_344(void) { sgl_unsupported(344, "?"); return 0; }
+ static long unsupported_345(void) { sgl_unsupported(345, "?"); return 0; }
+@@ -370,7 +370,7 @@
+ static long unsupported_366(void) { sgl_unsupported(366, "?"); return 0; }
+ static long unsupported_367(void) { sgl_unsupported(367, "?"); return 0; }
+ static long unsupported_368(void) { sgl_unsupported(368, "?"); return 0; }
+-static void w_369(void *rctx, GLenum target, GLfloat s, GLfloat t, GLfloat r, GLfloat q) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glMultiTexCoord4f(SGL_TGT(target), s, t, r, q); sgl_prof_add(369, t0_); SGL_POST(369); }
++static void w_369(void *rctx, GLenum target, GLfloat s, GLfloat t, GLfloat r, GLfloat q) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glMultiTexCoord4f(SGL_TGT(target), s, t, r, q); if (sgl_profile_enabled) sgl_prof_add(369, t0_); SGL_POST(369); }
+ static long unsupported_370(void) { sgl_unsupported(370, "?"); return 0; }
+ static long unsupported_371(void) { sgl_unsupported(371, "?"); return 0; }
+ static long unsupported_372(void) { sgl_unsupported(372, "?"); return 0; }
+@@ -380,13 +380,13 @@
+ static long unsupported_376(void) { sgl_unsupported(376, "?"); return 0; }
+ static long unsupported_377(void) { sgl_unsupported(377, "?"); return 0; }
+ static long unsupported_378(void) { sgl_unsupported(378, "?"); return 0; }
+-static void w_379(void *rctx, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLsizei imageSize, const GLvoid *data) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glCompressedTexImage3D(SGL_TGT(target), level, internalformat, width, height, depth, border, imageSize, data); sgl_prof_add(379, t0_); SGL_POST(379); }
+-static void w_380(void *rctx, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const GLvoid *data) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glCompressedTexImage2D(SGL_TGT(target), level, internalformat, width, height, border, imageSize, data); sgl_prof_add(380, t0_); SGL_POST(380); }
++static void w_379(void *rctx, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLsizei imageSize, const GLvoid *data) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glCompressedTexImage3D(SGL_TGT(target), level, internalformat, width, height, depth, border, imageSize, data); if (sgl_profile_enabled) sgl_prof_add(379, t0_); SGL_POST(379); }
++static void w_380(void *rctx, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const GLvoid *data) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glCompressedTexImage2D(SGL_TGT(target), level, internalformat, width, height, border, imageSize, data); if (sgl_profile_enabled) sgl_prof_add(380, t0_); SGL_POST(380); }
+ static long unsupported_381(void) { sgl_unsupported(381, "?"); return 0; }
+-static void w_382(void *rctx, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const GLvoid *data) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glCompressedTexSubImage3D(SGL_TGT(target), level, xoffset, yoffset, zoffset, width, height, depth, format, imageSize, data); sgl_prof_add(382, t0_); SGL_POST(382); }
+-static void w_383(void *rctx, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const GLvoid *data) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glCompressedTexSubImage2D(SGL_TGT(target), level, xoffset, yoffset, width, height, format, imageSize, data); sgl_prof_add(383, t0_); SGL_POST(383); }
++static void w_382(void *rctx, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const GLvoid *data) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glCompressedTexSubImage3D(SGL_TGT(target), level, xoffset, yoffset, zoffset, width, height, depth, format, imageSize, data); if (sgl_profile_enabled) sgl_prof_add(382, t0_); SGL_POST(382); }
++static void w_383(void *rctx, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const GLvoid *data) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glCompressedTexSubImage2D(SGL_TGT(target), level, xoffset, yoffset, width, height, format, imageSize, data); if (sgl_profile_enabled) sgl_prof_add(383, t0_); SGL_POST(383); }
+ static long unsupported_384(void) { sgl_unsupported(384, "?"); return 0; }
+-static void w_385(void *rctx, GLenum target, GLint lod, GLvoid *img) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetCompressedTexImage(SGL_TGT(target), lod, img); sgl_prof_add(385, t0_); SGL_POST(385); }
++static void w_385(void *rctx, GLenum target, GLint lod, GLvoid *img) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetCompressedTexImage(SGL_TGT(target), lod, img); if (sgl_profile_enabled) sgl_prof_add(385, t0_); SGL_POST(385); }
+ static long unsupported_386(void) { sgl_unsupported(386, "?"); return 0; }
+ static long unsupported_387(void) { sgl_unsupported(387, "?"); return 0; }
+ static long unsupported_388(void) { sgl_unsupported(388, "?"); return 0; }
+@@ -406,7 +406,7 @@
+ static long unsupported_402(void) { sgl_unsupported(402, "?"); return 0; }
+ static long unsupported_403(void) { sgl_unsupported(403, "?"); return 0; }
+ static long unsupported_404(void) { sgl_unsupported(404, "?"); return 0; }
+-static void w_405(void *rctx, GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glDrawRangeElements(mode, start, end, count, type, indices); sgl_prof_add(405, t0_); SGL_POST(405); }
++static void w_405(void *rctx, GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glDrawRangeElements(mode, start, end, count, type, indices); if (sgl_profile_enabled) sgl_prof_add(405, t0_); SGL_POST(405); }
+ static long unsupported_406(void) { sgl_unsupported(406, "?"); return 0; }
+ static long unsupported_407(void) { sgl_unsupported(407, "?"); return 0; }
+ static long unsupported_408(void) { sgl_unsupported(408, "?"); return 0; }
+@@ -439,16 +439,16 @@
+ static long unsupported_435(void) { sgl_unsupported(435, "?"); return 0; }
+ static long unsupported_436(void) { sgl_unsupported(436, "?"); return 0; }
+ static long unsupported_437(void) { sgl_unsupported(437, "?"); return 0; }
+-static void w_438(void *rctx, GLenum target, GLint level, GLint internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const GLvoid *pixels) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glTexImage3D(SGL_TGT(target), level, internalFormat, width, height, depth, border, format, type, pixels); sgl_prof_add(438, t0_); SGL_POST(438); }
+-static void w_439(void *rctx, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const GLvoid *pixels) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glTexSubImage3D(SGL_TGT(target), level, xoffset, yoffset, zoffset, width, height, depth, format, type, pixels); sgl_prof_add(439, t0_); SGL_POST(439); }
+-static void w_440(void *rctx, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLint x, GLint y, GLsizei width, GLsizei height) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glCopyTexSubImage3D(SGL_TGT(target), level, xoffset, yoffset, zoffset, x, y, width, height); sgl_prof_add(440, t0_); SGL_POST(440); }
+-static void w_441(void *rctx, GLuint program, GLsizei uniformCount, const GLchar *const*uniformNames, GLuint *uniformIndices) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetUniformIndices(program, uniformCount, uniformNames, uniformIndices); sgl_prof_add(441, t0_); SGL_POST(441); }
+-static void w_442(void *rctx, GLuint program, GLsizei uniformCount, const GLuint *uniformIndices, GLenum pname, GLint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetActiveUniformsiv(program, uniformCount, uniformIndices, pname, params); sgl_prof_add(442, t0_); SGL_POST(442); }
++static void w_438(void *rctx, GLenum target, GLint level, GLint internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const GLvoid *pixels) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glTexImage3D(SGL_TGT(target), level, internalFormat, width, height, depth, border, format, type, pixels); if (sgl_profile_enabled) sgl_prof_add(438, t0_); SGL_POST(438); }
++static void w_439(void *rctx, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const GLvoid *pixels) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glTexSubImage3D(SGL_TGT(target), level, xoffset, yoffset, zoffset, width, height, depth, format, type, pixels); if (sgl_profile_enabled) sgl_prof_add(439, t0_); SGL_POST(439); }
++static void w_440(void *rctx, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLint x, GLint y, GLsizei width, GLsizei height) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glCopyTexSubImage3D(SGL_TGT(target), level, xoffset, yoffset, zoffset, x, y, width, height); if (sgl_profile_enabled) sgl_prof_add(440, t0_); SGL_POST(440); }
++static void w_441(void *rctx, GLuint program, GLsizei uniformCount, const GLchar *const*uniformNames, GLuint *uniformIndices) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetUniformIndices(program, uniformCount, uniformNames, uniformIndices); if (sgl_profile_enabled) sgl_prof_add(441, t0_); SGL_POST(441); }
++static void w_442(void *rctx, GLuint program, GLsizei uniformCount, const GLuint *uniformIndices, GLenum pname, GLint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetActiveUniformsiv(program, uniformCount, uniformIndices, pname, params); if (sgl_profile_enabled) sgl_prof_add(442, t0_); SGL_POST(442); }
+ static long unsupported_443(void) { sgl_unsupported(443, "?"); return 0; }
+-static GLuint w_444(void *rctx, GLuint program, const GLchar *uniformBlockName) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLuint r = glGetUniformBlockIndex(program, uniformBlockName); sgl_prof_add(444, t0_); SGL_POST(444); return r; }
+-static void w_445(void *rctx, GLuint program, GLuint uniformBlockIndex, GLenum pname, GLint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetActiveUniformBlockiv(program, uniformBlockIndex, pname, params); sgl_prof_add(445, t0_); SGL_POST(445); }
+-static void w_446(void *rctx, GLuint program, GLuint uniformBlockIndex, GLsizei bufSize, GLsizei *length, GLchar *uniformBlockName) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetActiveUniformBlockName(program, uniformBlockIndex, bufSize, length, uniformBlockName); sgl_prof_add(446, t0_); SGL_POST(446); }
+-static void w_447(void *rctx, GLuint program, GLuint uniformBlockIndex, GLuint uniformBlockBinding) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniformBlockBinding(program, uniformBlockIndex, uniformBlockBinding); sgl_prof_add(447, t0_); SGL_POST(447); }
++static GLuint w_444(void *rctx, GLuint program, const GLchar *uniformBlockName) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLuint r = glGetUniformBlockIndex(program, uniformBlockName); if (sgl_profile_enabled) sgl_prof_add(444, t0_); SGL_POST(444); return r; }
++static void w_445(void *rctx, GLuint program, GLuint uniformBlockIndex, GLenum pname, GLint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetActiveUniformBlockiv(program, uniformBlockIndex, pname, params); if (sgl_profile_enabled) sgl_prof_add(445, t0_); SGL_POST(445); }
++static void w_446(void *rctx, GLuint program, GLuint uniformBlockIndex, GLsizei bufSize, GLsizei *length, GLchar *uniformBlockName) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetActiveUniformBlockName(program, uniformBlockIndex, bufSize, length, uniformBlockName); if (sgl_profile_enabled) sgl_prof_add(446, t0_); SGL_POST(446); }
++static void w_447(void *rctx, GLuint program, GLuint uniformBlockIndex, GLuint uniformBlockBinding) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniformBlockBinding(program, uniformBlockIndex, uniformBlockBinding); if (sgl_profile_enabled) sgl_prof_add(447, t0_); SGL_POST(447); }
+ static long unsupported_448(void) { sgl_unsupported(448, "?"); return 0; }
+ static long unsupported_449(void) { sgl_unsupported(449, "?"); return 0; }
+ static long unsupported_450(void) { sgl_unsupported(450, "?"); return 0; }
+@@ -459,8 +459,8 @@
+ static long unsupported_455(void) { sgl_unsupported(455, "?"); return 0; }
+ static long unsupported_456(void) { sgl_unsupported(456, "?"); return 0; }
+ static long unsupported_457(void) { sgl_unsupported(457, "?"); return 0; }
+-static void w_458(void *rctx, GLenum modeRGB, GLenum modeAlpha) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glBlendEquationSeparate(modeRGB, modeAlpha); sgl_prof_add(458, t0_); SGL_POST(458); }
+-static void w_459(void *rctx, GLclampf value, GLboolean invert) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glSampleCoverage(value, invert); sgl_prof_add(459, t0_); SGL_POST(459); }
++static void w_458(void *rctx, GLenum modeRGB, GLenum modeAlpha) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glBlendEquationSeparate(modeRGB, modeAlpha); if (sgl_profile_enabled) sgl_prof_add(458, t0_); SGL_POST(458); }
++static void w_459(void *rctx, GLclampf value, GLboolean invert) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glSampleCoverage(value, invert); if (sgl_profile_enabled) sgl_prof_add(459, t0_); SGL_POST(459); }
+ static long unsupported_460(void) { sgl_unsupported(460, "?"); return 0; }
+ static long unsupported_461(void) { sgl_unsupported(461, "?"); return 0; }
+ static long unsupported_462(void) { sgl_unsupported(462, "?"); return 0; }
+@@ -470,33 +470,33 @@
+ static long unsupported_466(void) { sgl_unsupported(466, "glIsFenceAPPLE"); return 0; }
+ static long unsupported_467(void) { sgl_unsupported(467, "glTestFenceAPPLE"); return 0; }
+ static long unsupported_468(void) { sgl_unsupported(468, "glFinishFenceAPPLE"); return 0; }
+-static GLboolean ps_469(void *rctx, GLenum object, GLuint name) { uint64_t t0_ = mach_absolute_time(); GLboolean r = sgl_TestObjectAPPLE(rctx, object, name); sgl_prof_add(469, t0_); return r; }
+-static void ps_470(void *rctx, GLenum object, GLint name) { uint64_t t0_ = mach_absolute_time(); sgl_FinishObjectAPPLE(rctx, object, name); sgl_prof_add(470, t0_); }
++static GLboolean ps_469(void *rctx, GLenum object, GLuint name) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; GLboolean r = sgl_TestObjectAPPLE(rctx, object, name); if (sgl_profile_enabled) sgl_prof_add(469, t0_); return r; }
++static void ps_470(void *rctx, GLenum object, GLint name) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; sgl_FinishObjectAPPLE(rctx, object, name); if (sgl_profile_enabled) sgl_prof_add(470, t0_); }
+ static long unsupported_471(void) { sgl_unsupported(471, "?"); return 0; }
+ static long unsupported_472(void) { sgl_unsupported(472, "?"); return 0; }
+ static long unsupported_473(void) { sgl_unsupported(473, "?"); return 0; }
+ static long unsupported_474(void) { sgl_unsupported(474, "?"); return 0; }
+ static long unsupported_475(void) { sgl_unsupported(475, "?"); return 0; }
+-static void w_476(void *rctx, GLuint index, GLfloat x) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glVertexAttrib1f(index, x); sgl_prof_add(476, t0_); SGL_POST(476); }
++static void w_476(void *rctx, GLuint index, GLfloat x) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glVertexAttrib1f(index, x); if (sgl_profile_enabled) sgl_prof_add(476, t0_); SGL_POST(476); }
+ static long unsupported_477(void) { sgl_unsupported(477, "?"); return 0; }
+ static long unsupported_478(void) { sgl_unsupported(478, "?"); return 0; }
+-static void w_479(void *rctx, GLuint index, GLfloat x, GLfloat y) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glVertexAttrib2f(index, x, y); sgl_prof_add(479, t0_); SGL_POST(479); }
++static void w_479(void *rctx, GLuint index, GLfloat x, GLfloat y) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glVertexAttrib2f(index, x, y); if (sgl_profile_enabled) sgl_prof_add(479, t0_); SGL_POST(479); }
+ static long unsupported_480(void) { sgl_unsupported(480, "?"); return 0; }
+ static long unsupported_481(void) { sgl_unsupported(481, "?"); return 0; }
+-static void w_482(void *rctx, GLuint index, GLfloat x, GLfloat y, GLfloat z) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glVertexAttrib3f(index, x, y, z); sgl_prof_add(482, t0_); SGL_POST(482); }
++static void w_482(void *rctx, GLuint index, GLfloat x, GLfloat y, GLfloat z) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glVertexAttrib3f(index, x, y, z); if (sgl_profile_enabled) sgl_prof_add(482, t0_); SGL_POST(482); }
+ static long unsupported_483(void) { sgl_unsupported(483, "?"); return 0; }
+ static long unsupported_484(void) { sgl_unsupported(484, "?"); return 0; }
+-static void w_485(void *rctx, GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glVertexAttrib4f(index, x, y, z, w); sgl_prof_add(485, t0_); SGL_POST(485); }
++static void w_485(void *rctx, GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glVertexAttrib4f(index, x, y, z, w); if (sgl_profile_enabled) sgl_prof_add(485, t0_); SGL_POST(485); }
+ static long unsupported_486(void) { sgl_unsupported(486, "?"); return 0; }
+ static long unsupported_487(void) { sgl_unsupported(487, "?"); return 0; }
+ static long unsupported_488(void) { sgl_unsupported(488, "?"); return 0; }
+-static void w_489(void *rctx, GLuint index, const GLfloat *v) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glVertexAttrib1fv(index, v); sgl_prof_add(489, t0_); SGL_POST(489); }
++static void w_489(void *rctx, GLuint index, const GLfloat *v) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glVertexAttrib1fv(index, v); if (sgl_profile_enabled) sgl_prof_add(489, t0_); SGL_POST(489); }
+ static long unsupported_490(void) { sgl_unsupported(490, "?"); return 0; }
+ static long unsupported_491(void) { sgl_unsupported(491, "?"); return 0; }
+-static void w_492(void *rctx, GLuint index, const GLfloat *v) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glVertexAttrib2fv(index, v); sgl_prof_add(492, t0_); SGL_POST(492); }
++static void w_492(void *rctx, GLuint index, const GLfloat *v) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glVertexAttrib2fv(index, v); if (sgl_profile_enabled) sgl_prof_add(492, t0_); SGL_POST(492); }
+ static long unsupported_493(void) { sgl_unsupported(493, "?"); return 0; }
+ static long unsupported_494(void) { sgl_unsupported(494, "?"); return 0; }
+-static void w_495(void *rctx, GLuint index, const GLfloat *v) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glVertexAttrib3fv(index, v); sgl_prof_add(495, t0_); SGL_POST(495); }
++static void w_495(void *rctx, GLuint index, const GLfloat *v) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glVertexAttrib3fv(index, v); if (sgl_profile_enabled) sgl_prof_add(495, t0_); SGL_POST(495); }
+ static long unsupported_496(void) { sgl_unsupported(496, "?"); return 0; }
+ static long unsupported_497(void) { sgl_unsupported(497, "?"); return 0; }
+ static long unsupported_498(void) { sgl_unsupported(498, "?"); return 0; }
+@@ -504,7 +504,7 @@
+ static long unsupported_500(void) { sgl_unsupported(500, "?"); return 0; }
+ static long unsupported_501(void) { sgl_unsupported(501, "?"); return 0; }
+ static long unsupported_502(void) { sgl_unsupported(502, "?"); return 0; }
+-static void w_503(void *rctx, GLuint index, const GLfloat *v) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glVertexAttrib4fv(index, v); sgl_prof_add(503, t0_); SGL_POST(503); }
++static void w_503(void *rctx, GLuint index, const GLfloat *v) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glVertexAttrib4fv(index, v); if (sgl_profile_enabled) sgl_prof_add(503, t0_); SGL_POST(503); }
+ static long unsupported_504(void) { sgl_unsupported(504, "?"); return 0; }
+ static long unsupported_505(void) { sgl_unsupported(505, "?"); return 0; }
+ static long unsupported_506(void) { sgl_unsupported(506, "?"); return 0; }
+@@ -512,13 +512,13 @@
+ static long unsupported_508(void) { sgl_unsupported(508, "?"); return 0; }
+ static long unsupported_509(void) { sgl_unsupported(509, "?"); return 0; }
+ static long unsupported_510(void) { sgl_unsupported(510, "?"); return 0; }
+-static void w_511(void *rctx, GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glVertexAttribPointer(index, size, type, normalized, stride, pointer); sgl_prof_add(511, t0_); SGL_POST(511); }
+-static void w_512(void *rctx, GLuint index) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glEnableVertexAttribArray(index); sgl_prof_add(512, t0_); SGL_POST(512); }
+-static void w_513(void *rctx, GLuint index) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glDisableVertexAttribArray(index); sgl_prof_add(513, t0_); SGL_POST(513); }
++static void w_511(void *rctx, GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glVertexAttribPointer(index, size, type, normalized, stride, pointer); if (sgl_profile_enabled) sgl_prof_add(511, t0_); SGL_POST(511); }
++static void w_512(void *rctx, GLuint index) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glEnableVertexAttribArray(index); if (sgl_profile_enabled) sgl_prof_add(512, t0_); SGL_POST(512); }
++static void w_513(void *rctx, GLuint index) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glDisableVertexAttribArray(index); if (sgl_profile_enabled) sgl_prof_add(513, t0_); SGL_POST(513); }
+ static long unsupported_514(void) { sgl_unsupported(514, "?"); return 0; }
+-static void w_515(void *rctx, GLuint index, GLenum pname, GLfloat *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetVertexAttribfv(index, pname, params); sgl_prof_add(515, t0_); SGL_POST(515); }
+-static void w_516(void *rctx, GLuint index, GLenum pname, GLint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetVertexAttribiv(index, pname, params); sgl_prof_add(516, t0_); SGL_POST(516); }
+-static void w_517(void *rctx, GLuint index, GLenum pname, void **pointer) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetVertexAttribPointerv(index, pname, pointer); sgl_prof_add(517, t0_); SGL_POST(517); }
++static void w_515(void *rctx, GLuint index, GLenum pname, GLfloat *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetVertexAttribfv(index, pname, params); if (sgl_profile_enabled) sgl_prof_add(515, t0_); SGL_POST(515); }
++static void w_516(void *rctx, GLuint index, GLenum pname, GLint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetVertexAttribiv(index, pname, params); if (sgl_profile_enabled) sgl_prof_add(516, t0_); SGL_POST(516); }
++static void w_517(void *rctx, GLuint index, GLenum pname, void **pointer) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetVertexAttribPointerv(index, pname, pointer); if (sgl_profile_enabled) sgl_prof_add(517, t0_); SGL_POST(517); }
+ static long unsupported_518(void) { sgl_unsupported(518, "?"); return 0; }
+ static long unsupported_519(void) { sgl_unsupported(519, "?"); return 0; }
+ static long unsupported_520(void) { sgl_unsupported(520, "?"); return 0; }
+@@ -541,8 +541,8 @@
+ static long unsupported_537(void) { sgl_unsupported(537, "?"); return 0; }
+ static long unsupported_538(void) { sgl_unsupported(538, "?"); return 0; }
+ static long unsupported_539(void) { sgl_unsupported(539, "?"); return 0; }
+-static void w_540(void *rctx, GLenum pname, GLfloat param) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glPointParameterf(pname, param); sgl_prof_add(540, t0_); SGL_POST(540); }
+-static void w_541(void *rctx, GLenum pname, const GLfloat *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glPointParameterfv(pname, params); sgl_prof_add(541, t0_); SGL_POST(541); }
++static void w_540(void *rctx, GLenum pname, GLfloat param) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glPointParameterf(pname, param); if (sgl_profile_enabled) sgl_prof_add(540, t0_); SGL_POST(540); }
++static void w_541(void *rctx, GLenum pname, const GLfloat *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glPointParameterfv(pname, params); if (sgl_profile_enabled) sgl_prof_add(541, t0_); SGL_POST(541); }
+ static long unsupported_542(void) { sgl_unsupported(542, "?"); return 0; }
+ static long unsupported_543(void) { sgl_unsupported(543, "?"); return 0; }
+ static long unsupported_544(void) { sgl_unsupported(544, "?"); return 0; }
+@@ -592,97 +592,97 @@
+ static long unsupported_588(void) { sgl_unsupported(588, "?"); return 0; }
+ static long unsupported_589(void) { sgl_unsupported(589, "?"); return 0; }
+ static long unsupported_590(void) { sgl_unsupported(590, "?"); return 0; }
+-static void ps_591(void *rctx, GLhandleARB obj) { uint64_t t0_ = mach_absolute_time(); sgl_DeleteObjectARB(rctx, obj); sgl_prof_add(591, t0_); }
++static void ps_591(void *rctx, GLhandleARB obj) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; sgl_DeleteObjectARB(rctx, obj); if (sgl_profile_enabled) sgl_prof_add(591, t0_); }
+ static long unsupported_592(void) { sgl_unsupported(592, "?"); return 0; }
+-static void w_593(void *rctx, GLhandleARB containerObj, GLhandleARB attachedObj) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glDetachShader((GLuint)(uintptr_t)(containerObj), (GLuint)(uintptr_t)(attachedObj)); sgl_prof_add(593, t0_); SGL_POST(593); }
+-static GLhandleARB w_594(void *rctx, GLenum shaderType) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLhandleARB r = (GLhandleARB)(uintptr_t)(glCreateShader(shaderType)); sgl_prof_add(594, t0_); SGL_POST(594); return r; }
+-static void ps_595(void *rctx, GLhandleARB shaderObj, GLsizei count, const GLcharARB **string, const GLint *length) { uint64_t t0_ = mach_absolute_time(); sgl_ShaderSourceARB(rctx, shaderObj, count, string, length); sgl_prof_add(595, t0_); }
+-static void ps_596(void *rctx, GLhandleARB shaderObj) { uint64_t t0_ = mach_absolute_time(); sgl_CompileShaderARB(rctx, shaderObj); sgl_prof_add(596, t0_); }
+-static GLhandleARB w_597(void *rctx) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLhandleARB r = (GLhandleARB)(uintptr_t)(glCreateProgram()); sgl_prof_add(597, t0_); SGL_POST(597); return r; }
+-static void w_598(void *rctx, GLhandleARB containerObj, GLhandleARB obj) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glAttachShader((GLuint)(uintptr_t)(containerObj), (GLuint)(uintptr_t)(obj)); sgl_prof_add(598, t0_); SGL_POST(598); }
+-static void ps_599(void *rctx, GLhandleARB programObj) { uint64_t t0_ = mach_absolute_time(); sgl_LinkProgramARB(rctx, programObj); sgl_prof_add(599, t0_); }
+-static void w_600(void *rctx, GLhandleARB programObj) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUseProgram((GLuint)(uintptr_t)(programObj)); sgl_prof_add(600, t0_); SGL_POST(600); }
+-static void w_601(void *rctx, GLhandleARB programObj) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glValidateProgram((GLuint)(uintptr_t)(programObj)); sgl_prof_add(601, t0_); SGL_POST(601); }
+-static void w_602(void *rctx, GLint location, GLfloat v0) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform1f(location, v0); sgl_prof_add(602, t0_); SGL_POST(602); }
+-static void w_603(void *rctx, GLint location, GLfloat v0, GLfloat v1) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform2f(location, v0, v1); sgl_prof_add(603, t0_); SGL_POST(603); }
+-static void w_604(void *rctx, GLint location, GLfloat v0, GLfloat v1, GLfloat v2) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform3f(location, v0, v1, v2); sgl_prof_add(604, t0_); SGL_POST(604); }
+-static void w_605(void *rctx, GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform4f(location, v0, v1, v2, v3); sgl_prof_add(605, t0_); SGL_POST(605); }
+-static void w_606(void *rctx, GLint location, GLint v0) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform1i(location, v0); sgl_prof_add(606, t0_); SGL_POST(606); }
+-static void w_607(void *rctx, GLint location, GLint v0, GLint v1) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform2i(location, v0, v1); sgl_prof_add(607, t0_); SGL_POST(607); }
+-static void w_608(void *rctx, GLint location, GLint v0, GLint v1, GLint v2) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform3i(location, v0, v1, v2); sgl_prof_add(608, t0_); SGL_POST(608); }
+-static void w_609(void *rctx, GLint location, GLint v0, GLint v1, GLint v2, GLint v3) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform4i(location, v0, v1, v2, v3); sgl_prof_add(609, t0_); SGL_POST(609); }
+-static void w_610(void *rctx, GLint location, GLsizei count, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform1fv(location, count, value); sgl_prof_add(610, t0_); SGL_POST(610); }
+-static void w_611(void *rctx, GLint location, GLsizei count, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform2fv(location, count, value); sgl_prof_add(611, t0_); SGL_POST(611); }
+-static void w_612(void *rctx, GLint location, GLsizei count, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform3fv(location, count, value); sgl_prof_add(612, t0_); SGL_POST(612); }
+-static void w_613(void *rctx, GLint location, GLsizei count, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform4fv(location, count, value); sgl_prof_add(613, t0_); SGL_POST(613); }
+-static void w_614(void *rctx, GLint location, GLsizei count, const GLint *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform1iv(location, count, value); sgl_prof_add(614, t0_); SGL_POST(614); }
+-static void w_615(void *rctx, GLint location, GLsizei count, const GLint *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform2iv(location, count, value); sgl_prof_add(615, t0_); SGL_POST(615); }
+-static void w_616(void *rctx, GLint location, GLsizei count, const GLint *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform3iv(location, count, value); sgl_prof_add(616, t0_); SGL_POST(616); }
+-static void w_617(void *rctx, GLint location, GLsizei count, const GLint *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform4iv(location, count, value); sgl_prof_add(617, t0_); SGL_POST(617); }
+-static void w_618(void *rctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniformMatrix2fv(location, count, transpose, value); sgl_prof_add(618, t0_); SGL_POST(618); }
+-static void w_619(void *rctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniformMatrix3fv(location, count, transpose, value); sgl_prof_add(619, t0_); SGL_POST(619); }
+-static void w_620(void *rctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniformMatrix4fv(location, count, transpose, value); sgl_prof_add(620, t0_); SGL_POST(620); }
++static void w_593(void *rctx, GLhandleARB containerObj, GLhandleARB attachedObj) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glDetachShader((GLuint)(uintptr_t)(containerObj), (GLuint)(uintptr_t)(attachedObj)); if (sgl_profile_enabled) sgl_prof_add(593, t0_); SGL_POST(593); }
++static GLhandleARB w_594(void *rctx, GLenum shaderType) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLhandleARB r = (GLhandleARB)(uintptr_t)(glCreateShader(shaderType)); if (sgl_profile_enabled) sgl_prof_add(594, t0_); SGL_POST(594); return r; }
++static void ps_595(void *rctx, GLhandleARB shaderObj, GLsizei count, const GLcharARB **string, const GLint *length) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; sgl_ShaderSourceARB(rctx, shaderObj, count, string, length); if (sgl_profile_enabled) sgl_prof_add(595, t0_); }
++static void ps_596(void *rctx, GLhandleARB shaderObj) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; sgl_CompileShaderARB(rctx, shaderObj); if (sgl_profile_enabled) sgl_prof_add(596, t0_); }
++static GLhandleARB w_597(void *rctx) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLhandleARB r = (GLhandleARB)(uintptr_t)(glCreateProgram()); if (sgl_profile_enabled) sgl_prof_add(597, t0_); SGL_POST(597); return r; }
++static void w_598(void *rctx, GLhandleARB containerObj, GLhandleARB obj) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glAttachShader((GLuint)(uintptr_t)(containerObj), (GLuint)(uintptr_t)(obj)); if (sgl_profile_enabled) sgl_prof_add(598, t0_); SGL_POST(598); }
++static void ps_599(void *rctx, GLhandleARB programObj) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; sgl_LinkProgramARB(rctx, programObj); if (sgl_profile_enabled) sgl_prof_add(599, t0_); }
++static void w_600(void *rctx, GLhandleARB programObj) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUseProgram((GLuint)(uintptr_t)(programObj)); if (sgl_profile_enabled) sgl_prof_add(600, t0_); SGL_POST(600); }
++static void w_601(void *rctx, GLhandleARB programObj) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glValidateProgram((GLuint)(uintptr_t)(programObj)); if (sgl_profile_enabled) sgl_prof_add(601, t0_); SGL_POST(601); }
++static void w_602(void *rctx, GLint location, GLfloat v0) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform1f(location, v0); if (sgl_profile_enabled) sgl_prof_add(602, t0_); SGL_POST(602); }
++static void w_603(void *rctx, GLint location, GLfloat v0, GLfloat v1) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform2f(location, v0, v1); if (sgl_profile_enabled) sgl_prof_add(603, t0_); SGL_POST(603); }
++static void w_604(void *rctx, GLint location, GLfloat v0, GLfloat v1, GLfloat v2) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform3f(location, v0, v1, v2); if (sgl_profile_enabled) sgl_prof_add(604, t0_); SGL_POST(604); }
++static void w_605(void *rctx, GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform4f(location, v0, v1, v2, v3); if (sgl_profile_enabled) sgl_prof_add(605, t0_); SGL_POST(605); }
++static void w_606(void *rctx, GLint location, GLint v0) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform1i(location, v0); if (sgl_profile_enabled) sgl_prof_add(606, t0_); SGL_POST(606); }
++static void w_607(void *rctx, GLint location, GLint v0, GLint v1) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform2i(location, v0, v1); if (sgl_profile_enabled) sgl_prof_add(607, t0_); SGL_POST(607); }
++static void w_608(void *rctx, GLint location, GLint v0, GLint v1, GLint v2) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform3i(location, v0, v1, v2); if (sgl_profile_enabled) sgl_prof_add(608, t0_); SGL_POST(608); }
++static void w_609(void *rctx, GLint location, GLint v0, GLint v1, GLint v2, GLint v3) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform4i(location, v0, v1, v2, v3); if (sgl_profile_enabled) sgl_prof_add(609, t0_); SGL_POST(609); }
++static void w_610(void *rctx, GLint location, GLsizei count, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform1fv(location, count, value); if (sgl_profile_enabled) sgl_prof_add(610, t0_); SGL_POST(610); }
++static void w_611(void *rctx, GLint location, GLsizei count, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform2fv(location, count, value); if (sgl_profile_enabled) sgl_prof_add(611, t0_); SGL_POST(611); }
++static void w_612(void *rctx, GLint location, GLsizei count, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform3fv(location, count, value); if (sgl_profile_enabled) sgl_prof_add(612, t0_); SGL_POST(612); }
++static void w_613(void *rctx, GLint location, GLsizei count, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform4fv(location, count, value); if (sgl_profile_enabled) sgl_prof_add(613, t0_); SGL_POST(613); }
++static void w_614(void *rctx, GLint location, GLsizei count, const GLint *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform1iv(location, count, value); if (sgl_profile_enabled) sgl_prof_add(614, t0_); SGL_POST(614); }
++static void w_615(void *rctx, GLint location, GLsizei count, const GLint *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform2iv(location, count, value); if (sgl_profile_enabled) sgl_prof_add(615, t0_); SGL_POST(615); }
++static void w_616(void *rctx, GLint location, GLsizei count, const GLint *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform3iv(location, count, value); if (sgl_profile_enabled) sgl_prof_add(616, t0_); SGL_POST(616); }
++static void w_617(void *rctx, GLint location, GLsizei count, const GLint *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform4iv(location, count, value); if (sgl_profile_enabled) sgl_prof_add(617, t0_); SGL_POST(617); }
++static void w_618(void *rctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniformMatrix2fv(location, count, transpose, value); if (sgl_profile_enabled) sgl_prof_add(618, t0_); SGL_POST(618); }
++static void w_619(void *rctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniformMatrix3fv(location, count, transpose, value); if (sgl_profile_enabled) sgl_prof_add(619, t0_); SGL_POST(619); }
++static void w_620(void *rctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniformMatrix4fv(location, count, transpose, value); if (sgl_profile_enabled) sgl_prof_add(620, t0_); SGL_POST(620); }
+ static long unsupported_621(void) { sgl_unsupported(621, "?"); return 0; }
+ static long unsupported_622(void) { sgl_unsupported(622, "?"); return 0; }
+ static long unsupported_623(void) { sgl_unsupported(623, "?"); return 0; }
+ static long unsupported_624(void) { sgl_unsupported(624, "?"); return 0; }
+-static GLint w_625(void *rctx, GLhandleARB programObj, const GLcharARB *name) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLint r = glGetUniformLocation((GLuint)(uintptr_t)(programObj), (const GLchar *)(name)); sgl_prof_add(625, t0_); SGL_POST(625); return r; }
+-static void w_626(void *rctx, GLhandleARB programObj, GLuint index, GLsizei maxLength, GLsizei *length, GLint *size, GLenum *type, GLcharARB *name) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetActiveUniform((GLuint)(uintptr_t)(programObj), index, maxLength, length, size, type, (GLchar *)(name)); sgl_prof_add(626, t0_); SGL_POST(626); }
+-static void w_627(void *rctx, GLhandleARB programObj, GLint location, GLfloat *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetUniformfv((GLuint)(uintptr_t)(programObj), location, params); sgl_prof_add(627, t0_); SGL_POST(627); }
+-static void w_628(void *rctx, GLhandleARB programObj, GLint location, GLint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetUniformiv((GLuint)(uintptr_t)(programObj), location, params); sgl_prof_add(628, t0_); SGL_POST(628); }
+-static void w_629(void *rctx, GLhandleARB obj, GLsizei maxLength, GLsizei *length, GLcharARB *source) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetShaderSource((GLuint)(uintptr_t)(obj), maxLength, length, (GLchar *)(source)); sgl_prof_add(629, t0_); SGL_POST(629); }
+-static void w_630(void *rctx, GLhandleARB programObj, GLuint index, const GLcharARB *name) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glBindAttribLocation((GLuint)(uintptr_t)(programObj), index, (const GLchar *)(name)); sgl_prof_add(630, t0_); SGL_POST(630); }
+-static void w_631(void *rctx, GLhandleARB programObj, GLuint index, GLsizei maxLength, GLsizei *length, GLint *size, GLenum *type, GLcharARB *name) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetActiveAttrib((GLuint)(uintptr_t)(programObj), index, maxLength, length, size, type, (GLchar *)(name)); sgl_prof_add(631, t0_); SGL_POST(631); }
+-static GLint w_632(void *rctx, GLhandleARB programObj, const GLcharARB *name) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLint r = glGetAttribLocation((GLuint)(uintptr_t)(programObj), (const GLchar *)(name)); sgl_prof_add(632, t0_); SGL_POST(632); return r; }
++static GLint w_625(void *rctx, GLhandleARB programObj, const GLcharARB *name) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLint r = glGetUniformLocation((GLuint)(uintptr_t)(programObj), (const GLchar *)(name)); if (sgl_profile_enabled) sgl_prof_add(625, t0_); SGL_POST(625); return r; }
++static void w_626(void *rctx, GLhandleARB programObj, GLuint index, GLsizei maxLength, GLsizei *length, GLint *size, GLenum *type, GLcharARB *name) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetActiveUniform((GLuint)(uintptr_t)(programObj), index, maxLength, length, size, type, (GLchar *)(name)); if (sgl_profile_enabled) sgl_prof_add(626, t0_); SGL_POST(626); }
++static void w_627(void *rctx, GLhandleARB programObj, GLint location, GLfloat *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetUniformfv((GLuint)(uintptr_t)(programObj), location, params); if (sgl_profile_enabled) sgl_prof_add(627, t0_); SGL_POST(627); }
++static void w_628(void *rctx, GLhandleARB programObj, GLint location, GLint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetUniformiv((GLuint)(uintptr_t)(programObj), location, params); if (sgl_profile_enabled) sgl_prof_add(628, t0_); SGL_POST(628); }
++static void w_629(void *rctx, GLhandleARB obj, GLsizei maxLength, GLsizei *length, GLcharARB *source) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetShaderSource((GLuint)(uintptr_t)(obj), maxLength, length, (GLchar *)(source)); if (sgl_profile_enabled) sgl_prof_add(629, t0_); SGL_POST(629); }
++static void w_630(void *rctx, GLhandleARB programObj, GLuint index, const GLcharARB *name) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glBindAttribLocation((GLuint)(uintptr_t)(programObj), index, (const GLchar *)(name)); if (sgl_profile_enabled) sgl_prof_add(630, t0_); SGL_POST(630); }
++static void w_631(void *rctx, GLhandleARB programObj, GLuint index, GLsizei maxLength, GLsizei *length, GLint *size, GLenum *type, GLcharARB *name) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetActiveAttrib((GLuint)(uintptr_t)(programObj), index, maxLength, length, size, type, (GLchar *)(name)); if (sgl_profile_enabled) sgl_prof_add(631, t0_); SGL_POST(631); }
++static GLint w_632(void *rctx, GLhandleARB programObj, const GLcharARB *name) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLint r = glGetAttribLocation((GLuint)(uintptr_t)(programObj), (const GLchar *)(name)); if (sgl_profile_enabled) sgl_prof_add(632, t0_); SGL_POST(632); return r; }
+ static long unsupported_633(void) { sgl_unsupported(633, "?"); return 0; }
+-static void w_634(void *rctx, GLsizei n, GLuint *ids) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGenQueries(n, ids); sgl_prof_add(634, t0_); SGL_POST(634); }
+-static void w_635(void *rctx, GLsizei n, const GLuint *ids) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glDeleteQueries(n, ids); sgl_prof_add(635, t0_); SGL_POST(635); }
+-static GLboolean w_636(void *rctx, GLuint id) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLboolean r = glIsQuery(id); sgl_prof_add(636, t0_); SGL_POST(636); return r; }
+-static void w_637(void *rctx, GLenum target, GLuint id) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glBeginQuery(SGL_TGT(target), id); sgl_prof_add(637, t0_); SGL_POST(637); }
+-static void w_638(void *rctx, GLenum target) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glEndQuery(SGL_TGT(target)); sgl_prof_add(638, t0_); SGL_POST(638); }
+-static void w_639(void *rctx, GLenum target, GLenum pname, GLint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetQueryiv(SGL_TGT(target), pname, params); sgl_prof_add(639, t0_); SGL_POST(639); }
+-static void w_640(void *rctx, GLuint id, GLenum pname, GLint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetQueryObjectiv(id, pname, params); sgl_prof_add(640, t0_); SGL_POST(640); }
+-static void w_641(void *rctx, GLuint id, GLenum pname, GLuint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetQueryObjectuiv(id, pname, params); sgl_prof_add(641, t0_); SGL_POST(641); }
+-static void w_642(void *rctx, GLenum target, GLuint buffer) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glBindBuffer(SGL_TGT(target), buffer); sgl_prof_add(642, t0_); SGL_POST(642); }
+-static void w_643(void *rctx, GLsizei n, const GLuint *buffers) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glDeleteBuffers(n, buffers); sgl_prof_add(643, t0_); SGL_POST(643); }
+-static void w_644(void *rctx, GLsizei n, GLuint *buffers) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGenBuffers(n, buffers); sgl_prof_add(644, t0_); SGL_POST(644); }
+-static GLboolean w_645(void *rctx, GLuint buffer) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLboolean r = glIsBuffer(buffer); sgl_prof_add(645, t0_); SGL_POST(645); return r; }
+-static void w_646(void *rctx, GLenum target, GLsizeiptr size, const void *data, GLenum usage) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glBufferData(SGL_TGT(target), size, data, usage); sgl_prof_add(646, t0_); SGL_POST(646); }
+-static void w_647(void *rctx, GLenum target, GLintptr offset, GLsizeiptr size, const void *data) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glBufferSubData(SGL_TGT(target), offset, size, data); sgl_prof_add(647, t0_); SGL_POST(647); }
++static void w_634(void *rctx, GLsizei n, GLuint *ids) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGenQueries(n, ids); if (sgl_profile_enabled) sgl_prof_add(634, t0_); SGL_POST(634); }
++static void w_635(void *rctx, GLsizei n, const GLuint *ids) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glDeleteQueries(n, ids); if (sgl_profile_enabled) sgl_prof_add(635, t0_); SGL_POST(635); }
++static GLboolean w_636(void *rctx, GLuint id) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLboolean r = glIsQuery(id); if (sgl_profile_enabled) sgl_prof_add(636, t0_); SGL_POST(636); return r; }
++static void w_637(void *rctx, GLenum target, GLuint id) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glBeginQuery(SGL_TGT(target), id); if (sgl_profile_enabled) sgl_prof_add(637, t0_); SGL_POST(637); }
++static void w_638(void *rctx, GLenum target) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glEndQuery(SGL_TGT(target)); if (sgl_profile_enabled) sgl_prof_add(638, t0_); SGL_POST(638); }
++static void w_639(void *rctx, GLenum target, GLenum pname, GLint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetQueryiv(SGL_TGT(target), pname, params); if (sgl_profile_enabled) sgl_prof_add(639, t0_); SGL_POST(639); }
++static void w_640(void *rctx, GLuint id, GLenum pname, GLint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetQueryObjectiv(id, pname, params); if (sgl_profile_enabled) sgl_prof_add(640, t0_); SGL_POST(640); }
++static void w_641(void *rctx, GLuint id, GLenum pname, GLuint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetQueryObjectuiv(id, pname, params); if (sgl_profile_enabled) sgl_prof_add(641, t0_); SGL_POST(641); }
++static void w_642(void *rctx, GLenum target, GLuint buffer) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glBindBuffer(SGL_TGT(target), buffer); if (sgl_profile_enabled) sgl_prof_add(642, t0_); SGL_POST(642); }
++static void w_643(void *rctx, GLsizei n, const GLuint *buffers) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glDeleteBuffers(n, buffers); if (sgl_profile_enabled) sgl_prof_add(643, t0_); SGL_POST(643); }
++static void w_644(void *rctx, GLsizei n, GLuint *buffers) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGenBuffers(n, buffers); if (sgl_profile_enabled) sgl_prof_add(644, t0_); SGL_POST(644); }
++static GLboolean w_645(void *rctx, GLuint buffer) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLboolean r = glIsBuffer(buffer); if (sgl_profile_enabled) sgl_prof_add(645, t0_); SGL_POST(645); return r; }
++static void w_646(void *rctx, GLenum target, GLsizeiptr size, const void *data, GLenum usage) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glBufferData(SGL_TGT(target), size, data, usage); if (sgl_profile_enabled) sgl_prof_add(646, t0_); SGL_POST(646); }
++static void w_647(void *rctx, GLenum target, GLintptr offset, GLsizeiptr size, const void *data) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glBufferSubData(SGL_TGT(target), offset, size, data); if (sgl_profile_enabled) sgl_prof_add(647, t0_); SGL_POST(647); }
+ static long unsupported_648(void) { sgl_unsupported(648, "?"); return 0; }
+-static void * w_649(void *rctx, GLenum target, GLenum access) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); void * r = glMapBuffer(SGL_TGT(target), access); sgl_prof_add(649, t0_); SGL_POST(649); return r; }
+-static GLboolean w_650(void *rctx, GLenum target) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLboolean r = glUnmapBuffer(SGL_TGT(target)); sgl_prof_add(650, t0_); SGL_POST(650); return r; }
+-static void w_651(void *rctx, GLenum target, GLenum pname, GLint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetBufferParameteriv(SGL_TGT(target), pname, params); sgl_prof_add(651, t0_); SGL_POST(651); }
+-static void w_652(void *rctx, GLenum target, GLenum pname, void **params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetBufferPointerv(SGL_TGT(target), pname, params); sgl_prof_add(652, t0_); SGL_POST(652); }
++static void * w_649(void *rctx, GLenum target, GLenum access) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); void * r = glMapBuffer(SGL_TGT(target), access); if (sgl_profile_enabled) sgl_prof_add(649, t0_); SGL_POST(649); return r; }
++static GLboolean w_650(void *rctx, GLenum target) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLboolean r = glUnmapBuffer(SGL_TGT(target)); if (sgl_profile_enabled) sgl_prof_add(650, t0_); SGL_POST(650); return r; }
++static void w_651(void *rctx, GLenum target, GLenum pname, GLint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetBufferParameteriv(SGL_TGT(target), pname, params); if (sgl_profile_enabled) sgl_prof_add(651, t0_); SGL_POST(651); }
++static void w_652(void *rctx, GLenum target, GLenum pname, void **params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetBufferPointerv(SGL_TGT(target), pname, params); if (sgl_profile_enabled) sgl_prof_add(652, t0_); SGL_POST(652); }
+ static long unsupported_653(void) { sgl_unsupported(653, "?"); return 0; }
+-static void w_654(void *rctx, GLsizei n, const GLenum *bufs) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glDrawBuffers(n, bufs); sgl_prof_add(654, t0_); SGL_POST(654); }
+-static GLboolean w_655(void *rctx, GLuint shader) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLboolean r = glIsShader(shader); sgl_prof_add(655, t0_); SGL_POST(655); return r; }
+-static GLboolean w_656(void *rctx, GLuint program) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLboolean r = glIsProgram(program); sgl_prof_add(656, t0_); SGL_POST(656); return r; }
+-static void w_657(void *rctx, GLuint shader, GLenum pname, GLint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetShaderiv(shader, pname, params); sgl_prof_add(657, t0_); SGL_POST(657); }
+-static void w_658(void *rctx, GLuint program, GLenum pname, GLint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetProgramiv(program, pname, params); sgl_prof_add(658, t0_); SGL_POST(658); }
+-static void w_659(void *rctx, GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetShaderInfoLog(shader, bufSize, length, infoLog); sgl_prof_add(659, t0_); SGL_POST(659); }
+-static void w_660(void *rctx, GLuint program, GLsizei bufSize, GLsizei *length, GLchar *infoLog) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetProgramInfoLog(program, bufSize, length, infoLog); sgl_prof_add(660, t0_); SGL_POST(660); }
+-static void w_661(void *rctx, GLenum face, GLenum func, GLint ref, GLuint mask) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glStencilFuncSeparate(face, func, ref, mask); sgl_prof_add(661, t0_); SGL_POST(661); }
+-static void w_662(void *rctx, GLenum face, GLuint mask) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glStencilMaskSeparate(face, mask); sgl_prof_add(662, t0_); SGL_POST(662); }
++static void w_654(void *rctx, GLsizei n, const GLenum *bufs) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glDrawBuffers(n, bufs); if (sgl_profile_enabled) sgl_prof_add(654, t0_); SGL_POST(654); }
++static GLboolean w_655(void *rctx, GLuint shader) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLboolean r = glIsShader(shader); if (sgl_profile_enabled) sgl_prof_add(655, t0_); SGL_POST(655); return r; }
++static GLboolean w_656(void *rctx, GLuint program) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLboolean r = glIsProgram(program); if (sgl_profile_enabled) sgl_prof_add(656, t0_); SGL_POST(656); return r; }
++static void w_657(void *rctx, GLuint shader, GLenum pname, GLint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetShaderiv(shader, pname, params); if (sgl_profile_enabled) sgl_prof_add(657, t0_); SGL_POST(657); }
++static void w_658(void *rctx, GLuint program, GLenum pname, GLint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetProgramiv(program, pname, params); if (sgl_profile_enabled) sgl_prof_add(658, t0_); SGL_POST(658); }
++static void w_659(void *rctx, GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetShaderInfoLog(shader, bufSize, length, infoLog); if (sgl_profile_enabled) sgl_prof_add(659, t0_); SGL_POST(659); }
++static void w_660(void *rctx, GLuint program, GLsizei bufSize, GLsizei *length, GLchar *infoLog) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetProgramInfoLog(program, bufSize, length, infoLog); if (sgl_profile_enabled) sgl_prof_add(660, t0_); SGL_POST(660); }
++static void w_661(void *rctx, GLenum face, GLenum func, GLint ref, GLuint mask) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glStencilFuncSeparate(face, func, ref, mask); if (sgl_profile_enabled) sgl_prof_add(661, t0_); SGL_POST(661); }
++static void w_662(void *rctx, GLenum face, GLuint mask) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glStencilMaskSeparate(face, mask); if (sgl_profile_enabled) sgl_prof_add(662, t0_); SGL_POST(662); }
+ static long unsupported_663(void) { sgl_unsupported(663, "?"); return 0; }
+ static long unsupported_664(void) { sgl_unsupported(664, "?"); return 0; }
+-static GLboolean w_665(void *rctx, GLuint renderbuffer) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLboolean r = glIsRenderbuffer(renderbuffer); sgl_prof_add(665, t0_); SGL_POST(665); return r; }
+-static void w_666(void *rctx, GLenum target, GLuint renderbuffer) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glBindRenderbuffer(SGL_TGT(target), renderbuffer); sgl_prof_add(666, t0_); SGL_POST(666); }
+-static void w_667(void *rctx, GLsizei n, const GLuint *renderbuffers) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glDeleteRenderbuffers(n, renderbuffers); sgl_prof_add(667, t0_); SGL_POST(667); }
+-static void w_668(void *rctx, GLsizei n, GLuint *renderbuffers) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGenRenderbuffers(n, renderbuffers); sgl_prof_add(668, t0_); SGL_POST(668); }
+-static void w_669(void *rctx, GLenum target, GLenum internalformat, GLsizei width, GLsizei height) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glRenderbufferStorage(SGL_TGT(target), internalformat, width, height); sgl_prof_add(669, t0_); SGL_POST(669); }
+-static void w_670(void *rctx, GLenum target, GLenum pname, GLint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetRenderbufferParameteriv(SGL_TGT(target), pname, params); sgl_prof_add(670, t0_); SGL_POST(670); }
+-static GLboolean w_671(void *rctx, GLuint framebuffer) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLboolean r = glIsFramebuffer(framebuffer); sgl_prof_add(671, t0_); SGL_POST(671); return r; }
+-static void ps_672(void *rctx, GLenum target, GLuint framebuffer) { uint64_t t0_ = mach_absolute_time(); sgl_BindFramebufferEXT(rctx, target, framebuffer); sgl_prof_add(672, t0_); }
+-static void w_673(void *rctx, GLsizei n, const GLuint *framebuffers) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glDeleteFramebuffers(n, framebuffers); sgl_prof_add(673, t0_); SGL_POST(673); }
+-static void w_674(void *rctx, GLsizei n, GLuint *framebuffers) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGenFramebuffers(n, framebuffers); sgl_prof_add(674, t0_); SGL_POST(674); }
+-static GLenum w_675(void *rctx, GLenum target) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLenum r = glCheckFramebufferStatus(SGL_TGT(target)); sgl_prof_add(675, t0_); SGL_POST(675); return r; }
++static GLboolean w_665(void *rctx, GLuint renderbuffer) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLboolean r = glIsRenderbuffer(renderbuffer); if (sgl_profile_enabled) sgl_prof_add(665, t0_); SGL_POST(665); return r; }
++static void w_666(void *rctx, GLenum target, GLuint renderbuffer) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glBindRenderbuffer(SGL_TGT(target), renderbuffer); if (sgl_profile_enabled) sgl_prof_add(666, t0_); SGL_POST(666); }
++static void w_667(void *rctx, GLsizei n, const GLuint *renderbuffers) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glDeleteRenderbuffers(n, renderbuffers); if (sgl_profile_enabled) sgl_prof_add(667, t0_); SGL_POST(667); }
++static void w_668(void *rctx, GLsizei n, GLuint *renderbuffers) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGenRenderbuffers(n, renderbuffers); if (sgl_profile_enabled) sgl_prof_add(668, t0_); SGL_POST(668); }
++static void w_669(void *rctx, GLenum target, GLenum internalformat, GLsizei width, GLsizei height) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glRenderbufferStorage(SGL_TGT(target), internalformat, width, height); if (sgl_profile_enabled) sgl_prof_add(669, t0_); SGL_POST(669); }
++static void w_670(void *rctx, GLenum target, GLenum pname, GLint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetRenderbufferParameteriv(SGL_TGT(target), pname, params); if (sgl_profile_enabled) sgl_prof_add(670, t0_); SGL_POST(670); }
++static GLboolean w_671(void *rctx, GLuint framebuffer) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLboolean r = glIsFramebuffer(framebuffer); if (sgl_profile_enabled) sgl_prof_add(671, t0_); SGL_POST(671); return r; }
++static void ps_672(void *rctx, GLenum target, GLuint framebuffer) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; sgl_BindFramebufferEXT(rctx, target, framebuffer); if (sgl_profile_enabled) sgl_prof_add(672, t0_); }
++static void w_673(void *rctx, GLsizei n, const GLuint *framebuffers) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glDeleteFramebuffers(n, framebuffers); if (sgl_profile_enabled) sgl_prof_add(673, t0_); SGL_POST(673); }
++static void w_674(void *rctx, GLsizei n, GLuint *framebuffers) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGenFramebuffers(n, framebuffers); if (sgl_profile_enabled) sgl_prof_add(674, t0_); SGL_POST(674); }
++static GLenum w_675(void *rctx, GLenum target) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLenum r = glCheckFramebufferStatus(SGL_TGT(target)); if (sgl_profile_enabled) sgl_prof_add(675, t0_); SGL_POST(675); return r; }
+ static long unsupported_676(void) { sgl_unsupported(676, "?"); return 0; }
+-static void ps_677(void *rctx, GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level) { uint64_t t0_ = mach_absolute_time(); sgl_FramebufferTexture2DEXT(rctx, target, attachment, textarget, texture, level); sgl_prof_add(677, t0_); }
++static void ps_677(void *rctx, GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; sgl_FramebufferTexture2DEXT(rctx, target, attachment, textarget, texture, level); if (sgl_profile_enabled) sgl_prof_add(677, t0_); }
+ static long unsupported_678(void) { sgl_unsupported(678, "?"); return 0; }
+-static void w_679(void *rctx, GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glFramebufferRenderbuffer(SGL_TGT(target), attachment, renderbuffertarget, renderbuffer); sgl_prof_add(679, t0_); SGL_POST(679); }
+-static void w_680(void *rctx, GLenum target, GLenum attachment, GLenum pname, GLint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetFramebufferAttachmentParameteriv(SGL_TGT(target), attachment, pname, params); sgl_prof_add(680, t0_); SGL_POST(680); }
+-static void w_681(void *rctx, GLenum target) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGenerateMipmap(SGL_TGT(target)); sgl_prof_add(681, t0_); SGL_POST(681); }
++static void w_679(void *rctx, GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glFramebufferRenderbuffer(SGL_TGT(target), attachment, renderbuffertarget, renderbuffer); if (sgl_profile_enabled) sgl_prof_add(679, t0_); SGL_POST(679); }
++static void w_680(void *rctx, GLenum target, GLenum attachment, GLenum pname, GLint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetFramebufferAttachmentParameteriv(SGL_TGT(target), attachment, pname, params); if (sgl_profile_enabled) sgl_prof_add(680, t0_); SGL_POST(680); }
++static void w_681(void *rctx, GLenum target) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGenerateMipmap(SGL_TGT(target)); if (sgl_profile_enabled) sgl_prof_add(681, t0_); SGL_POST(681); }
+ static long unsupported_682(void) { sgl_unsupported(682, "?"); return 0; }
+ static long unsupported_683(void) { sgl_unsupported(683, "?"); return 0; }
+ static long unsupported_684(void) { sgl_unsupported(684, "?"); return 0; }
+@@ -690,17 +690,17 @@
+ static long unsupported_686(void) { sgl_unsupported(686, "?"); return 0; }
+ static long unsupported_687(void) { sgl_unsupported(687, "?"); return 0; }
+ static long unsupported_688(void) { sgl_unsupported(688, "?"); return 0; }
+-static void w_689(void *rctx, GLuint program, GLenum pname, GLint value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramParameteri(program, pname, value); sgl_prof_add(689, t0_); SGL_POST(689); }
++static void w_689(void *rctx, GLuint program, GLenum pname, GLint value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramParameteri(program, pname, value); if (sgl_profile_enabled) sgl_prof_add(689, t0_); SGL_POST(689); }
+ static long unsupported_690(void) { sgl_unsupported(690, "?"); return 0; }
+-static void w_691(void *rctx, GLenum target, GLenum attachment, GLuint texture, GLint level, GLint layer) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glFramebufferTextureLayer(SGL_TGT(target), attachment, texture, level, layer); sgl_prof_add(691, t0_); SGL_POST(691); }
++static void w_691(void *rctx, GLenum target, GLenum attachment, GLuint texture, GLint level, GLint layer) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glFramebufferTextureLayer(SGL_TGT(target), attachment, texture, level, layer); if (sgl_profile_enabled) sgl_prof_add(691, t0_); SGL_POST(691); }
+ static long unsupported_692(void) { sgl_unsupported(692, "?"); return 0; }
+-static void w_693(void *rctx, GLenum target, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glBindBufferRange(SGL_TGT(target), index, buffer, offset, size); sgl_prof_add(693, t0_); SGL_POST(693); }
++static void w_693(void *rctx, GLenum target, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glBindBufferRange(SGL_TGT(target), index, buffer, offset, size); if (sgl_profile_enabled) sgl_prof_add(693, t0_); SGL_POST(693); }
+ static long unsupported_694(void) { sgl_unsupported(694, "?"); return 0; }
+-static void w_695(void *rctx, GLenum target, GLuint index, GLuint buffer) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glBindBufferBase(SGL_TGT(target), index, buffer); sgl_prof_add(695, t0_); SGL_POST(695); }
+-static void w_696(void *rctx, GLenum primitiveMode) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glBeginTransformFeedback(primitiveMode); sgl_prof_add(696, t0_); SGL_POST(696); }
+-static void w_697(void *rctx) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glEndTransformFeedback(); sgl_prof_add(697, t0_); SGL_POST(697); }
+-static void w_698(void *rctx, GLuint program, GLsizei count, const GLchar *const*varyings, GLenum bufferMode) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glTransformFeedbackVaryings(program, count, varyings, bufferMode); sgl_prof_add(698, t0_); SGL_POST(698); }
+-static void w_699(void *rctx, GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLsizei *size, GLenum *type, GLchar *name) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetTransformFeedbackVarying(program, index, bufSize, length, size, type, name); sgl_prof_add(699, t0_); SGL_POST(699); }
++static void w_695(void *rctx, GLenum target, GLuint index, GLuint buffer) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glBindBufferBase(SGL_TGT(target), index, buffer); if (sgl_profile_enabled) sgl_prof_add(695, t0_); SGL_POST(695); }
++static void w_696(void *rctx, GLenum primitiveMode) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glBeginTransformFeedback(primitiveMode); if (sgl_profile_enabled) sgl_prof_add(696, t0_); SGL_POST(696); }
++static void w_697(void *rctx) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glEndTransformFeedback(); if (sgl_profile_enabled) sgl_prof_add(697, t0_); SGL_POST(697); }
++static void w_698(void *rctx, GLuint program, GLsizei count, const GLchar *const*varyings, GLenum bufferMode) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glTransformFeedbackVaryings(program, count, varyings, bufferMode); if (sgl_profile_enabled) sgl_prof_add(698, t0_); SGL_POST(698); }
++static void w_699(void *rctx, GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLsizei *size, GLenum *type, GLchar *name) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetTransformFeedbackVarying(program, index, bufSize, length, size, type, name); if (sgl_profile_enabled) sgl_prof_add(699, t0_); SGL_POST(699); }
+ static long unsupported_701(void) { sgl_unsupported(701, "?"); return 0; }
+ static long unsupported_702(void) { sgl_unsupported(702, "?"); return 0; }
+ static long unsupported_703(void) { sgl_unsupported(703, "?"); return 0; }
+@@ -714,154 +714,154 @@
+ static long unsupported_711(void) { sgl_unsupported(711, "?"); return 0; }
+ static long unsupported_712(void) { sgl_unsupported(712, "?"); return 0; }
+ static long unsupported_713(void) { sgl_unsupported(713, "?"); return 0; }
+-static void w_714(void *rctx, GLuint index, GLint x, GLint y, GLint z, GLint w) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glVertexAttribI4i(index, x, y, z, w); sgl_prof_add(714, t0_); SGL_POST(714); }
++static void w_714(void *rctx, GLuint index, GLint x, GLint y, GLint z, GLint w) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glVertexAttribI4i(index, x, y, z, w); if (sgl_profile_enabled) sgl_prof_add(714, t0_); SGL_POST(714); }
+ static long unsupported_715(void) { sgl_unsupported(715, "?"); return 0; }
+ static long unsupported_716(void) { sgl_unsupported(716, "?"); return 0; }
+ static long unsupported_717(void) { sgl_unsupported(717, "?"); return 0; }
+-static void w_718(void *rctx, GLuint index, GLuint x, GLuint y, GLuint z, GLuint w) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glVertexAttribI4ui(index, x, y, z, w); sgl_prof_add(718, t0_); SGL_POST(718); }
++static void w_718(void *rctx, GLuint index, GLuint x, GLuint y, GLuint z, GLuint w) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glVertexAttribI4ui(index, x, y, z, w); if (sgl_profile_enabled) sgl_prof_add(718, t0_); SGL_POST(718); }
+ static long unsupported_719(void) { sgl_unsupported(719, "?"); return 0; }
+ static long unsupported_720(void) { sgl_unsupported(720, "?"); return 0; }
+ static long unsupported_721(void) { sgl_unsupported(721, "?"); return 0; }
+-static void w_722(void *rctx, GLuint index, const GLint *v) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glVertexAttribI4iv(index, v); sgl_prof_add(722, t0_); SGL_POST(722); }
++static void w_722(void *rctx, GLuint index, const GLint *v) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glVertexAttribI4iv(index, v); if (sgl_profile_enabled) sgl_prof_add(722, t0_); SGL_POST(722); }
+ static long unsupported_723(void) { sgl_unsupported(723, "?"); return 0; }
+ static long unsupported_724(void) { sgl_unsupported(724, "?"); return 0; }
+ static long unsupported_725(void) { sgl_unsupported(725, "?"); return 0; }
+-static void w_726(void *rctx, GLuint index, const GLuint *v) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glVertexAttribI4uiv(index, v); sgl_prof_add(726, t0_); SGL_POST(726); }
++static void w_726(void *rctx, GLuint index, const GLuint *v) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glVertexAttribI4uiv(index, v); if (sgl_profile_enabled) sgl_prof_add(726, t0_); SGL_POST(726); }
+ static long unsupported_727(void) { sgl_unsupported(727, "?"); return 0; }
+ static long unsupported_728(void) { sgl_unsupported(728, "?"); return 0; }
+ static long unsupported_729(void) { sgl_unsupported(729, "?"); return 0; }
+ static long unsupported_730(void) { sgl_unsupported(730, "?"); return 0; }
+-static void w_731(void *rctx, GLuint index, GLint size, GLenum type, GLsizei stride, const void *pointer) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glVertexAttribIPointer(index, size, type, stride, pointer); sgl_prof_add(731, t0_); SGL_POST(731); }
+-static void w_732(void *rctx, GLuint index, GLenum pname, GLint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetVertexAttribIiv(index, pname, params); sgl_prof_add(732, t0_); SGL_POST(732); }
+-static void w_733(void *rctx, GLuint index, GLenum pname, GLuint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetVertexAttribIuiv(index, pname, params); sgl_prof_add(733, t0_); SGL_POST(733); }
+-static void w_734(void *rctx, GLint location, GLuint v0) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform1ui(location, v0); sgl_prof_add(734, t0_); SGL_POST(734); }
+-static void w_735(void *rctx, GLint location, GLuint v0, GLuint v1) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform2ui(location, v0, v1); sgl_prof_add(735, t0_); SGL_POST(735); }
+-static void w_736(void *rctx, GLint location, GLuint v0, GLuint v1, GLuint v2) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform3ui(location, v0, v1, v2); sgl_prof_add(736, t0_); SGL_POST(736); }
+-static void w_737(void *rctx, GLint location, GLuint v0, GLuint v1, GLuint v2, GLuint v3) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform4ui(location, v0, v1, v2, v3); sgl_prof_add(737, t0_); SGL_POST(737); }
+-static void w_738(void *rctx, GLint location, GLsizei count, const GLuint *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform1uiv(location, count, value); sgl_prof_add(738, t0_); SGL_POST(738); }
+-static void w_739(void *rctx, GLint location, GLsizei count, const GLuint *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform2uiv(location, count, value); sgl_prof_add(739, t0_); SGL_POST(739); }
+-static void w_740(void *rctx, GLint location, GLsizei count, const GLuint *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform3uiv(location, count, value); sgl_prof_add(740, t0_); SGL_POST(740); }
+-static void w_741(void *rctx, GLint location, GLsizei count, const GLuint *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniform4uiv(location, count, value); sgl_prof_add(741, t0_); SGL_POST(741); }
+-static void w_742(void *rctx, GLuint program, GLint location, GLuint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetUniformuiv(program, location, params); sgl_prof_add(742, t0_); SGL_POST(742); }
++static void w_731(void *rctx, GLuint index, GLint size, GLenum type, GLsizei stride, const void *pointer) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glVertexAttribIPointer(index, size, type, stride, pointer); if (sgl_profile_enabled) sgl_prof_add(731, t0_); SGL_POST(731); }
++static void w_732(void *rctx, GLuint index, GLenum pname, GLint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetVertexAttribIiv(index, pname, params); if (sgl_profile_enabled) sgl_prof_add(732, t0_); SGL_POST(732); }
++static void w_733(void *rctx, GLuint index, GLenum pname, GLuint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetVertexAttribIuiv(index, pname, params); if (sgl_profile_enabled) sgl_prof_add(733, t0_); SGL_POST(733); }
++static void w_734(void *rctx, GLint location, GLuint v0) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform1ui(location, v0); if (sgl_profile_enabled) sgl_prof_add(734, t0_); SGL_POST(734); }
++static void w_735(void *rctx, GLint location, GLuint v0, GLuint v1) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform2ui(location, v0, v1); if (sgl_profile_enabled) sgl_prof_add(735, t0_); SGL_POST(735); }
++static void w_736(void *rctx, GLint location, GLuint v0, GLuint v1, GLuint v2) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform3ui(location, v0, v1, v2); if (sgl_profile_enabled) sgl_prof_add(736, t0_); SGL_POST(736); }
++static void w_737(void *rctx, GLint location, GLuint v0, GLuint v1, GLuint v2, GLuint v3) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform4ui(location, v0, v1, v2, v3); if (sgl_profile_enabled) sgl_prof_add(737, t0_); SGL_POST(737); }
++static void w_738(void *rctx, GLint location, GLsizei count, const GLuint *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform1uiv(location, count, value); if (sgl_profile_enabled) sgl_prof_add(738, t0_); SGL_POST(738); }
++static void w_739(void *rctx, GLint location, GLsizei count, const GLuint *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform2uiv(location, count, value); if (sgl_profile_enabled) sgl_prof_add(739, t0_); SGL_POST(739); }
++static void w_740(void *rctx, GLint location, GLsizei count, const GLuint *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform3uiv(location, count, value); if (sgl_profile_enabled) sgl_prof_add(740, t0_); SGL_POST(740); }
++static void w_741(void *rctx, GLint location, GLsizei count, const GLuint *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniform4uiv(location, count, value); if (sgl_profile_enabled) sgl_prof_add(741, t0_); SGL_POST(741); }
++static void w_742(void *rctx, GLuint program, GLint location, GLuint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetUniformuiv(program, location, params); if (sgl_profile_enabled) sgl_prof_add(742, t0_); SGL_POST(742); }
+ static long unsupported_743(void) { sgl_unsupported(743, "?"); return 0; }
+-static GLint w_744(void *rctx, GLuint program, const GLchar *name) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLint r = glGetFragDataLocation(program, name); sgl_prof_add(744, t0_); SGL_POST(744); return r; }
++static GLint w_744(void *rctx, GLuint program, const GLchar *name) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLint r = glGetFragDataLocation(program, name); if (sgl_profile_enabled) sgl_prof_add(744, t0_); SGL_POST(744); return r; }
+ static long unsupported_745(void) { sgl_unsupported(745, "?"); return 0; }
+ static long unsupported_746(void) { sgl_unsupported(746, "?"); return 0; }
+ static long unsupported_747(void) { sgl_unsupported(747, "?"); return 0; }
+ static long unsupported_748(void) { sgl_unsupported(748, "?"); return 0; }
+-static void w_749(void *rctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniformMatrix2x3fv(location, count, transpose, value); sgl_prof_add(749, t0_); SGL_POST(749); }
+-static void w_750(void *rctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniformMatrix3x2fv(location, count, transpose, value); sgl_prof_add(750, t0_); SGL_POST(750); }
+-static void w_751(void *rctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniformMatrix2x4fv(location, count, transpose, value); sgl_prof_add(751, t0_); SGL_POST(751); }
+-static void w_752(void *rctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniformMatrix4x2fv(location, count, transpose, value); sgl_prof_add(752, t0_); SGL_POST(752); }
+-static void w_753(void *rctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniformMatrix3x4fv(location, count, transpose, value); sgl_prof_add(753, t0_); SGL_POST(753); }
+-static void w_754(void *rctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUniformMatrix4x3fv(location, count, transpose, value); sgl_prof_add(754, t0_); SGL_POST(754); }
+-static void w_755(void *rctx, GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glBlitFramebuffer(srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, mask, filter); sgl_prof_add(755, t0_); SGL_POST(755); }
+-static void w_756(void *rctx, GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glRenderbufferStorageMultisample(SGL_TGT(target), samples, internalformat, width, height); sgl_prof_add(756, t0_); SGL_POST(756); }
++static void w_749(void *rctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniformMatrix2x3fv(location, count, transpose, value); if (sgl_profile_enabled) sgl_prof_add(749, t0_); SGL_POST(749); }
++static void w_750(void *rctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniformMatrix3x2fv(location, count, transpose, value); if (sgl_profile_enabled) sgl_prof_add(750, t0_); SGL_POST(750); }
++static void w_751(void *rctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniformMatrix2x4fv(location, count, transpose, value); if (sgl_profile_enabled) sgl_prof_add(751, t0_); SGL_POST(751); }
++static void w_752(void *rctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniformMatrix4x2fv(location, count, transpose, value); if (sgl_profile_enabled) sgl_prof_add(752, t0_); SGL_POST(752); }
++static void w_753(void *rctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniformMatrix3x4fv(location, count, transpose, value); if (sgl_profile_enabled) sgl_prof_add(753, t0_); SGL_POST(753); }
++static void w_754(void *rctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUniformMatrix4x3fv(location, count, transpose, value); if (sgl_profile_enabled) sgl_prof_add(754, t0_); SGL_POST(754); }
++static void w_755(void *rctx, GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glBlitFramebuffer(srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, mask, filter); if (sgl_profile_enabled) sgl_prof_add(755, t0_); SGL_POST(755); }
++static void w_756(void *rctx, GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glRenderbufferStorageMultisample(SGL_TGT(target), samples, internalformat, width, height); if (sgl_profile_enabled) sgl_prof_add(756, t0_); SGL_POST(756); }
+ static long unsupported_757(void) { sgl_unsupported(757, "?"); return 0; }
+ static long unsupported_758(void) { sgl_unsupported(758, "?"); return 0; }
+-static void w_759(void *rctx, GLuint program, GLsizei maxCount, GLsizei *count, GLuint *shaders) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetAttachedShaders(program, maxCount, count, shaders); sgl_prof_add(759, t0_); SGL_POST(759); }
++static void w_759(void *rctx, GLuint program, GLsizei maxCount, GLsizei *count, GLuint *shaders) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetAttachedShaders(program, maxCount, count, shaders); if (sgl_profile_enabled) sgl_prof_add(759, t0_); SGL_POST(759); }
+ static long unsupported_760(void) { sgl_unsupported(760, "?"); return 0; }
+-static void w_761(void *rctx, GLuint index, GLuint divisor) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glVertexAttribDivisor(index, divisor); sgl_prof_add(761, t0_); SGL_POST(761); }
+-static void w_762(void *rctx, GLenum mode, GLint first, GLsizei count, GLsizei instancecount) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glDrawArraysInstanced(mode, first, count, instancecount); sgl_prof_add(762, t0_); SGL_POST(762); }
+-static void w_763(void *rctx, GLenum mode, GLsizei count, GLenum type, const void *indices, GLsizei instancecount) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glDrawElementsInstanced(mode, count, type, indices, instancecount); sgl_prof_add(763, t0_); SGL_POST(763); }
++static void w_761(void *rctx, GLuint index, GLuint divisor) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glVertexAttribDivisor(index, divisor); if (sgl_profile_enabled) sgl_prof_add(761, t0_); SGL_POST(761); }
++static void w_762(void *rctx, GLenum mode, GLint first, GLsizei count, GLsizei instancecount) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glDrawArraysInstanced(mode, first, count, instancecount); if (sgl_profile_enabled) sgl_prof_add(762, t0_); SGL_POST(762); }
++static void w_763(void *rctx, GLenum mode, GLsizei count, GLenum type, const void *indices, GLsizei instancecount) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glDrawElementsInstanced(mode, count, type, indices, instancecount); if (sgl_profile_enabled) sgl_prof_add(763, t0_); SGL_POST(763); }
+ static long unsupported_764(void) { sgl_unsupported(764, "?"); return 0; }
+ static long unsupported_765(void) { sgl_unsupported(765, "?"); return 0; }
+ static long unsupported_766(void) { sgl_unsupported(766, "?"); return 0; }
+ static long unsupported_767(void) { sgl_unsupported(767, "?"); return 0; }
+-static void w_768(void *rctx, GLuint array) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glBindVertexArray(array); sgl_prof_add(768, t0_); SGL_POST(768); }
+-static void w_769(void *rctx, GLsizei n, const GLuint *arrays) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glDeleteVertexArrays(n, arrays); sgl_prof_add(769, t0_); SGL_POST(769); }
+-static void w_770(void *rctx, GLsizei n, GLuint *arrays) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGenVertexArrays(n, arrays); sgl_prof_add(770, t0_); SGL_POST(770); }
+-static GLboolean w_771(void *rctx, GLuint array) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLboolean r = glIsVertexArray(array); sgl_prof_add(771, t0_); SGL_POST(771); return r; }
++static void w_768(void *rctx, GLuint array) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glBindVertexArray(array); if (sgl_profile_enabled) sgl_prof_add(768, t0_); SGL_POST(768); }
++static void w_769(void *rctx, GLsizei n, const GLuint *arrays) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glDeleteVertexArrays(n, arrays); if (sgl_profile_enabled) sgl_prof_add(769, t0_); SGL_POST(769); }
++static void w_770(void *rctx, GLsizei n, GLuint *arrays) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGenVertexArrays(n, arrays); if (sgl_profile_enabled) sgl_prof_add(770, t0_); SGL_POST(770); }
++static GLboolean w_771(void *rctx, GLuint array) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLboolean r = glIsVertexArray(array); if (sgl_profile_enabled) sgl_prof_add(771, t0_); SGL_POST(771); return r; }
+ static long unsupported_772(void) { sgl_unsupported(772, "glPointSizePointer"); return 0; }
+ static long unsupported_773(void) { sgl_unsupported(773, "?"); return 0; }
+-static void w_774(void *rctx, GLenum buffer, GLint drawbuffer, const GLint *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glClearBufferiv(buffer, drawbuffer, value); sgl_prof_add(774, t0_); SGL_POST(774); }
+-static void w_775(void *rctx, GLenum buffer, GLint drawbuffer, const GLuint *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glClearBufferuiv(buffer, drawbuffer, value); sgl_prof_add(775, t0_); SGL_POST(775); }
+-static void w_776(void *rctx, GLenum buffer, GLint drawbuffer, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glClearBufferfv(buffer, drawbuffer, value); sgl_prof_add(776, t0_); SGL_POST(776); }
+-static void w_777(void *rctx, GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glClearBufferfi(buffer, drawbuffer, depth, stencil); sgl_prof_add(777, t0_); SGL_POST(777); }
+-static const GLubyte * w_778(void *rctx, GLenum name, GLuint index) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); const GLubyte * r = glGetStringi(name, index); sgl_prof_add(778, t0_); SGL_POST(778); return r; }
+-static GLsync w_779(void *rctx, GLenum condition, GLbitfield flags) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLsync r = glFenceSync(condition, flags); sgl_prof_add(779, t0_); SGL_POST(779); return r; }
+-static GLboolean w_780(void *rctx, GLsync sync) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLboolean r = glIsSync(sync); sgl_prof_add(780, t0_); SGL_POST(780); return r; }
+-static void w_781(void *rctx, GLsync sync) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glDeleteSync(sync); sgl_prof_add(781, t0_); SGL_POST(781); }
+-static GLenum w_782(void *rctx, GLsync sync, GLbitfield flags, GLuint64 timeout) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLenum r = glClientWaitSync(sync, flags, timeout); sgl_prof_add(782, t0_); SGL_POST(782); return r; }
+-static void w_783(void *rctx, GLsync sync, GLbitfield flags, GLuint64 timeout) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glWaitSync(sync, flags, timeout); sgl_prof_add(783, t0_); SGL_POST(783); }
+-static void w_784(void *rctx, GLenum pname, GLint64 *data) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetInteger64v(pname, data); sgl_prof_add(784, t0_); SGL_POST(784); }
+-static void w_785(void *rctx, GLsync sync, GLenum pname, GLsizei count, GLsizei *length, GLint *values) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetSynciv(sync, pname, count, length, values); sgl_prof_add(785, t0_); SGL_POST(785); }
++static void w_774(void *rctx, GLenum buffer, GLint drawbuffer, const GLint *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glClearBufferiv(buffer, drawbuffer, value); if (sgl_profile_enabled) sgl_prof_add(774, t0_); SGL_POST(774); }
++static void w_775(void *rctx, GLenum buffer, GLint drawbuffer, const GLuint *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glClearBufferuiv(buffer, drawbuffer, value); if (sgl_profile_enabled) sgl_prof_add(775, t0_); SGL_POST(775); }
++static void w_776(void *rctx, GLenum buffer, GLint drawbuffer, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glClearBufferfv(buffer, drawbuffer, value); if (sgl_profile_enabled) sgl_prof_add(776, t0_); SGL_POST(776); }
++static void w_777(void *rctx, GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glClearBufferfi(buffer, drawbuffer, depth, stencil); if (sgl_profile_enabled) sgl_prof_add(777, t0_); SGL_POST(777); }
++static const GLubyte * w_778(void *rctx, GLenum name, GLuint index) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); const GLubyte * r = glGetStringi(name, index); if (sgl_profile_enabled) sgl_prof_add(778, t0_); SGL_POST(778); return r; }
++static GLsync w_779(void *rctx, GLenum condition, GLbitfield flags) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLsync r = glFenceSync(condition, flags); if (sgl_profile_enabled) sgl_prof_add(779, t0_); SGL_POST(779); return r; }
++static GLboolean w_780(void *rctx, GLsync sync) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLboolean r = glIsSync(sync); if (sgl_profile_enabled) sgl_prof_add(780, t0_); SGL_POST(780); return r; }
++static void w_781(void *rctx, GLsync sync) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glDeleteSync(sync); if (sgl_profile_enabled) sgl_prof_add(781, t0_); SGL_POST(781); }
++static GLenum w_782(void *rctx, GLsync sync, GLbitfield flags, GLuint64 timeout) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLenum r = glClientWaitSync(sync, flags, timeout); if (sgl_profile_enabled) sgl_prof_add(782, t0_); SGL_POST(782); return r; }
++static void w_783(void *rctx, GLsync sync, GLbitfield flags, GLuint64 timeout) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glWaitSync(sync, flags, timeout); if (sgl_profile_enabled) sgl_prof_add(783, t0_); SGL_POST(783); }
++static void w_784(void *rctx, GLenum pname, GLint64 *data) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetInteger64v(pname, data); if (sgl_profile_enabled) sgl_prof_add(784, t0_); SGL_POST(784); }
++static void w_785(void *rctx, GLsync sync, GLenum pname, GLsizei count, GLsizei *length, GLint *values) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetSynciv(sync, pname, count, length, values); if (sgl_profile_enabled) sgl_prof_add(785, t0_); SGL_POST(785); }
+ static long unsupported_786(void) { sgl_unsupported(786, "?"); return 0; }
+ static long unsupported_787(void) { sgl_unsupported(787, "?"); return 0; }
+ static long unsupported_788(void) { sgl_unsupported(788, "?"); return 0; }
+ static long unsupported_789(void) { sgl_unsupported(789, "?"); return 0; }
+ static long unsupported_790(void) { sgl_unsupported(790, "?"); return 0; }
+-static void w_791(void *rctx, GLenum readTarget, GLenum writeTarget, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glCopyBufferSubData(readTarget, writeTarget, readOffset, writeOffset, size); sgl_prof_add(791, t0_); SGL_POST(791); }
++static void w_791(void *rctx, GLenum readTarget, GLenum writeTarget, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glCopyBufferSubData(readTarget, writeTarget, readOffset, writeOffset, size); if (sgl_profile_enabled) sgl_prof_add(791, t0_); SGL_POST(791); }
+ static long unsupported_792(void) { sgl_unsupported(792, "?"); return 0; }
+ static long unsupported_793(void) { sgl_unsupported(793, "?"); return 0; }
+ static long unsupported_794(void) { sgl_unsupported(794, "?"); return 0; }
+-static void * w_795(void *rctx, GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); void * r = glMapBufferRange(SGL_TGT(target), offset, length, access); sgl_prof_add(795, t0_); SGL_POST(795); return r; }
+-static void w_796(void *rctx, GLenum target, GLintptr offset, GLsizeiptr length) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glFlushMappedBufferRange(SGL_TGT(target), offset, length); sgl_prof_add(796, t0_); SGL_POST(796); }
++static void * w_795(void *rctx, GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); void * r = glMapBufferRange(SGL_TGT(target), offset, length, access); if (sgl_profile_enabled) sgl_prof_add(795, t0_); SGL_POST(795); return r; }
++static void w_796(void *rctx, GLenum target, GLintptr offset, GLsizeiptr length) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glFlushMappedBufferRange(SGL_TGT(target), offset, length); if (sgl_profile_enabled) sgl_prof_add(796, t0_); SGL_POST(796); }
+ static long unsupported_797(void) { sgl_unsupported(797, "?"); return 0; }
+-static void w_798(void *rctx, GLenum target, GLuint index, GLint64 *data) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetInteger64i_v(SGL_TGT(target), index, data); sgl_prof_add(798, t0_); SGL_POST(798); }
+-static void w_799(void *rctx, GLenum target, GLenum pname, GLint64 *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetBufferParameteri64v(SGL_TGT(target), pname, params); sgl_prof_add(799, t0_); SGL_POST(799); }
+-static void w_800(void *rctx, GLsizei count, GLuint *samplers) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGenSamplers(count, samplers); sgl_prof_add(800, t0_); SGL_POST(800); }
+-static void w_801(void *rctx, GLsizei count, const GLuint *samplers) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glDeleteSamplers(count, samplers); sgl_prof_add(801, t0_); SGL_POST(801); }
+-static GLboolean w_802(void *rctx, GLuint sampler) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLboolean r = glIsSampler(sampler); sgl_prof_add(802, t0_); SGL_POST(802); return r; }
+-static void w_803(void *rctx, GLuint unit, GLuint sampler) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glBindSampler(unit, sampler); sgl_prof_add(803, t0_); SGL_POST(803); }
+-static void w_804(void *rctx, GLuint sampler, GLenum pname, GLint param) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glSamplerParameteri(sampler, pname, param); sgl_prof_add(804, t0_); SGL_POST(804); }
+-static void w_805(void *rctx, GLuint sampler, GLenum pname, const GLint *param) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glSamplerParameteriv(sampler, pname, param); sgl_prof_add(805, t0_); SGL_POST(805); }
+-static void w_806(void *rctx, GLuint sampler, GLenum pname, GLfloat param) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glSamplerParameterf(sampler, pname, param); sgl_prof_add(806, t0_); SGL_POST(806); }
+-static void w_807(void *rctx, GLuint sampler, GLenum pname, const GLfloat *param) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glSamplerParameterfv(sampler, pname, param); sgl_prof_add(807, t0_); SGL_POST(807); }
++static void w_798(void *rctx, GLenum target, GLuint index, GLint64 *data) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetInteger64i_v(SGL_TGT(target), index, data); if (sgl_profile_enabled) sgl_prof_add(798, t0_); SGL_POST(798); }
++static void w_799(void *rctx, GLenum target, GLenum pname, GLint64 *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetBufferParameteri64v(SGL_TGT(target), pname, params); if (sgl_profile_enabled) sgl_prof_add(799, t0_); SGL_POST(799); }
++static void w_800(void *rctx, GLsizei count, GLuint *samplers) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGenSamplers(count, samplers); if (sgl_profile_enabled) sgl_prof_add(800, t0_); SGL_POST(800); }
++static void w_801(void *rctx, GLsizei count, const GLuint *samplers) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glDeleteSamplers(count, samplers); if (sgl_profile_enabled) sgl_prof_add(801, t0_); SGL_POST(801); }
++static GLboolean w_802(void *rctx, GLuint sampler) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLboolean r = glIsSampler(sampler); if (sgl_profile_enabled) sgl_prof_add(802, t0_); SGL_POST(802); return r; }
++static void w_803(void *rctx, GLuint unit, GLuint sampler) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glBindSampler(unit, sampler); if (sgl_profile_enabled) sgl_prof_add(803, t0_); SGL_POST(803); }
++static void w_804(void *rctx, GLuint sampler, GLenum pname, GLint param) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glSamplerParameteri(sampler, pname, param); if (sgl_profile_enabled) sgl_prof_add(804, t0_); SGL_POST(804); }
++static void w_805(void *rctx, GLuint sampler, GLenum pname, const GLint *param) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glSamplerParameteriv(sampler, pname, param); if (sgl_profile_enabled) sgl_prof_add(805, t0_); SGL_POST(805); }
++static void w_806(void *rctx, GLuint sampler, GLenum pname, GLfloat param) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glSamplerParameterf(sampler, pname, param); if (sgl_profile_enabled) sgl_prof_add(806, t0_); SGL_POST(806); }
++static void w_807(void *rctx, GLuint sampler, GLenum pname, const GLfloat *param) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glSamplerParameterfv(sampler, pname, param); if (sgl_profile_enabled) sgl_prof_add(807, t0_); SGL_POST(807); }
+ static long unsupported_808(void) { sgl_unsupported(808, "?"); return 0; }
+ static long unsupported_809(void) { sgl_unsupported(809, "?"); return 0; }
+-static void w_810(void *rctx, GLuint sampler, GLenum pname, GLint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetSamplerParameteriv(sampler, pname, params); sgl_prof_add(810, t0_); SGL_POST(810); }
+-static void w_811(void *rctx, GLuint sampler, GLenum pname, GLfloat *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetSamplerParameterfv(sampler, pname, params); sgl_prof_add(811, t0_); SGL_POST(811); }
++static void w_810(void *rctx, GLuint sampler, GLenum pname, GLint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetSamplerParameteriv(sampler, pname, params); if (sgl_profile_enabled) sgl_prof_add(810, t0_); SGL_POST(810); }
++static void w_811(void *rctx, GLuint sampler, GLenum pname, GLfloat *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetSamplerParameterfv(sampler, pname, params); if (sgl_profile_enabled) sgl_prof_add(811, t0_); SGL_POST(811); }
+ static long unsupported_812(void) { sgl_unsupported(812, "?"); return 0; }
+ static long unsupported_813(void) { sgl_unsupported(813, "?"); return 0; }
+-static void w_814(void *rctx, GLenum type, GLuint object, GLsizei length, const GLchar *label) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glLabelObjectEXT(type, object, length, label); sgl_prof_add(814, t0_); SGL_POST(814); }
+-static void w_815(void *rctx, GLenum type, GLuint object, GLsizei bufSize, GLsizei *length, GLchar *label) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetObjectLabel(type, object, bufSize, length, label); sgl_prof_add(815, t0_); SGL_POST(815); }
++static void w_814(void *rctx, GLenum type, GLuint object, GLsizei length, const GLchar *label) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glLabelObjectEXT(type, object, length, label); if (sgl_profile_enabled) sgl_prof_add(814, t0_); SGL_POST(814); }
++static void w_815(void *rctx, GLenum type, GLuint object, GLsizei bufSize, GLsizei *length, GLchar *label) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetObjectLabel(type, object, bufSize, length, label); if (sgl_profile_enabled) sgl_prof_add(815, t0_); SGL_POST(815); }
+ static long unsupported_816(void) { sgl_unsupported(816, "gliNoop"); return 0; }
+ static long unsupported_817(void) { sgl_unsupported(817, "gliNoop"); return 0; }
+ static long unsupported_818(void) { sgl_unsupported(818, "gliNoop"); return 0; }
+-static void w_819(void *rctx, GLuint pipeline, GLbitfield stages, GLuint program) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glUseProgramStages(pipeline, stages, program); sgl_prof_add(819, t0_); SGL_POST(819); }
+-static void w_820(void *rctx, GLuint pipeline, GLuint program) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glActiveShaderProgram(pipeline, program); sgl_prof_add(820, t0_); SGL_POST(820); }
+-static GLuint w_821(void *rctx, GLenum type, GLsizei count, const GLchar *const*strings) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLuint r = glCreateShaderProgramv(type, count, strings); sgl_prof_add(821, t0_); SGL_POST(821); return r; }
+-static void w_822(void *rctx, GLuint pipeline) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glBindProgramPipeline(pipeline); sgl_prof_add(822, t0_); SGL_POST(822); }
+-static void w_823(void *rctx, GLsizei n, const GLuint *pipelines) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glDeleteProgramPipelines(n, pipelines); sgl_prof_add(823, t0_); SGL_POST(823); }
+-static void w_824(void *rctx, GLsizei n, GLuint *pipelines) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGenProgramPipelines(n, pipelines); sgl_prof_add(824, t0_); SGL_POST(824); }
+-static GLboolean w_825(void *rctx, GLuint pipeline) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLboolean r = glIsProgramPipeline(pipeline); sgl_prof_add(825, t0_); SGL_POST(825); return r; }
+-static void w_826(void *rctx, GLuint pipeline, GLenum pname, GLint *params) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetProgramPipelineiv(pipeline, pname, params); sgl_prof_add(826, t0_); SGL_POST(826); }
+-static void w_827(void *rctx, GLuint pipeline) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glValidateProgramPipeline(pipeline); sgl_prof_add(827, t0_); SGL_POST(827); }
+-static void w_828(void *rctx, GLuint pipeline, GLsizei bufSize, GLsizei *length, GLchar *infoLog) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetProgramPipelineInfoLog(pipeline, bufSize, length, infoLog); sgl_prof_add(828, t0_); SGL_POST(828); }
+-static void w_829(void *rctx, GLuint program, GLint location, GLint v0) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform1i(program, location, v0); sgl_prof_add(829, t0_); SGL_POST(829); }
+-static void w_830(void *rctx, GLuint program, GLint location, GLint v0, GLint v1) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform2i(program, location, v0, v1); sgl_prof_add(830, t0_); SGL_POST(830); }
+-static void w_831(void *rctx, GLuint program, GLint location, GLint v0, GLint v1, GLint v2) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform3i(program, location, v0, v1, v2); sgl_prof_add(831, t0_); SGL_POST(831); }
+-static void w_832(void *rctx, GLuint program, GLint location, GLint v0, GLint v1, GLint v2, GLint v3) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform4i(program, location, v0, v1, v2, v3); sgl_prof_add(832, t0_); SGL_POST(832); }
+-static void w_833(void *rctx, GLuint program, GLint location, GLfloat v0) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform1f(program, location, v0); sgl_prof_add(833, t0_); SGL_POST(833); }
+-static void w_834(void *rctx, GLuint program, GLint location, GLfloat v0, GLfloat v1) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform2f(program, location, v0, v1); sgl_prof_add(834, t0_); SGL_POST(834); }
+-static void w_835(void *rctx, GLuint program, GLint location, GLfloat v0, GLfloat v1, GLfloat v2) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform3f(program, location, v0, v1, v2); sgl_prof_add(835, t0_); SGL_POST(835); }
+-static void w_836(void *rctx, GLuint program, GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform4f(program, location, v0, v1, v2, v3); sgl_prof_add(836, t0_); SGL_POST(836); }
+-static void w_837(void *rctx, GLuint program, GLint location, GLsizei count, const GLint *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform1iv(program, location, count, value); sgl_prof_add(837, t0_); SGL_POST(837); }
+-static void w_838(void *rctx, GLuint program, GLint location, GLsizei count, const GLint *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform2iv(program, location, count, value); sgl_prof_add(838, t0_); SGL_POST(838); }
+-static void w_839(void *rctx, GLuint program, GLint location, GLsizei count, const GLint *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform3iv(program, location, count, value); sgl_prof_add(839, t0_); SGL_POST(839); }
+-static void w_840(void *rctx, GLuint program, GLint location, GLsizei count, const GLint *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform4iv(program, location, count, value); sgl_prof_add(840, t0_); SGL_POST(840); }
+-static void w_841(void *rctx, GLuint program, GLint location, GLsizei count, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform1fv(program, location, count, value); sgl_prof_add(841, t0_); SGL_POST(841); }
+-static void w_842(void *rctx, GLuint program, GLint location, GLsizei count, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform2fv(program, location, count, value); sgl_prof_add(842, t0_); SGL_POST(842); }
+-static void w_843(void *rctx, GLuint program, GLint location, GLsizei count, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform3fv(program, location, count, value); sgl_prof_add(843, t0_); SGL_POST(843); }
+-static void w_844(void *rctx, GLuint program, GLint location, GLsizei count, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform4fv(program, location, count, value); sgl_prof_add(844, t0_); SGL_POST(844); }
+-static void w_845(void *rctx, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniformMatrix2fv(program, location, count, transpose, value); sgl_prof_add(845, t0_); SGL_POST(845); }
+-static void w_846(void *rctx, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniformMatrix3fv(program, location, count, transpose, value); sgl_prof_add(846, t0_); SGL_POST(846); }
+-static void w_847(void *rctx, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniformMatrix4fv(program, location, count, transpose, value); sgl_prof_add(847, t0_); SGL_POST(847); }
+-static void w_848(void *rctx, GLuint program, GLint location, GLuint v0) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform1ui(program, location, v0); sgl_prof_add(848, t0_); SGL_POST(848); }
+-static void w_849(void *rctx, GLuint program, GLint location, GLuint v0, GLuint v1) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform2ui(program, location, v0, v1); sgl_prof_add(849, t0_); SGL_POST(849); }
+-static void w_850(void *rctx, GLuint program, GLint location, GLuint v0, GLuint v1, GLuint v2) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform3ui(program, location, v0, v1, v2); sgl_prof_add(850, t0_); SGL_POST(850); }
+-static void w_851(void *rctx, GLuint program, GLint location, GLuint v0, GLuint v1, GLuint v2, GLuint v3) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform4ui(program, location, v0, v1, v2, v3); sgl_prof_add(851, t0_); SGL_POST(851); }
+-static void w_852(void *rctx, GLuint program, GLint location, GLsizei count, const GLuint *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform1uiv(program, location, count, value); sgl_prof_add(852, t0_); SGL_POST(852); }
+-static void w_853(void *rctx, GLuint program, GLint location, GLsizei count, const GLuint *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform2uiv(program, location, count, value); sgl_prof_add(853, t0_); SGL_POST(853); }
+-static void w_854(void *rctx, GLuint program, GLint location, GLsizei count, const GLuint *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform3uiv(program, location, count, value); sgl_prof_add(854, t0_); SGL_POST(854); }
+-static void w_855(void *rctx, GLuint program, GLint location, GLsizei count, const GLuint *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniform4uiv(program, location, count, value); sgl_prof_add(855, t0_); SGL_POST(855); }
+-static void w_856(void *rctx, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniformMatrix2x3fv(program, location, count, transpose, value); sgl_prof_add(856, t0_); SGL_POST(856); }
+-static void w_857(void *rctx, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniformMatrix3x2fv(program, location, count, transpose, value); sgl_prof_add(857, t0_); SGL_POST(857); }
+-static void w_858(void *rctx, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniformMatrix2x4fv(program, location, count, transpose, value); sgl_prof_add(858, t0_); SGL_POST(858); }
+-static void w_859(void *rctx, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniformMatrix4x2fv(program, location, count, transpose, value); sgl_prof_add(859, t0_); SGL_POST(859); }
+-static void w_860(void *rctx, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniformMatrix3x4fv(program, location, count, transpose, value); sgl_prof_add(860, t0_); SGL_POST(860); }
+-static void w_861(void *rctx, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramUniformMatrix4x3fv(program, location, count, transpose, value); sgl_prof_add(861, t0_); SGL_POST(861); }
++static void w_819(void *rctx, GLuint pipeline, GLbitfield stages, GLuint program) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glUseProgramStages(pipeline, stages, program); if (sgl_profile_enabled) sgl_prof_add(819, t0_); SGL_POST(819); }
++static void w_820(void *rctx, GLuint pipeline, GLuint program) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glActiveShaderProgram(pipeline, program); if (sgl_profile_enabled) sgl_prof_add(820, t0_); SGL_POST(820); }
++static GLuint w_821(void *rctx, GLenum type, GLsizei count, const GLchar *const*strings) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLuint r = glCreateShaderProgramv(type, count, strings); if (sgl_profile_enabled) sgl_prof_add(821, t0_); SGL_POST(821); return r; }
++static void w_822(void *rctx, GLuint pipeline) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glBindProgramPipeline(pipeline); if (sgl_profile_enabled) sgl_prof_add(822, t0_); SGL_POST(822); }
++static void w_823(void *rctx, GLsizei n, const GLuint *pipelines) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glDeleteProgramPipelines(n, pipelines); if (sgl_profile_enabled) sgl_prof_add(823, t0_); SGL_POST(823); }
++static void w_824(void *rctx, GLsizei n, GLuint *pipelines) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGenProgramPipelines(n, pipelines); if (sgl_profile_enabled) sgl_prof_add(824, t0_); SGL_POST(824); }
++static GLboolean w_825(void *rctx, GLuint pipeline) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLboolean r = glIsProgramPipeline(pipeline); if (sgl_profile_enabled) sgl_prof_add(825, t0_); SGL_POST(825); return r; }
++static void w_826(void *rctx, GLuint pipeline, GLenum pname, GLint *params) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetProgramPipelineiv(pipeline, pname, params); if (sgl_profile_enabled) sgl_prof_add(826, t0_); SGL_POST(826); }
++static void w_827(void *rctx, GLuint pipeline) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glValidateProgramPipeline(pipeline); if (sgl_profile_enabled) sgl_prof_add(827, t0_); SGL_POST(827); }
++static void w_828(void *rctx, GLuint pipeline, GLsizei bufSize, GLsizei *length, GLchar *infoLog) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetProgramPipelineInfoLog(pipeline, bufSize, length, infoLog); if (sgl_profile_enabled) sgl_prof_add(828, t0_); SGL_POST(828); }
++static void w_829(void *rctx, GLuint program, GLint location, GLint v0) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform1i(program, location, v0); if (sgl_profile_enabled) sgl_prof_add(829, t0_); SGL_POST(829); }
++static void w_830(void *rctx, GLuint program, GLint location, GLint v0, GLint v1) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform2i(program, location, v0, v1); if (sgl_profile_enabled) sgl_prof_add(830, t0_); SGL_POST(830); }
++static void w_831(void *rctx, GLuint program, GLint location, GLint v0, GLint v1, GLint v2) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform3i(program, location, v0, v1, v2); if (sgl_profile_enabled) sgl_prof_add(831, t0_); SGL_POST(831); }
++static void w_832(void *rctx, GLuint program, GLint location, GLint v0, GLint v1, GLint v2, GLint v3) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform4i(program, location, v0, v1, v2, v3); if (sgl_profile_enabled) sgl_prof_add(832, t0_); SGL_POST(832); }
++static void w_833(void *rctx, GLuint program, GLint location, GLfloat v0) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform1f(program, location, v0); if (sgl_profile_enabled) sgl_prof_add(833, t0_); SGL_POST(833); }
++static void w_834(void *rctx, GLuint program, GLint location, GLfloat v0, GLfloat v1) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform2f(program, location, v0, v1); if (sgl_profile_enabled) sgl_prof_add(834, t0_); SGL_POST(834); }
++static void w_835(void *rctx, GLuint program, GLint location, GLfloat v0, GLfloat v1, GLfloat v2) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform3f(program, location, v0, v1, v2); if (sgl_profile_enabled) sgl_prof_add(835, t0_); SGL_POST(835); }
++static void w_836(void *rctx, GLuint program, GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform4f(program, location, v0, v1, v2, v3); if (sgl_profile_enabled) sgl_prof_add(836, t0_); SGL_POST(836); }
++static void w_837(void *rctx, GLuint program, GLint location, GLsizei count, const GLint *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform1iv(program, location, count, value); if (sgl_profile_enabled) sgl_prof_add(837, t0_); SGL_POST(837); }
++static void w_838(void *rctx, GLuint program, GLint location, GLsizei count, const GLint *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform2iv(program, location, count, value); if (sgl_profile_enabled) sgl_prof_add(838, t0_); SGL_POST(838); }
++static void w_839(void *rctx, GLuint program, GLint location, GLsizei count, const GLint *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform3iv(program, location, count, value); if (sgl_profile_enabled) sgl_prof_add(839, t0_); SGL_POST(839); }
++static void w_840(void *rctx, GLuint program, GLint location, GLsizei count, const GLint *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform4iv(program, location, count, value); if (sgl_profile_enabled) sgl_prof_add(840, t0_); SGL_POST(840); }
++static void w_841(void *rctx, GLuint program, GLint location, GLsizei count, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform1fv(program, location, count, value); if (sgl_profile_enabled) sgl_prof_add(841, t0_); SGL_POST(841); }
++static void w_842(void *rctx, GLuint program, GLint location, GLsizei count, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform2fv(program, location, count, value); if (sgl_profile_enabled) sgl_prof_add(842, t0_); SGL_POST(842); }
++static void w_843(void *rctx, GLuint program, GLint location, GLsizei count, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform3fv(program, location, count, value); if (sgl_profile_enabled) sgl_prof_add(843, t0_); SGL_POST(843); }
++static void w_844(void *rctx, GLuint program, GLint location, GLsizei count, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform4fv(program, location, count, value); if (sgl_profile_enabled) sgl_prof_add(844, t0_); SGL_POST(844); }
++static void w_845(void *rctx, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniformMatrix2fv(program, location, count, transpose, value); if (sgl_profile_enabled) sgl_prof_add(845, t0_); SGL_POST(845); }
++static void w_846(void *rctx, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniformMatrix3fv(program, location, count, transpose, value); if (sgl_profile_enabled) sgl_prof_add(846, t0_); SGL_POST(846); }
++static void w_847(void *rctx, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniformMatrix4fv(program, location, count, transpose, value); if (sgl_profile_enabled) sgl_prof_add(847, t0_); SGL_POST(847); }
++static void w_848(void *rctx, GLuint program, GLint location, GLuint v0) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform1ui(program, location, v0); if (sgl_profile_enabled) sgl_prof_add(848, t0_); SGL_POST(848); }
++static void w_849(void *rctx, GLuint program, GLint location, GLuint v0, GLuint v1) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform2ui(program, location, v0, v1); if (sgl_profile_enabled) sgl_prof_add(849, t0_); SGL_POST(849); }
++static void w_850(void *rctx, GLuint program, GLint location, GLuint v0, GLuint v1, GLuint v2) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform3ui(program, location, v0, v1, v2); if (sgl_profile_enabled) sgl_prof_add(850, t0_); SGL_POST(850); }
++static void w_851(void *rctx, GLuint program, GLint location, GLuint v0, GLuint v1, GLuint v2, GLuint v3) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform4ui(program, location, v0, v1, v2, v3); if (sgl_profile_enabled) sgl_prof_add(851, t0_); SGL_POST(851); }
++static void w_852(void *rctx, GLuint program, GLint location, GLsizei count, const GLuint *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform1uiv(program, location, count, value); if (sgl_profile_enabled) sgl_prof_add(852, t0_); SGL_POST(852); }
++static void w_853(void *rctx, GLuint program, GLint location, GLsizei count, const GLuint *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform2uiv(program, location, count, value); if (sgl_profile_enabled) sgl_prof_add(853, t0_); SGL_POST(853); }
++static void w_854(void *rctx, GLuint program, GLint location, GLsizei count, const GLuint *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform3uiv(program, location, count, value); if (sgl_profile_enabled) sgl_prof_add(854, t0_); SGL_POST(854); }
++static void w_855(void *rctx, GLuint program, GLint location, GLsizei count, const GLuint *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniform4uiv(program, location, count, value); if (sgl_profile_enabled) sgl_prof_add(855, t0_); SGL_POST(855); }
++static void w_856(void *rctx, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniformMatrix2x3fv(program, location, count, transpose, value); if (sgl_profile_enabled) sgl_prof_add(856, t0_); SGL_POST(856); }
++static void w_857(void *rctx, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniformMatrix3x2fv(program, location, count, transpose, value); if (sgl_profile_enabled) sgl_prof_add(857, t0_); SGL_POST(857); }
++static void w_858(void *rctx, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniformMatrix2x4fv(program, location, count, transpose, value); if (sgl_profile_enabled) sgl_prof_add(858, t0_); SGL_POST(858); }
++static void w_859(void *rctx, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniformMatrix4x2fv(program, location, count, transpose, value); if (sgl_profile_enabled) sgl_prof_add(859, t0_); SGL_POST(859); }
++static void w_860(void *rctx, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniformMatrix3x4fv(program, location, count, transpose, value); if (sgl_profile_enabled) sgl_prof_add(860, t0_); SGL_POST(860); }
++static void w_861(void *rctx, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramUniformMatrix4x3fv(program, location, count, transpose, value); if (sgl_profile_enabled) sgl_prof_add(861, t0_); SGL_POST(861); }
+ static long unsupported_862(void) { sgl_unsupported(862, "?"); return 0; }
+ static long unsupported_863(void) { sgl_unsupported(863, "?"); return 0; }
+ static long unsupported_864(void) { sgl_unsupported(864, "?"); return 0; }
+@@ -874,8 +874,8 @@
+ static long unsupported_871(void) { sgl_unsupported(871, "?"); return 0; }
+ static long unsupported_872(void) { sgl_unsupported(872, "?"); return 0; }
+ static long unsupported_873(void) { sgl_unsupported(873, "?"); return 0; }
+-static void w_877(void *rctx, GLfloat n, GLfloat f) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glDepthRangef(n, f); sgl_prof_add(877, t0_); SGL_POST(877); }
+-static void w_878(void *rctx, GLfloat d) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glClearDepthf(d); sgl_prof_add(878, t0_); SGL_POST(878); }
++static void w_877(void *rctx, GLfloat n, GLfloat f) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glDepthRangef(n, f); if (sgl_profile_enabled) sgl_prof_add(877, t0_); SGL_POST(877); }
++static void w_878(void *rctx, GLfloat d) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glClearDepthf(d); if (sgl_profile_enabled) sgl_prof_add(878, t0_); SGL_POST(878); }
+ static long unsupported_879(void) { sgl_unsupported(879, "?"); return 0; }
+ static long unsupported_880(void) { sgl_unsupported(880, "?"); return 0; }
+ static long unsupported_881(void) { sgl_unsupported(881, "?"); return 0; }
+@@ -884,8 +884,8 @@
+ static long unsupported_884(void) { sgl_unsupported(884, "?"); return 0; }
+ static long unsupported_885(void) { sgl_unsupported(885, "?"); return 0; }
+ static long unsupported_886(void) { sgl_unsupported(886, "?"); return 0; }
+-static void w_887(void *rctx, GLuint program, GLsizei bufSize, GLsizei *length, GLenum *binaryFormat, void *binary) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGetProgramBinary(program, bufSize, length, binaryFormat, binary); sgl_prof_add(887, t0_); SGL_POST(887); }
+-static void w_888(void *rctx, GLuint program, GLenum binaryFormat, const void *binary, GLsizei length) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glProgramBinary(program, binaryFormat, binary, length); sgl_prof_add(888, t0_); SGL_POST(888); }
++static void w_887(void *rctx, GLuint program, GLsizei bufSize, GLsizei *length, GLenum *binaryFormat, void *binary) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGetProgramBinary(program, bufSize, length, binaryFormat, binary); if (sgl_profile_enabled) sgl_prof_add(887, t0_); SGL_POST(887); }
++static void w_888(void *rctx, GLuint program, GLenum binaryFormat, const void *binary, GLsizei length) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glProgramBinary(program, binaryFormat, binary, length); if (sgl_profile_enabled) sgl_prof_add(888, t0_); SGL_POST(888); }
+ static long unsupported_889(void) { sgl_unsupported(889, "?"); return 0; }
+ static long unsupported_890(void) { sgl_unsupported(890, "?"); return 0; }
+ static long unsupported_891(void) { sgl_unsupported(891, "?"); return 0; }
+@@ -901,12 +901,12 @@
+ static long unsupported_901(void) { sgl_unsupported(901, "?"); return 0; }
+ static long unsupported_902(void) { sgl_unsupported(902, "?"); return 0; }
+ static long unsupported_903(void) { sgl_unsupported(903, "?"); return 0; }
+-static void w_904(void *rctx, GLenum target, GLuint id) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glBindTransformFeedback(SGL_TGT(target), id); sgl_prof_add(904, t0_); SGL_POST(904); }
+-static void w_905(void *rctx, GLsizei n, GLuint *ids) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glGenTransformFeedbacks(n, ids); sgl_prof_add(905, t0_); SGL_POST(905); }
+-static void w_906(void *rctx, GLsizei n, const GLuint *ids) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glDeleteTransformFeedbacks(n, ids); sgl_prof_add(906, t0_); SGL_POST(906); }
+-static void w_907(void *rctx) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glPauseTransformFeedback(); sgl_prof_add(907, t0_); SGL_POST(907); }
+-static void w_908(void *rctx) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glResumeTransformFeedback(); sgl_prof_add(908, t0_); SGL_POST(908); }
+-static GLboolean w_909(void *rctx, GLuint id) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); GLboolean r = glIsTransformFeedback(id); sgl_prof_add(909, t0_); SGL_POST(909); return r; }
++static void w_904(void *rctx, GLenum target, GLuint id) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glBindTransformFeedback(SGL_TGT(target), id); if (sgl_profile_enabled) sgl_prof_add(904, t0_); SGL_POST(904); }
++static void w_905(void *rctx, GLsizei n, GLuint *ids) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glGenTransformFeedbacks(n, ids); if (sgl_profile_enabled) sgl_prof_add(905, t0_); SGL_POST(905); }
++static void w_906(void *rctx, GLsizei n, const GLuint *ids) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glDeleteTransformFeedbacks(n, ids); if (sgl_profile_enabled) sgl_prof_add(906, t0_); SGL_POST(906); }
++static void w_907(void *rctx) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glPauseTransformFeedback(); if (sgl_profile_enabled) sgl_prof_add(907, t0_); SGL_POST(907); }
++static void w_908(void *rctx) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glResumeTransformFeedback(); if (sgl_profile_enabled) sgl_prof_add(908, t0_); SGL_POST(908); }
++static GLboolean w_909(void *rctx, GLuint id) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); GLboolean r = glIsTransformFeedback(id); if (sgl_profile_enabled) sgl_prof_add(909, t0_); SGL_POST(909); return r; }
+ static long unsupported_910(void) { sgl_unsupported(910, "?"); return 0; }
+ static long unsupported_911(void) { sgl_unsupported(911, "?"); return 0; }
+ static long unsupported_912(void) { sgl_unsupported(912, "?"); return 0; }
+@@ -1024,11 +1024,11 @@
+ static long unsupported_1025(void) { sgl_unsupported(1025, "glGetFramebufferParameterivAPPLE"); return 0; }
+ static long unsupported_1026(void) { sgl_unsupported(1026, "glResolveMultisampleFramebufferAPPLE"); return 0; }
+ static long unsupported_1027(void) { sgl_unsupported(1027, "glCopyTextureLevels"); return 0; }
+-static void w_1028(void *rctx, GLenum target, GLsizei numAttachments, const GLenum *attachments, GLint x, GLint y, GLsizei width, GLsizei height) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glInvalidateSubFramebuffer(SGL_TGT(target), numAttachments, attachments, x, y, width, height); sgl_prof_add(1028, t0_); SGL_POST(1028); }
++static void w_1028(void *rctx, GLenum target, GLsizei numAttachments, const GLenum *attachments, GLint x, GLint y, GLsizei width, GLsizei height) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glInvalidateSubFramebuffer(SGL_TGT(target), numAttachments, attachments, x, y, width, height); if (sgl_profile_enabled) sgl_prof_add(1028, t0_); SGL_POST(1028); }
+ static long unsupported_1029(void) { sgl_unsupported(1029, "glGetInternalformativ"); return 0; }
+ static long unsupported_1030(void) { sgl_unsupported(1030, "?"); return 0; }
+-static void w_1031(void *rctx, GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glTexStorage2D(SGL_TGT(target), levels, internalformat, width, height); sgl_prof_add(1031, t0_); SGL_POST(1031); }
+-static void w_1032(void *rctx, GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); glTexStorage3D(SGL_TGT(target), levels, internalformat, width, height, depth); sgl_prof_add(1032, t0_); SGL_POST(1032); }
++static void w_1031(void *rctx, GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glTexStorage2D(SGL_TGT(target), levels, internalformat, width, height); if (sgl_profile_enabled) sgl_prof_add(1031, t0_); SGL_POST(1031); }
++static void w_1032(void *rctx, GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); glTexStorage3D(SGL_TGT(target), levels, internalformat, width, height, depth); if (sgl_profile_enabled) sgl_prof_add(1032, t0_); SGL_POST(1032); }
+ static long unsupported_1033(void) { sgl_unsupported(1033, "glLabelObjectWithResponsibleProcessAPPLE"); return 0; }
+ static long unsupported_1034(void) { sgl_unsupported(1034, "?"); return 0; }
+ static long unsupported_1035(void) { sgl_unsupported(1035, "?"); return 0; }
+--- a/src/gallium/drivers/freedreno/sweetgl/gen-dispatch.py
++++ b/src/gallium/drivers/freedreno/sweetgl/gen-dispatch.py
+@@ -67,10 +67,10 @@
+             decl = ', '.join(['void *rctx'] + params)
+             call = '%s(%s)' % (special[name], ', '.join(['rctx'] + [v for _, v in sp]))
+             if ret == 'void':
+-                stmt = '%s; sgl_prof_add(%d, t0_);' % (call, i)
++                stmt = '%s; if (sgl_profile_enabled) sgl_prof_add(%d, t0_);' % (call, i)
+             else:
+-                stmt = '%s r = %s; sgl_prof_add(%d, t0_); return r;' % (ret, call, i)
+-            body.append('static %s ps_%d(%s) { uint64_t t0_ = mach_absolute_time(); %s }' % (ret, i, decl, stmt))
++                stmt = '%s r = %s; if (sgl_profile_enabled) sgl_prof_add(%d, t0_); return r;' % (ret, call, i)
++            body.append('static %s ps_%d(%s) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; %s }' % (ret, i, decl, stmt))
+             table.append('(void *)ps_%d' % i)
+         else:
+             table.append('(void *)%s' % special[name])
+@@ -99,10 +99,10 @@
+     call = '%s(%s)' % (target, args)
+     decl = ', '.join(['void *rctx'] + params)
+     if ret == 'void':
+-        stmt = '%s; sgl_prof_add(%d, t0_); SGL_POST(%d);' % (call, i, i)
++        stmt = '%s; if (sgl_profile_enabled) sgl_prof_add(%d, t0_); SGL_POST(%d);' % (call, i, i)
+     else:
+-        stmt = '%s r = %s; sgl_prof_add(%d, t0_); SGL_POST(%d); return r;' % (ret, conv(call, tret, ret), i, i)
+-    body.append('static %s w_%d(%s) { uint64_t t0_ = mach_absolute_time(); SGL_CUR(rctx); %s }' % (ret, i, decl, stmt))
++        stmt = '%s r = %s; if (sgl_profile_enabled) sgl_prof_add(%d, t0_); SGL_POST(%d); return r;' % (ret, conv(call, tret, ret), i, i)
++    body.append('static %s w_%d(%s) { uint64_t t0_ = sgl_profile_enabled ? mach_absolute_time() : 0; SGL_CUR(rctx); %s }' % (ret, i, decl, stmt))
+     table.append('(void *)w_%d' % i)
+ 
+ with open(out, 'w') as f:

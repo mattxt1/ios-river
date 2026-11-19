@@ -1,0 +1,22 @@
+{
+  "mesa_base": "f9ce5e81f30cd694726bff6d8197e509a8374ea7",
+  "patch_sha256": "c9451c2306c4f5ebff9755b4fe3087907faea849d7fd499377ba44597c9a4020",
+  "files": {
+    "src/gallium/drivers/freedreno/sweetgl/eagl.c": {
+      "base_sha256": "e231f814c36d9282b862bad74bd07ef9dde472ebe0430872f9e1e37e1a41cbf0",
+      "candidate_sha256": "517de3a3f89b3014cac947d4403366b4f1c6af18ada2fe27d992b0bbe92f6c00"
+    },
+    "src/gallium/drivers/freedreno/sweetgl/eagl.h": {
+      "base_sha256": "1533418d1662dd74aa13aa3c0ea846b7665be80a9a4d6b93855d693a0f6fabf2",
+      "candidate_sha256": "7c77079f0fd1a37b2781847b0c5986871a22d3ba3cce90127f14c3beb0df317d"
+    },
+    "src/gallium/drivers/freedreno/sweetgl/dispatch.c": {
+      "base_sha256": "0b91672b78ab1b16265c718183ffa7c233188f76ae05e6778b7990e20b21028f",
+      "candidate_sha256": "e910c82a96582e86c6bd91be51ec03e392df2bfdfbd17605100cf21a79fc5caa"
+    },
+    "src/gallium/drivers/freedreno/sweetgl/gen-dispatch.py": {
+      "base_sha256": "b485a6b1626514a8a20ff71a074ffeacaa15bbb60a795360d763a2df1832a1a6",
+      "candidate_sha256": "48a4e04e95a4b8eecbc809e746219fc2ed3b140973b437cbda6997b382245e83"
+    }
+  }
+}

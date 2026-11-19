@@ -20,6 +20,21 @@ import mkpayload
 NAMES = ('RiverGPUFW', 'RiverWCNSSMeta', 'RiverWCNSSImage', 'RiverWCNSSNV', 'RiverFiles')
 
 
+def select_renderer(cmdline, name):
+    """Select an independently staged candidate without changing the fallback."""
+    require(re.fullmatch(r'sweetgl-p[0-9]{4}\.dylib', name) is not None,
+            'Expected a numbered candidate renderer basename')
+    old = b'riverenv=backboardd:DYLD_INSERT_LIBRARIES=/usr/local/lib/sweetgl.dylib'
+    tokens = cmdline.split(b' ')
+    require(tokens.count(old) == 1, 'Expected exactly one original renderer selection')
+    require(sum(b'DYLD_INSERT_LIBRARIES=' in t for t in tokens) == 1,
+            'Ambiguous renderer environment')
+    new = old.rsplit(b'/', 1)[0] + b'/' + name.encode('ascii')
+    result = cmdline.replace(old, new, 1)
+    require(len(result) < 608, 'Renderer command line exceeds fixed field')
+    return result
+
+
 def digest(data):
     return hashlib.sha256(data).hexdigest()
 
@@ -108,6 +123,7 @@ def main():
     ap.add_argument('--base-sha256', required=True)
     ap.add_argument('--kernel', type=Path, required=True)
     ap.add_argument('--clock-helper', type=Path, required=True)
+    ap.add_argument('--renderer-library-name', help='Already staged sweetgl-pNNNN.dylib; preserves the original fallback library')
     ap.add_argument('--adsp-helper', type=Path)
     ap.add_argument('--wifi-check-helper', type=Path, help='Optional bounded connectivity probe')
     ap.add_argument('--ipconfig-helper', type=Path, help='Optional read-only native DHCP/media reader')
@@ -137,6 +153,8 @@ def main():
         require(size <= vs and off + size <= len(prior), 'Invalid payload segment')
     cmdline = prior[0x48:0x2a8].split(b'\0')[0]
     require(len(cmdline) < 608 and b'rd=emmc0s64' in cmdline, 'Unexpected command line')
+    if args.renderer_library_name is not None:
+        cmdline = select_renderer(cmdline, args.renderer_library_name)
     if args.msgbuf_bytes is not None:
         matches = list(re.finditer(rb'(?<!\S)msgbuf=[0-9]+(?=\s|$)', cmdline))
         require(len(matches) <= 1, 'Duplicate msgbuf arguments')
@@ -259,6 +277,8 @@ def main():
                     cmdline_bytes=len(cmdline), kernel_payload_segments_verified=True,
                     clock_helper_sha256=digest(replacement), temporary_boot_only=True)
     manifest['unrelated_riverfiles_verified'] = True
+    if args.renderer_library_name is not None:
+        manifest['staged_renderer_path'] = '/usr/local/lib/' + args.renderer_library_name
     if wifi_check is not None:
         manifest['wifi_check_helper_sha256'] = digest(wifi_check)
     if ipconfig is not None:
