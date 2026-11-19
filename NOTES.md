@@ -5,6 +5,32 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0344 candidate VERIFIED; awaiting fastboot (2026-11-19)
+
+Native kernel0342exit0/source7041a59 SHA
+ d04506ac3ddcc75130d8aec7863d149ecbddd60d2f25a3dc445a331d639e4cf3.
+Image0344 27,162,624B/cmdline583 SHA
+ 3248412de8e0cc65736be167188029bdcf6d167f5df80b722278955e2e4f0086.
+Local performance/batch344/artifacts/river-performance-0344.img; manifest
+build-manifest-candidate.json. FULL validated343kernel/UI rollback SHA
+ eabaf5a8a1624fd129b30d1024729f50585263321e4a25dd3000638bee84b5b5.
+Preserves343UI/backgrounds, workingaudioSPIstartup, p0340renderer/cameracfg.
+New performance: cache immutable surface page lists across GPU presents;
+no fence/pin/layer/pixel changes. DefaultOFF composition metadata trace.
+Nativehelper/signature/testsuitePASS; unique /usr/local/bin/river-fb-trace344
+staged with exactbyte/hash verification, NOTexecutedon343. Compatible-kernel
+protocolguard. Helper source31a1a53. No hardware performance/animation fix claim.
+
+Current343 normalservice ON/healthy; do not repeatinit. Useraudio/UI/navPASS.
+No UI restart thisboot. Awaitfastboot then verify image+rollbackhash/product
+river/serialZY226HM8QB; temporarybootONLY. Prepared batch344/preflight.py and
+prepare-audio.py have new unique evidence names, NOTRUN. Fresh-homecheck first,
+then readpreflight+once-onlymutedsetup/ios-enable. PreservehealthyserviceON.
+Nextcombinedtest: UI/nav/folders/Search, short scrolling baselineandpagehit
+counters, bounded composition trace during repeated appclosing. Existingaudio
+playback/keyboard check only; no unnecessary microphone counting/calibration.
+Closingissue/blackstatusbarstripstillpending. PERFORMANCE.md documentslimits.
+
 ## Active handoff:0343 UI/audio PASS; preparing page-cache/trace batch0344 (2026-11-19)
 
 USER343: responsive; folders and Spotlight look right; existing memo/UI sounds
