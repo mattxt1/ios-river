@@ -5,6 +5,33 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## 0349 direct Spotlight replay (2026-11-19)
+
+The signed, hash-verified iOS 16 helper dispatched a synthetic Spotlight
+swipe over trusted Wi-Fi SSH on the existing boot. The replay runner picked
+the current full-canvas IOSurface from the framebuffer trace and classified
+visual checkpoints against private reference frames. An early bottom-edge
+dismissal instead opened App Switcher, so the runner halted and collected
+complete kernel, SpringBoard and backboardd captures before any manual
+follow-up. No process or kernel restart was issued. A separate early
+screenshot transfer stalled even though the phone was responsive. Smaller
+grayscale checkpoints addressed the transfer overhead.
+
+The corrected flow, pull down from Home and tap the empty Spotlight backdrop,
+completed two fully verified Home → Spotlight → Home cycles. No freeze
+occurred in those cycles. River ended on Home on 0349. The tool also accepts
+physical panel coordinates for edge taps and swipes with separate crop and
+fit transforms. The physical fit mode still needs its own on-device checks.
+
+Optional external-panel video is available through a selected Mac camera.
+The silent MP4 capture lifecycle and encoding passed with synthetic input.
+A camera aimed at the physical panel was not used in this run.
+
+Private reference frames and evidence remain outside Git at
+`/Users/matttyson/Developer/Codex/2026-11-19/continue-ios-river-read-this-handoff/work/replay`. In that directory, `spotlight-backdrop` is the successful
+two-cycle run and `spotlight-two-cycles` contains the App Switcher failure
+checkpoint, stacks and retained kernel log.
+
 ## 0349 Spotlight follow-up and capture readiness (2026-11-19)
 
 Traced the captured user return address to the self-task deallocation trap

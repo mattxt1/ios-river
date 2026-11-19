@@ -31,6 +31,69 @@ favor validating a GPU composition pass and corresponding touch geometry
 before enabling a new display mode.
 
 
+## River UI replay over SSH
+
+`tools/river-ui-replay.py` checks the installed SpringBoard library SHA,
+stages and verifies its private helper, and replays a mid-screen pull into
+Spotlight followed by a tap on the empty backdrop to return to Home. It uses a fresh
+framebuffer trace to pick the latest full-canvas, single-layer IOSurface.
+It saves a downsampled visual checkpoint and checks it against known Home
+and Spotlight reference frames. A mismatch or timed-out observation stops
+the flow and captures the kernel log, process list, userspace stacks and
+PID-scoped kernel stackshots. The runner never restarts services or the phone.
+A transport failure, an idle screen with no new presents, and a UI freeze
+are distinct outcomes. Inspect the evidence before classifying a failure.
+
+Build into a local work directory:
+
+```sh
+xcrun --sdk iphoneos clang -arch arm64 -miphoneos-version-min=16.0 \
+  -Wall -Wextra -Werror phone-tools/river-ui-replay.c \
+  -framework IOKit -framework CoreFoundation -framework IOSurface -lz \
+  -o "$RIVER_REPLAY_WORK/river-ui-replay"
+codesign -s - --entitlements phone-tools/river-ui-replay-ents.plist \
+  "$RIVER_REPLAY_WORK/river-ui-replay"
+codesign --verify "$RIVER_REPLAY_WORK/river-ui-replay"
+```
+
+Run from the repo with River awake and unlocked. Use trusted SSH and a new
+private capture directory. Use the `observe` mode with no reference arguments
+to collect new reference frames and verify their states visually. A quiet
+screen may require capturing immediately after it changes. Save the exact
+Home layout and Spotlight with the keyboard visible at a matching theme and
+orientation. References and captures may contain private screen content.
+
+```sh
+python3 tools/river-ui-replay.py spotlight --runs 2 \
+  --helper "$RIVER_REPLAY_WORK/river-ui-replay" \
+  --identity /Users/matttyson/Developer/Codex/.device-ssh/id_ed25519 \
+  --home-reference "$RIVER_REPLAY_WORK/home.pgm" \
+  --spotlight-reference "$RIVER_REPLAY_WORK/spotlight.pgm" \
+  --output "$RIVER_REPLAY_WORK/replay-01"
+```
+
+Use `--confirmed-home` only after a fresh physical Home observation. It covers
+the case where idle Home produces no new frame. Use `capture` for read-only
+diagnostics without reference images. Wi-Fi is the default trusted SSH
+transport. Use `--host 192.168.7.2` when USB SSH is healthy.
+
+For edge checks, use the `gesture` mode with `--points X Y X2 Y2 MS` and
+`--expect home|spotlight`. The points are physical 1080×2270 panel pixels.
+Equal endpoints produce a tap. A gesture starting within 48 pixels of an
+edge carries the digitizer edge flag. Crop is the 0349 default. The separate
+`--viewport fit` transform is for a candidate using the centered 1048×2270
+fit. Selecting it in the runner does not change the phone's display mode.
+An unchanged screen with the expected baseline does not prove a tap landed.
+Use a visible state change or a calibration target for that check.
+
+For physical-panel video, aim a Mac-connected camera at River and pass its
+AVFoundation video index with `--camera INDEX`. List the inputs with
+`ffmpeg -f avfoundation -list_devices true -i ""`. The runner records silent
+H.264 to `panel.mp4` and writes host UTC gesture and camera markers to
+`events.jsonl`. Use the camera to check clipping and physical touch alignment.
+Frame comparisons inside the runner use logical compositor pixels and the
+presentation trace describes attempts. Neither measures the physical panel.
+
 ## Current checkpoint: image 0345, November 19
 
 The user confirms Spotlight, the settled home-screen Search pill and folders
