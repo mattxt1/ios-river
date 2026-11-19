@@ -5,6 +5,34 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## 0349 persistent Spotlight freeze (2026-11-19)
+
+The user reported a full UI freeze opening Spotlight from Home. Trusted
+Wi-Fi SSH remained available. Three rapid samples of SpringBoard, backboardd,
+Spotlight and searchd plus the kernel ring were captured before controls.
+SpringBoard's main stack repeatedly entered `mach_msg2_trap` through QuartzCore
+and UIKitCore. Kernel touch reports continued after the last logged GPU
+presentation window at device time 2311.037811. The frozen stack capture at
+2379.545438 still had no newer presentation window.
+
+The user approved one SpringBoard restart. PID 26 received SIGTERM and launchd
+started PID 615, but the user still saw no responsive Home. The new main
+thread reached a different QuartzCore Mach wait. backboardd stayed PID 60:
+its thread 3 held the same QuartzCore stack at `mach_vm_deallocate` in the
+frozen and post-restart samples. In the earlier responsive baseline that
+thread was in a Mach message wait. This identifies the compositor thread
+to investigate. The specific kernel wait or resource owner is unknown.
+
+The user then approved one backboardd restart. PID 60 received SIGTERM.
+Both `/bin/ps` and `psx` reported new backboardd PID 656 and SpringBoard
+PID 658. GPU presentation counters resumed, with 140 presents in the first
+logged window after restart. The user confirmed the screen was responsive.
+The full Spotlight freeze remains unfixed.
+
+Private evidence in the original task workspace at
+`outputs/hardware/device-0349/20261119T220038258798Z-spotlight-freeze`.
+The device remains on 0349. No kernel reboot or audio changes were made.
+
 ## 0349 device qualification and responsiveness baseline (2026-11-19)
 
 User confirmed Home, Settings navigation and Spotlight typing. USB SSH still
