@@ -7,6 +7,18 @@
 
 ## Active handoff:0349 boot authorized; host device access blocked (2026-11-19)
 
+Follow-up: user explicitly refuses manual boot and requires normal device work
+through this chat. Do not redirect them to execute the boot themselves. Replug
+is visible to macOS IOUSB, but fastboot still lists nothing. Additional diagnosis:
+shell ps is denied; log show explicitly reports Cannot run while sandboxed;
+CODEX_SANDBOX_NETWORK_DISABLED=1. User config is workspace-write/on-request,
+while active session policy disables sandbox approval escalation. No firmware or
+fastboot installation change is indicated by this evidence. Restoring task
+execution permissions requires the app's user-controlled permissions setting;
+do not edit policy files or route commands through another backend to bypass it.
+After an authorized permissions refresh, recheck fastboot/product and use the
+verified0349 runner directly here. Boot/testing authorization remains in force.
+
 User has phone ready in fastboot and authorizes temporary0349boot/testing and
 baseline collection before the usability milestones. Exact candidate/rollback
 hashes,599byte embedded XNU line/nativefeedback mode and helper hash pass.
