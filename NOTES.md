@@ -5,6 +5,23 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0341 candidate and UI rollback VERIFIED; awaiting fastboot (2026-11-18)
+
+KernelPATCH0340(nativeexit0/sourcecfc4bdb) SHA77aa949bb37828ccee3a3ed9a95da4cc615093dd49091fd5ef6adbd044909bc3.
+UIlibraryrestoresnativesearchmaterial/transitionstate; nativebuild+signaturePASS,
+notdevicevalidated. Normaloutput1024framesinstead4096+startupstagetimestamps;
+allhardwareguards/preroll/cleanupunchanged. Actualhandoff/queue/volume/rearm/wake
+race/micregressionsPASS. Repacker8af738a/UIaddreplacepreservationtestsPASS.
+Candidate27,160,576B/cmdline583 SHAa126f6504fb2c9214ed9accd805166d4e63d5a5c15d7206c8dbc91283a50a1cd.
+UIrollbackSHAa9b5239bdf2edfe37c7e3ba6d8243b2f919041f6dfb649688c39a24e07b547ff
+carriesoriginalUIlibwithnewkernel. Priorimagesdon'tcarryUIlib; useUIrollback
+FIRSTtorestoreoriginalthenolderimagesifneeded. Originalrootlibcurrentlyunchanged.
+Bothimageslocalperformance/batch341/artifacts, manifestsverified. Pendinguser
+FASTBOOTforcombinedSpotlight/appclose/audio-delaytestONEboot. NoFPSclaim.
+Currentphone0340audioON/usernav+keyboard+clearVoiceMemosPASS; noUIrestart0340.
+ScreenshothelpersobtainedstaleSettings/blackunuseddefaultsurface, NOTliveSpotlight.
+Fullhandoffperformance/CURRENT_TASK.md. Don'trepeatsetupcurrentboot.
+
 ## Active handoff:0340 audio/navigation PASS; user requests blur/animation/latency batch (2026-11-18)
 
 USER: clearVoiceMemosaudioANDhome/navigation/searchkeyboardworkafterapp on0340.
