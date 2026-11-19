@@ -1,5 +1,6 @@
 #!/bin/sh
-# Build only; no phone access, signing entitlements or boot image mutation.
+# Build only. Optional --with-ui compiles the existing UI fixes and the native
+# bridge into the already injected SpringBoard library, preserving its path.
 set -eu
 repo=$(cd "$(dirname "$0")/.." && pwd -P)
 out=${1:?usage: build-river-hardware.sh ABSOLUTE_OUTPUT_DIRECTORY}
@@ -27,3 +28,17 @@ xcrun --sdk iphoneos clang -arch arm64 -mios-version-min=16.0 -O2 -Wall -Wextra 
 codesign -f -s - "$out/libRiverHardware.dylib"
 codesign --verify --strict "$out/libRiverHardware.dylib"
 shasum -a 256 "$out/libRiverHardware.dylib"
+if [ "${2:-}" = --with-ui ]; then
+ xcrun --sdk iphoneos clang -arch arm64 -mios-version-min=16.0 -O2 -Wall \
+  -Wno-deprecated-declarations -c "$repo/phone-tools/cgprobe.c" -o "$out/cgprobe.o"
+ xcrun --sdk iphoneos clang -arch arm64 -mios-version-min=16.0 -O2 -Wall -Wextra \
+  -Wno-unused-parameter -fobjc-arc -c "$repo/phone-tools/river-hardware.m" -o "$out/river-hardware.o"
+ xcrun --sdk iphoneos clang -arch arm64 -mios-version-min=16.0 -dynamiclib \
+  -install_name /usr/local/lib/libcgprobe.dylib \
+  -framework Foundation -framework UIKit -framework CoreGraphics -framework IOKit \
+  -Wl,-weak_library,"$out/BackBoardServices.tbd" \
+  "$out/cgprobe.o" "$out/river-hardware.o" -o "$out/libcgprobe.dylib"
+ codesign -f -s - "$out/libcgprobe.dylib"
+ codesign --verify --strict "$out/libcgprobe.dylib"
+ shasum -a 256 "$out/libcgprobe.dylib"
+fi

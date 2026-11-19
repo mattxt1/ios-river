@@ -19,7 +19,9 @@ static _Thread_local unsigned feedback_depth;
 
 static BOOL enabled(const char *key) {
  const char *value = getenv(key);
- return value && !strcmp(value, "1");
+ if (value) return !strcmp(value, "1"); /* an explicit 0 also overrides boot mode */
+ int mode = 0; size_t size = sizeof(mode);
+ return sysctlbyname("debug.river_native_feedback", &mode, &size, NULL, 0) == 0 && size == sizeof(mode) && mode == 1;
 }
 
 static BOOL feedback_allowed(void) {

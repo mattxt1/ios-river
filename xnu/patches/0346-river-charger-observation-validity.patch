@@ -2,10 +2,11 @@ diff --git a/bsd/dev/river_battery.h b/bsd/dev/river_battery.h
 new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/river_battery.h
-@@ -0,0 +1,17 @@
+@@ -0,0 +1,18 @@
 +/* River read-only QG/SMB5 observation. No charger policy writes. */
 +#ifndef RIVER_BATTERY_H
 +#define RIVER_BATTERY_H
++#include <stdbool.h>
 +struct river_battery_observation {
 + unsigned mv, soc;
 + int ma;

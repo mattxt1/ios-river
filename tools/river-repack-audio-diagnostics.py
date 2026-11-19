@@ -21,6 +21,14 @@ from river_camera_service import validate_capture_removal
 NAMES = ('RiverGPUFW', 'RiverWCNSSMeta', 'RiverWCNSSImage', 'RiverWCNSSNV', 'RiverFiles')
 
 
+def select_native_feedback(cmdline):
+    tokens = cmdline.split(b' ')
+    require(not any(t.startswith(b'riverfeedback=') for t in tokens), 'Native feedback mode already specified')
+    result = cmdline + b' riverfeedback=1'
+    require(len(result) < 608, 'Native feedback command line exceeds fixed field')
+    return result
+
+
 def select_renderer(cmdline, name):
     """Select an independently staged candidate without changing the fallback."""
     require(re.fullmatch(r'sweetgl-p[0-9]{4}\.dylib', name) is not None,
@@ -145,6 +153,7 @@ def main():
                     help='Optional launchd configuration changing only the disabled capture-source advertisement')
     ap.add_argument('--ui-library', type=Path, help='Optional signed arm64 UI library; installs at its existing SpringBoard load path')
     ap.add_argument('--ui-library-sha256', help='Required exact fingerprint when carrying a UI library')
+    ap.add_argument('--native-feedback', action='store_true', help='Opt in to the combined native hardware bridge (requires a bridge-bearing UI library)')
     ap.add_argument('--adsp-helper', type=Path)
     ap.add_argument('--wifi-check-helper', type=Path, help='Optional bounded connectivity probe')
     ap.add_argument('--ipconfig-helper', type=Path, help='Optional read-only native DHCP/media reader')
@@ -174,6 +183,9 @@ def main():
         require(size <= vs and off + size <= len(prior), 'Invalid payload segment')
     cmdline = prior[0x48:0x2a8].split(b'\0')[0]
     require(len(cmdline) < 608 and b'rd=emmc0s64' in cmdline, 'Unexpected command line')
+    if args.native_feedback:
+        require(args.ui_library is not None, 'Native feedback requires the combined UI/bridge library')
+        cmdline = select_native_feedback(cmdline)
     if args.renderer_library_name is not None:
         cmdline = select_renderer(cmdline, args.renderer_library_name)
     if args.msgbuf_bytes is not None:
@@ -309,6 +321,7 @@ def main():
                     cmdline_bytes=len(cmdline), kernel_payload_segments_verified=True,
                     clock_helper_sha256=digest(replacement), temporary_boot_only=True)
     manifest['unrelated_riverfiles_verified'] = True
+    manifest['native_hardware_bridge_opt_in'] = args.native_feedback
     if ui_library is not None:
         manifest['ui_library_sha256'] = digest(ui_library)
         manifest['ui_library_path'] = '/usr/local/lib/libcgprobe.dylib'
