@@ -5,6 +5,30 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0345 image VERIFIED; prepare combined UI/performance boot (2026-11-19)
+
+Candidate performance/batch345/artifacts/river-ui-performance-0345.img
+SHA5abd9cfbfe7aef83b9ea68dbd14e7a4eebc2b8b09f1caa66e62a42532f5e9415,
+27,162,624B/cmdline583. Same validatedkernel0342 SHA
+d04506ac3ddcc75130d8aec7863d149ecbddd60d2f25a3dc445a331d639e4cf3.
+UI345SHAcca2001fe5cf8a1d5cf6990e071eb5a9114b46e0f0e5afc2ae325d6916f4e5a3,
+source393058d, iOScompile/signature and actualSearch/switcher+foldertestsPASS.
+Repack verifiedkernelsegments/unrelatedfiles. Full344kernel/UIrollback SHA
+3248412de8e0cc65736be167188029bdcf6d167f5df80b722278955e2e4f0086.
+No345boot/hardwareclaim. Current344 serviceON/healthy; no repeatedinit.
+
+345 nativeSearchcapsuleclip(no paint/hide/opacitychanges), switcher sourceVIEW
+cache invalidatedondetach/emptyimage; tests600layouts/onewindowscan andimage/
+resize/replacementPASS. DefaultOFFgeometrytrace addsancestorclasses+clipflag.
+Allfolder/audio/renderer/camera/pagecache fixes preserved. Runtime effectpending.
+OptionalUSERquestion344iconsstilllatevsbetter unansweredatthishandoff; don't
+blockpackagingonthat. Askfastbootforverified345candidate, tempbootONLY.
+Freshhome/nav/WiFi/Search/foldercheck before once-onlymutedsetup/ios-enable.
+Preparedbatch345/preflight.py+prepare-audio.py NOTRUN, new345evidence paths.
+Tracehelper remainsnamedriver-fb-trace344 (intentionalkernelAPIunchanged),hash
+edcd541169dea3c1bcabd527a0e598b8526ff6581cd15a02316a9a07e5a767b4.
+No newhelperstaging needed. NohotUIdeploy/restart. Fullmanifestbatch345.
+
 ## Active handoff:0344 audio PASS/single-canvas trace; UI0345 preparing (2026-11-19)
 
 USER clear/quicker existingmemo/UIclicks + navigationPASS. NormalserviceON/healthy;
