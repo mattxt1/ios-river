@@ -1,5 +1,43 @@
 # River performance: first combined candidate
 
+## 0341 observations and 0342 candidate
+
+The user confirmed Spotlight blur works on image 0341. App-closing animation
+was unchanged. Direct captures of compositor surfaces 2/4 show a black 132-pixel
+status-bar strip and overlapping rounded shapes in Spotlight's search field.
+The user also reported two corner radii during folder transitions. Spotlight's
+process does not load the SpringBoard compatibility library, so its static field
+and top strip cannot be attributed exclusively to that library.
+
+Audio remained delayed; navigation continued to work. Six playback sessions
+accepted/completed 2497536 frames; microphone input delivered 381952 frames with
+zero timestamp gaps. Cleanup passed and the normal service remains enabled.
+Backend timing from first non-silent PCM to first DMA submission was 1.354 s in
+one sample and 5.226 s in an earlier sample. Coordinator ownership took tens of
+microseconds; most delay occurred before codec readiness. These are backend
+measurements, not UI-to-speaker or acoustic measurements.
+
+Kernel patch 0341 addresses a source-level cause of avoidable scheduling:
+`delay(5)` on every software-SPI edge can block the thread when the CPU's idle
+latency is unknown. A codec-local absolute-time loop now retains the same
+five-microsecond minimum edge dwell without scheduler sleep. It leaves global
+kernel delays, interrupt/preemption state, PLL settling, amplifier leases,
+register readback and cleanup unchanged. [Cirrus DS1085F2, table 3-20](https://statics.cirrus.com/pubs/proDatasheet/CS47L35_F2.pdf)
+provides the SPI timing limits; retaining five microseconds does not raise the
+software bus's existing maximum clock rate. Actual-source host tests cover
+64 ordered mode-0 edges, identity decoding, invalid-register refusal and
+stretched/preempted edges. Native build passed; device latency benefit remains
+unverified.
+
+Image 0342 combines that kernel with removal of fixed bitmap Search-pill and
+folder plates in favor of native animated shapes. A bounded, default-off,
+geometry-only trace can observe SpringBoard model/presentation opacity and
+animation counts during app closure. It reads no text or image contents. The
+static Spotlight field, black status-bar strip and app-closing cause remain
+pending; this batch does not claim to fix all three. The verified 0341 candidate
+image carries both its UI library and prior kernel and can restore that known
+responsive state. Earlier images that omit the UI library cannot restore it.
+
 ## 0340 validation and next combined batch
 
 The user confirmed clear Voice Memos playback and working home navigation and

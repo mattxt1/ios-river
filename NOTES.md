@@ -5,6 +5,22 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0342 candidate VERIFIED; awaiting fastboot (2026-11-18)
+
+NativePATCH0341buildexit0/source69d237c SHA5be7a2bfbf7b14004328a90814ea832d127b5bd5e9ee659901b1877537ab333a.
+UI342nativecompile/signaturePASS; hostSPIedge/normalcoordinator/queue/volume/
+rearmtestsPASS. Image27,160,576B/cmdline583 SHA
+b6403bb70b99398c70f105a81fe41945d20e1dbe6cea568a6d90caeac35eab53
+atlocalperformance/batch342/artifacts/river-ui-audio-0342-candidate.img.
+UIlibSHA19f68810a52d46001c280319903e1318a511392654ca257e9a8d82bf7404af3e.
+CarriesUIlib+newkernel, retainsrendererp0340/cameracfg. Verified341CANDIDATE
+imagea126f650...isconcreteFULLkernel/UIrollback(carries341UI); don'tuseold
+338-340imagesthatomitUIlibtorestoreit. Manifestbatch342/build-manifest-candidate.json.
+PendinguserFASTBOOTforcombinedstartup/folder-searchshape/animationdiagnosticboot.
+StaticSpotlightfield/topblackstrip/appclosingcauseSTILLPENDING, notfixclaims.
+Current341servicestaysON/healthy/navworks. No liveUIchanges/restarts. Readlocal
+CURRENT_TASKfornexttest/procedure. Actualbackenddevicebenefitunverified.
+
 ## Active handoff:0341 blur PASS/latency remains; next SPI+shape batch preparing (2026-11-18)
 
 USER0341responsive/navigation/keyboardwork, SpotlightblurWORKS. Appclosinganimation
