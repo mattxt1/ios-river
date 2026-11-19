@@ -50,6 +50,8 @@ static void *current_thread(void){return (void*)2;}
 static int thread_terminate(void *t){assert(t==(void*)2);return 0;}
 static jmp_buf stopped;
 static uint64_t ri_audio_normal_wake_generation;
+#define RI_AUDIO_NORMAL_START_FRAMES 1024u
+static void ri_audio_startup_mark(unsigned stage){assert(stage==1);}
 static bool idle_registered,idle_cancelled,inject_registered;
 static unsigned idle_ms,cleared,idle_calls;
 static void ri_wait(unsigned ms);
@@ -70,12 +72,12 @@ static void ri_mic_live_session(void){
  assert(!queue_held && !mic_held && !adsp_held && !ri_audio_auto.active && ri_mic_live.active);
  inputs++;ri_mic_live.sessions++;ri_mic_live.active=false;ri_mic_live.stop=true;
  if(scenario==2){ri_mic_live.blocked=true;ri_mic_live.enabled=false;ri_mic_live.error=ETIMEDOUT;return;}
- ri_audio_queue.armed=true;ri_audio_queue.used=4096;
+ ri_audio_queue.armed=true;ri_audio_queue.used=1024;
 }
 static void ri_wait(unsigned ms){assert(!queue_held && !mic_held && !adsp_held);now_ns+=ms*1000000ULL;
  assert(++waits<10);
  if(scenario==3){ri_audio_normal_disable();return;}
- ri_audio_queue.armed=true;ri_audio_queue.used=4096;
+ ri_audio_queue.armed=true;ri_audio_queue.used=1024;
 }
 #include "normal-actual.h"
 static void reset(unsigned n){
@@ -87,7 +89,7 @@ int main(void){
  for(unsigned n=0;n<4;n++){
   reset(n);assert(!ri_audio_normal_enable());assert(created==1 && entry && ri_audio_normal.worker && ri_audio_auto.worker && ri_mic_live.worker && ri_mic_live.attempted && !ri_mic_live.gain);
   assert(ri_audio_normal_enable()==EBUSY && created==1);
-  if(n==0){ri_audio_queue.armed=true;ri_audio_queue.used=4096;ri_mic_live.requested=true;assert(ri_audio_normal_input_pending());}
+  if(n==0){ri_audio_queue.armed=true;ri_audio_queue.used=1024;ri_mic_live.requested=true;assert(ri_audio_normal_input_pending());}
   if(!setjmp(stopped))entry(NULL,0);
   assert(!ri_audio_normal.worker && !ri_audio_normal.enabled && !ri_audio_auto.worker && !ri_mic_live.worker && !ri_audio_auto.enabled && !ri_mic_live.enabled);
   if(n==0)assert(outputs==30 && inputs==30 && !ri_audio_normal.blocked);

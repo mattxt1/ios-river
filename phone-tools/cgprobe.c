@@ -312,25 +312,25 @@ static void probe_dock_layout(id self, SEL cmd)
 static void (*original_material_set_content_replaced_with_snapshot)(id, SEL, BOOL);
 static void probe_material_set_content_replaced_with_snapshot(id self, SEL cmd, BOOL replaced)
 {
-	original_material_set_content_replaced_with_snapshot(self, cmd, NO);
+	original_material_set_content_replaced_with_snapshot(self, cmd, replaced);
 }
 
 static BOOL (*original_material_is_content_replaced_with_snapshot)(id, SEL);
 static BOOL probe_material_is_content_replaced_with_snapshot(id self, SEL cmd)
 {
-	return NO;
+	return original_material_is_content_replaced_with_snapshot(self, cmd);
 }
 
 static void (*original_material_view_set_content_replaced_with_snapshot)(id, SEL, BOOL);
 static void probe_material_view_set_content_replaced_with_snapshot(id self, SEL cmd, BOOL replaced)
 {
-	original_material_view_set_content_replaced_with_snapshot(self, cmd, NO);
+	original_material_view_set_content_replaced_with_snapshot(self, cmd, replaced);
 }
 
 static BOOL (*original_material_view_is_content_replaced_with_snapshot)(id, SEL);
 static BOOL probe_material_view_is_content_replaced_with_snapshot(id self, SEL cmd)
 {
-	return NO;
+	return original_material_view_is_content_replaced_with_snapshot(self, cmd);
 }
 
 static void (*original_focus_isolation_layout)(id, SEL);
@@ -345,12 +345,12 @@ static void probe_focus_isolation_layout(id self, SEL cmd)
 		if (strcmp(object_getClassName(mtv), "MTMaterialView") == 0) {
 			((void (*)(id, SEL, BOOL))objc_msgSend)(mtv, sel_registerName("setHidden:"), NO);
 			((void (*)(id, SEL, CGFloat))objc_msgSend)(mtv, sel_registerName("setAlpha:"), 1.0f);
-			((void (*)(id, SEL, BOOL))objc_msgSend)(mtv, sel_registerName("setContentReplacedWithSnapshot:"), NO);
+			/* Native material snapshot state is retained during transitions. */
 			id l = ((id (*)(id, SEL))objc_msgSend)(mtv, sel_registerName("layer"));
 			if (l) {
 				((void (*)(id, SEL, BOOL))objc_msgSend)(l, sel_registerName("setHidden:"), NO);
 				((void (*)(id, SEL, float))objc_msgSend)(l, sel_registerName("setOpacity:"), 1.0f);
-				((void (*)(id, SEL, BOOL))objc_msgSend)(l, sel_registerName("setContentReplacedWithSnapshot:"), NO);
+				/* Preserve native layer snapshot replacement. */
 			}
 		}
 	}
@@ -578,93 +578,22 @@ static void probe_folder_icon_img_layout(id self, SEL cmd)
 static void (*original_search_backdrop_layout)(id, SEL);
 static void probe_search_backdrop_layout(id self, SEL cmd)
 {
+	/* Native search owns its material, opacity and transition state. */
 	if (original_search_backdrop_layout) original_search_backdrop_layout(self, cmd);
-	if (!strstr(object_getClassName(self), "SearchBackdropView")) return;
-
-	Class uic = objc_getClass("UIColor");
-	id clear = ((id (*)(id, SEL))objc_msgSend)((id)uic, sel_registerName("clearColor"));
-	((void (*)(id, SEL, id))objc_msgSend)(self, sel_registerName("setBackgroundColor:"), clear);
-	((void (*)(id, SEL, BOOL))objc_msgSend)(self, sel_registerName("setOpaque:"), NO);
-
-	id l = ((id (*)(id, SEL))objc_msgSend)(self, sel_registerName("layer"));
-	if (l) {
-		((void (*)(id, SEL, CGColorRef))objc_msgSend)(l, sel_registerName("setBackgroundColor:"), nil);
-		((void (*)(id, SEL, BOOL))objc_msgSend)(l, sel_registerName("setOpaque:"), NO);
-		((void (*)(id, SEL, id))objc_msgSend)(l, sel_registerName("setFilters:"), nil);
-	}
-
-	Ivar mv_iv = class_getInstanceVariable(object_getClass(self), "_materialView");
-	id mv = mv_iv ? object_getIvar(self, mv_iv) : nil;
-	if (mv) {
-		((void (*)(id, SEL, BOOL))objc_msgSend)(mv, sel_registerName("setHidden:"), YES);
-		((void (*)(id, SEL, CGFloat))objc_msgSend)(mv, sel_registerName("setAlpha:"), 0.0f);
-	}
 }
 
 static void (*original_search_bar_layout)(id, SEL);
 static void probe_search_bar_layout(id self, SEL cmd)
 {
+	/* Native search owns its material, opacity and transition state. */
 	if (original_search_bar_layout) original_search_bar_layout(self, cmd);
-	if (strcmp(object_getClassName(self), "SBHSearchBar") != 0) return;
-
-	Ivar bg_iv = class_getInstanceVariable(object_getClass(self), "_backgroundView");
-	id bg = bg_iv ? object_getIvar(self, bg_iv) : nil;
-	if (bg) {
-		((void (*)(id, SEL, BOOL))objc_msgSend)(bg, sel_registerName("setHidden:"), YES);
-		((void (*)(id, SEL, CGFloat))objc_msgSend)(bg, sel_registerName("setAlpha:"), 0.0f);
-	}
 }
 
 static void (*original_library_search_layout)(id, SEL);
 static void probe_library_search_layout(id self, SEL cmd)
 {
+	/* Native search owns its material, opacity and transition state. */
 	if (original_library_search_layout) original_library_search_layout(self, cmd);
-	if (strcmp(object_getClassName(self), "SBHLibrarySearchController") != 0) return;
-
-	Class uic = objc_getClass("UIColor");
-	id clear = ((id (*)(id, SEL))objc_msgSend)((id)uic, sel_registerName("clearColor"));
-
-	Ivar sbg_iv = class_getInstanceVariable(object_getClass(self), "_searchBackgroundView");
-	id sbg = sbg_iv ? object_getIvar(self, sbg_iv) : nil;
-	if (sbg) {
-		((void (*)(id, SEL, id))objc_msgSend)(sbg, sel_registerName("setBackgroundColor:"), clear);
-		((void (*)(id, SEL, BOOL))objc_msgSend)(sbg, sel_registerName("setOpaque:"), NO);
-		id l = ((id (*)(id, SEL))objc_msgSend)(sbg, sel_registerName("layer"));
-		if (l) {
-			((void (*)(id, SEL, CGColorRef))objc_msgSend)(l, sel_registerName("setBackgroundColor:"), nil);
-			((void (*)(id, SEL, BOOL))objc_msgSend)(l, sel_registerName("setOpaque:"), NO);
-			((void (*)(id, SEL, id))objc_msgSend)(l, sel_registerName("setFilters:"), nil);
-		}
-	}
-
-	Ivar sdv_iv = class_getInstanceVariable(object_getClass(self), "_searchDimmingView");
-	id sdv = sdv_iv ? object_getIvar(self, sdv_iv) : nil;
-	if (sdv) {
-		((void (*)(id, SEL, BOOL))objc_msgSend)(sdv, sel_registerName("setHidden:"), YES);
-		((void (*)(id, SEL, CGFloat))objc_msgSend)(sdv, sel_registerName("setAlpha:"), 0.0f);
-	}
-
-	Ivar cvg_iv = class_getInstanceVariable(object_getClass(self), "_contentViewGradientMaskLayers");
-	id cvg = cvg_iv ? object_getIvar(self, cvg_iv) : nil;
-	if (cvg) {
-		unsigned long count = ((unsigned long (*)(id, SEL))objc_msgSend)(cvg, sel_registerName("count"));
-		for (unsigned long i = 0; i < count; i++) {
-			id lyr = ((id (*)(id, SEL, unsigned long))objc_msgSend)(cvg, sel_registerName("objectAtIndex:"), i);
-			((void (*)(id, SEL, BOOL))objc_msgSend)(lyr, sel_registerName("setHidden:"), YES);
-			((void (*)(id, SEL, float))objc_msgSend)(lyr, sel_registerName("setOpacity:"), 0.0f);
-		}
-	}
-
-	Ivar srg_iv = class_getInstanceVariable(object_getClass(self), "_searchResultsGradientMaskLayers");
-	id srg = srg_iv ? object_getIvar(self, srg_iv) : nil;
-	if (srg) {
-		unsigned long count = ((unsigned long (*)(id, SEL))objc_msgSend)(srg, sel_registerName("count"));
-		for (unsigned long i = 0; i < count; i++) {
-			id lyr = ((id (*)(id, SEL, unsigned long))objc_msgSend)(srg, sel_registerName("objectAtIndex:"), i);
-			((void (*)(id, SEL, BOOL))objc_msgSend)(lyr, sel_registerName("setHidden:"), YES);
-			((void (*)(id, SEL, float))objc_msgSend)(lyr, sel_registerName("setOpacity:"), 0.0f);
-		}
-	}
 }
 
 static void (*original_window_set_hidden)(id, SEL, BOOL);
@@ -770,7 +699,7 @@ static id probe_folder_contents_image(id self, SEL cmd)
 static void (*original_layer_set_should_rasterize)(id, SEL, BOOL);
 static void probe_layer_set_should_rasterize(id self, SEL cmd, BOOL rasterize)
 {
-	original_layer_set_should_rasterize(self, cmd, NO);
+	original_layer_set_should_rasterize(self, cmd, rasterize);
 }
 
 static void (*original_switcher_snapshot_set_image)(id, SEL, id);
@@ -1248,6 +1177,9 @@ static void clear_blackout_in_view_mode(id view, BOOL switcher)
 {
 	if (!view) return;
 	const char *cname = object_getClassName(view);
+	if (strstr(cname, "SearchBackdropView") || strstr(cname, "SBHLibrarySearchController") ||
+	    strcmp(cname, "SBHomeScreenBackdropView") == 0 || strcmp(cname, "SBFFeatherBlurView") == 0 ||
+	    strcmp(cname, "SBHFeatherBlurView") == 0) return;
 	if (switcher && strcmp(cname, "SBWallpaperEffectView") == 0 &&
 	    ((CGFloat (*)(id, SEL))objc_msgSend)(view, sel_registerName("alpha")) != 0.0f)
 		((void (*)(id, SEL, CGFloat))objc_msgSend)(view, sel_registerName("setAlpha:"), 0.0f);
@@ -1257,12 +1189,12 @@ static void clear_blackout_in_view_mode(id view, BOOL switcher)
 	id clear = ((id (*)(id, SEL))objc_msgSend)((id)uic, sel_registerName("clearColor"));
 
 	if (strcmp(cname, "MTMaterialView") == 0) {
-		((void (*)(id, SEL, BOOL))objc_msgSend)(view, sel_registerName("setContentReplacedWithSnapshot:"), NO);
+		/* Preserve native snapshot replacement. */
 		((void (*)(id, SEL, BOOL))objc_msgSend)(view, sel_registerName("setHidden:"), NO);
 		((void (*)(id, SEL, CGFloat))objc_msgSend)(view, sel_registerName("setAlpha:"), 1.0f);
 		id l = ((id (*)(id, SEL))objc_msgSend)(view, sel_registerName("layer"));
 		if (l) {
-			((void (*)(id, SEL, BOOL))objc_msgSend)(l, sel_registerName("setContentReplacedWithSnapshot:"), NO);
+			/* Preserve native layer snapshot replacement. */
 			((void (*)(id, SEL, BOOL))objc_msgSend)(l, sel_registerName("setHidden:"), NO);
 			((void (*)(id, SEL, float))objc_msgSend)(l, sel_registerName("setOpacity:"), 1.0f);
 		}
@@ -1468,7 +1400,7 @@ static void install_all_hooks(void)
 	}
 
 	install_switcher_hooks();
-	install_feather_blur_hooks();
+	/* Preserve native feather blur visibility/opacity. */
 
 	static bool snap_done = false;
 	if (!snap_done) {

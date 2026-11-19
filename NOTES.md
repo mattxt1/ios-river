@@ -5,6 +5,44 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0340 audio/navigation PASS; user requests blur/animation/latency batch (2026-11-18)
+
+USER: clearVoiceMemosaudioANDhome/navigation/searchkeyboardworkafterapp on0340.
+Mic385exactREADs/770048realframes16.04sec,0timestampgaps/invalid/backwards,
+clock/codec/route/pinsrestored. Auto2playsessions710656accepted=completed,
+last652exactWRITEcompletions, noqueueerror; normalserviceLEFTON/healthy.
+Postappcameraqueryreturnsdevices0/613ms/lookup1102, noUIrestart0340. INITIAL
+querytimedout5sec, thenFIVEqueriesPASS761/633/694/609/613ms; don'tclaimcoldfix
+complete. Keepworkingboot. LowinteractionCPU~21.7seccoreduetd56%/biomed48%onecore,
+notcontrolledidle. No daemonpolicychanges. Rawalllocalperformance/batch340.
+
+NEWUSERfixes: Spotlightmissingblur/fullytransparent; closingappanimationonly
+focusediconthenothericonsappear; BOTH UIandappplayback~1secdelay. UserleftSpotlight
+openforinspection. ActualSpringBoardloaded /usr/local/lib/libcgprobe.dylib,
+93,056B SHAa8bd7ef11fc4d53423888c8914772973b35f4fbdc39d8e71fb70586af9f28b69,
+backedup/hashverifiedlocalbatch341/libcgprobe-original.dylib. Firstoldhelper
+screenshotpickedSTALESettingssurface3144; doNOTcallitSpotlightcapture. Current
+exactdefaultdisplayhelperbuiltinstalled; screenshotcopyRUNNINGsession59400,
+9,806,454B BMPunderbatch341/spotlight-default-surface.bmp. Pollbeforeview.
+
+Nextcandidatephone-tools/cgprobe.c restoresnativeSearchBackdrop/bar/librarysearch
+materialandtransitionstate; stopspermanentfeatherblurhide; forwardsnativerasterize
+andsnapshotreplacementflagsandpreserveshomebackdropsubtrees. Actualarm64dylib
+compilePASS(oldsyscalldeprecation/twoexistingwarnings), NOTdeployed. NativeUI
+renderingcorrectnesspending. Avoidenablingunusedglyphhooks(oldpinkregression).
+
+NewkernelPATCH0340 (nextimageREVISION0341) lowernormaloutputstart4096->1024frames
+andcoarsefirstPCM/owner/route/clock/output/firstDMAstage timestampsviaios-status.
+No clocksettling/mutelease/DMAcompletionorcleanuprelaxed. Exactstagebase339in
+localbatch341/base/new. Hostactualnormaloneblockstart/30handoffs/wakeraces PASS;
+actualnormalqueue200nonretryingcallbacks/volume/rearm/milestonefirst-writePASS;
+micpipeline15scenariosPASS. Oldstandalone0293volumeharnessrequirespre293tree
+anddoesn'tapplycurrenttree; normalvolumeharnessabovePASS. No kernelbuildyet.
+CommitnumberedpatchBEFOREnativebuild. NeedvalidatedUIlibRiverFilesselectionand
+concreterollbackimagecarryingbackeduplibrarybeforedeploy(oldimagesdon'tcontainit).
+UserwantsallthreecoherentchangesinONEtestboot; don'taskfastbootuntilcandidate
+androllbackimage/source/nativebuildverified. Current0340servicestayon.
+
 ## Active handoff:0340 audio enabled; discovery four passes after initial timeout (2026-11-18)
 
 USERfreshhome/navigation/keyboard/WiFiPASS. WiFiSSH192.168.1.232working.
