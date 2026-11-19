@@ -5,6 +5,16 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0340 temporary boot accepted; home check pending (2026-11-18)
+
+UserconfirmedFASTBOOT; imageSHA/productriver/serialZY226HM8QBverified.
+fastbootbootexit0/send0.616s/boot0.216s, noflash. Freshhome/navigation/keyboard/
+WiFiasyncquestionpending; no340audioinit/controlsent. Nextboundedcamera-list
+probeFIRSTandinstalledlaunchdhash, thenonce-onlymutednormalaudiosetupwith
+new340evidencenames. Original339hadclearcountingbutcamera-discoveryUIstall;
+0340availabilityhypothesisstillrequiresactualquery/audio/navigationvalidation.
+Localperformance/batch340/temporary-boot-0340.json andCURRENT_TASK.md.
+
 ## Active handoff:0340 ready; staging verified over Wi-Fi (2026-11-18)
 
 Priorp0340copycompletedbutreadbacktimedout. ResumedREADONLYviaWiFi192.168.1.232
