@@ -45,7 +45,7 @@ def require(condition, message):
         raise ValueError(message)
 
 
-def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None, network_state=None, ipconfig=None, wifi_check=None, launchd=None):
+def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None, network_state=None, ipconfig=None, wifi_check=None, launchd=None, ui_library=None):
     require(blob[:8] == b'RIVFILES', 'Invalid RiverFiles magic')
     count, = struct.unpack_from('<I', blob, 8)
     require(count <= 64 and 12 + count * 128 <= len(blob), 'Invalid file table')
@@ -58,10 +58,15 @@ def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None, ne
     ipconfig_found = 0
     wifi_check_found = 0
     launchd_found = 0
+    ui_found = 0
     for i in range(count):
         name, mode, off, size, reserved = struct.unpack_from('<112sIIII', blob, 12 + 128 * i)
         require(off + size <= len(blob), 'File outside container')
         data = blob[off:off + size]
+        if name.split(b'\0')[0] == b'/usr/local/lib/libcgprobe.dylib':
+            ui_found += 1
+            if ui_library is not None:
+                data = ui_library
         if name.split(b'\0')[0] == b'/System/Library/xpc/launchd.plist':
             launchd_found += 1
             if launchd is not None:
@@ -96,6 +101,9 @@ def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None, ne
                 data = wifi_check
         entries.append((name, mode, data, reserved))
     require(found == 1, 'Expected exactly one existing clock helper')
+    require(ui_found <= 1, 'Duplicate UI library')
+    if ui_library is not None and not ui_found:
+        entries.append((b'/usr/local/lib/libcgprobe.dylib', 0o755, ui_library, 0))
     if launchd is not None:
         require(launchd_found == 1, 'Expected exactly one existing launchd configuration')
     require(adsp_found <= 1, 'Duplicate ADSP helper')
@@ -135,6 +143,8 @@ def main():
     ap.add_argument('--renderer-library-name', help='Already staged sweetgl-pNNNN.dylib; preserves the original fallback library')
     ap.add_argument('--camera-launchd-plist', type=Path,
                     help='Optional launchd configuration changing only the disabled capture-source advertisement')
+    ap.add_argument('--ui-library', type=Path, help='Optional signed arm64 UI library; installs at its existing SpringBoard load path')
+    ap.add_argument('--ui-library-sha256', help='Required exact fingerprint when carrying a UI library')
     ap.add_argument('--adsp-helper', type=Path)
     ap.add_argument('--wifi-check-helper', type=Path, help='Optional bounded connectivity probe')
     ap.add_argument('--ipconfig-helper', type=Path, help='Optional read-only native DHCP/media reader')
@@ -220,7 +230,13 @@ def main():
     if wifi_check is not None:
         require(wifi_check[:8] == bytes.fromhex('cffaedfe0c000001'), 'Expected arm64 connectivity probe')
     launchd = args.camera_launchd_plist.read_bytes() if args.camera_launchd_plist else None
-    blobs['RiverFiles'] = replace_helper(prior_files, replacement, adsp_helper, wifi_helper, net_helper, network_state, ipconfig, wifi_check, launchd)
+    ui_library = args.ui_library.read_bytes() if args.ui_library else None
+    require(bool(args.ui_library) == bool(args.ui_library_sha256), 'UI library and fingerprint must be supplied together')
+    if ui_library is not None:
+        require(len(ui_library) >= 32 and ui_library[:8] == bytes.fromhex('cffaedfe0c000001') and
+                struct.unpack_from('<I', ui_library, 12)[0] == 6, 'Expected arm64 Mach-O UI dylib')
+        require(digest(ui_library) == args.ui_library_sha256.lower(), 'UI library fingerprint mismatch')
+    blobs['RiverFiles'] = replace_helper(prior_files, replacement, adsp_helper, wifi_helper, net_helper, network_state, ipconfig, wifi_check, launchd, ui_library)
     # Compare the actual containers: every unrelated file and metadata survives.
     def files(blob):
         result = {}
@@ -234,6 +250,8 @@ def main():
     changed = {b'/usr/local/bin/river-codec-clock': replacement}
     if launchd is not None:
         changed[b'/System/Library/xpc/launchd.plist'] = launchd
+    if ui_library is not None:
+        changed[b'/usr/local/lib/libcgprobe.dylib'] = ui_library
     for name, data in [(b'/usr/local/bin/river-adsp-status', adsp_helper),
                        (b'/usr/local/bin/river-wifi-monitor-state', wifi_helper),
                        (b'/usr/local/bin/river-net', net_helper),
@@ -291,6 +309,9 @@ def main():
                     cmdline_bytes=len(cmdline), kernel_payload_segments_verified=True,
                     clock_helper_sha256=digest(replacement), temporary_boot_only=True)
     manifest['unrelated_riverfiles_verified'] = True
+    if ui_library is not None:
+        manifest['ui_library_sha256'] = digest(ui_library)
+        manifest['ui_library_path'] = '/usr/local/lib/libcgprobe.dylib'
     if launchd is not None:
         manifest['camera_launchd_sha256'] = digest(launchd)
         manifest['only_capture_source_advertisement_changed'] = True

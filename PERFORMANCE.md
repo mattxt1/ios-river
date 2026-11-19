@@ -1,5 +1,51 @@
 # River performance: first combined candidate
 
+## 0340 validation and next combined batch
+
+The user confirmed clear Voice Memos playback and working home navigation and
+keyboard after recording on image 0340, without a system UI restart. Microphone
+input delivered 770048 frames with 385 exact READ completions and zero timestamp
+gaps, invalid values or backwards values. Two playback sessions accepted and
+completed 710656 frames; route/clock/pin cleanup passed. The service remains on.
+Camera discovery returned normally in five later processes (0.61–0.76 seconds),
+including after the app test; the initial five-second timeout remains unresolved.
+
+The next requested batch targets fully transparent Spotlight, icons appearing
+late after the app-closing animation, and about one second of delay for both UI
+sounds and app playback. SpringBoard loads `/usr/local/lib/libcgprobe.dylib`.
+Its original SHA256 is
+`a8bd7ef11fc4d53423888c8914772973b35f4fbdc39d8e71fb70586af9f28b69`.
+The library is backed up locally. Source includes explicit search/feather-blur
+hiding and permanent overrides of rasterization/material snapshot state.
+The candidate restores native search materials and those transition choices;
+actual blur appearance and animation behavior require the combined boot test.
+Unused image/glyph hooks remain uninstalled.
+
+Kernel patch 0340 lowers the normal output startup threshold from 4096 frames
+(85 ms at 48 kHz) to 1024 (21 ms). This removes up to 64 ms of buffer waiting;
+it does not by itself explain or promise to eliminate a one-second delay.
+Stage timestamps cover first non-silent PCM acceptance, coordinator ownership,
+route entry, codec readiness, output enable and first DMA publication. They are
+backend timings, not a microphone measurement of speaker latency or UI-to-sound
+latency. Hardware settling checks, silence preroll, mute lease, ownership and
+cleanup are preserved. Native kernel and UI library builds passed. Actual-source
+coordinator/race, queue/volume/rearm and microphone pipeline regressions passed.
+
+Image revision 0341 combines those changes, retaining renderer p0340 and the
+camera-service configuration from image 0340. It carries the candidate UI library
+at its existing load path. A separate UI rollback image must carry the verified
+original library before candidate deployment: prior images do not carry this UI
+library and therefore do not restore it by themselves. The UI rollback image
+retains the new kernel; after it restores the library, prior images can again be
+used for a full kernel fallback. No current library is overwritten during host
+preparation. Boot images remain temporary; carried files persist on root as in
+the established helper workflow.
+
+The first screenshot helper selected a stale Settings surface. The display-default
+surface helper returned a black unused surface. Neither capture verifies the
+current Spotlight appearance. Keep the user's report as the visual baseline;
+do not label those captures as a valid live screen.
+
 ## 0339 device results and follow-up
 
 The fresh 0339 boot passed home/navigation/keyboard checks. During the cued
