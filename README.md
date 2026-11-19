@@ -53,7 +53,7 @@ Earlier bounded speaker and microphone milestones are retained in
 | Boot and storage | Stock Motorola bootloader loads a temporary image via `fastboot boot`; XNU mounts an HFS+ iOS root on eMMC `userdata` (`rd=emmc0s64 rootrw=1`). | Preparing that root overwrites Android user data. Temporary fastboot boot only; physical partitions are never flashed. |
 | CPU and memory | Four Cortex-A53 Gold cores (`cpus=4`) and ~3.38 GiB usable RAM on the full-RAM configuration. | Firmware carveouts stay excluded. Silver cores remain parked. |
 | Graphics & Display | Adreno 506 hardware acceleration via Mesa Freedreno, RiverGPU, and an EAGL/OpenGL ES adapter (`riverenv=backboardd:DYLD_INSERT_LIBRARIES=/usr/local/lib/sweetgl.dylib`). Display path runs at 60 Hz flip (`sweetfb_hz=60`, `riverblit=1`, `riverfbinv=0`). | 60 Hz display scanout confirmed. Metal is translated via OpenGL ES / Freedreno. |
-| Backlight & Sleep/Wake | Tianma hardware brightness uses DSI DCS 0x51 (`riverbl=1`). `AppleARMBacklight` stays opt-in after the prior CoreBrightness UI slowdown. | 0347 adds DMA-success tracking and sleep/wake ordering; an opt-in native brightness bridge is prepared. New candidate unbooted; native slider coverage and responsiveness require validation. See [HARDWARE.md](HARDWARE.md). |
+| Backlight & Sleep/Wake | Tianma hardware brightness uses DSI DCS 0x51 (`riverbl=1`). `AppleARMBacklight` stays opt-in after the prior CoreBrightness UI slowdown. | 0347/0349 add DMA-success tracking, failed-state invalidation and sleep/wake ordering; an opt-in native brightness bridge is prepared. New candidate unbooted; native slider coverage and responsiveness require validation. See [HARDWARE.md](HARDWARE.md). |
 | Touch & UI Interaction | Synaptics touch controller operational (`riverinput=1`, `rivertouchlatch=0`). Lockscreen unlock and touch interaction have been verified; controlled app FPS measurements remain pending. | Canvas is cropped iPhone X geometry; UI elements are fully interactive. |
 | Home & SpringBoard | SpringBoard lockscreen, home screen, settings navigation, and app launch operational. App switcher functional with replica layer. | PosterBoard background load requires initial settle time on boot. |
 | Battery & Power | Hardware battery monitoring via Qualcomm PM8953 FG/QG and JG30 battery curve (`0267-river-battery-jg30-power-source.patch`). Publishes observed voltage/current/status and estimated capacity to IOKit `IOPMPowerSource`. | Integrated0290/0291 preserve last-valid samples, reject invalid current and remove charger-enable writes from sampling/diagnostics. Host checks and full build pass; live SweetBattery/IOPMPowerSource/IOPS publication agrees at85%,4194–4195mV, external/notcharging/notfull with valid/nonfallback flags. Failure recovery, load/cable/charging validation remains pending; percentage is a load-sensitive estimate. See [BATTERY-STATUS.md](BATTERY-STATUS.md). |
@@ -189,7 +189,7 @@ configuration. Preparing or writing one is destructive to the target partition.
   fit experiments and diagnostics.
 - [LOCAL-BUILD.md](LOCAL-BUILD.md): verified local XNU build setup.
 - `shim-river/`, `xnu/patches/`, `tools/`, `phone-tools/`, `mesa/`: loader,
-  ordered kernel patches (currently through patch 0348), host utilities, device tools and Mesa integration.
+  ordered kernel patches (currently through patch 0349), host utilities, device tools and Mesa integration.
 
 ## Next work
 

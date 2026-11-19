@@ -1,9 +1,19 @@
 # River battery, backlight and native feedback
 
-The November 19 candidate adds patches 0346–0348 and an opt-in SpringBoard
+The November 19 candidate adds patches 0346–0349 and an opt-in SpringBoard
 bridge. It has **not been booted or hardware-validated**. Last known phone
 image is 0345. No audio initialization, audio enable, playback or capture was
 performed in this task. Device SSH was denied by the host session permissions.
+
+The final **0349** kernel build, iOS arm64 library/helper builds and host checks
+pass. The applied source hashes match the host-tested inputs. Local candidate:
+`outputs/hardware/river-hardware-0349.img` (27,168,768 bytes, command line599).
+Image SHA-256:
+`9e1e80630e7eb85424f34fd08fe4beca5659137dc9c094c02361b1fc3bddf4b8`.
+Kernel source commit `5f082ba2fea73f9bb35f47e50aade9efe5669768`;
+full source/provenance and rollback hashes are in
+`outputs/hardware/candidate-manifest.json` in this task workspace. The prior
+0348 image is superseded and marked do-not-boot in its retained manifest.
 
 | Area | Candidate implementation | Still required |
 | --- | --- | --- |
@@ -70,13 +80,14 @@ read failures, mapping contention/failure, cable/state transition rejection,
 VI sentinels, all eight charger states, hard/soft thermal limits, errors,
 command/mode/suspend/DC handling, first-sample absence, stale retention and
 recovery. Backlight checks cover stale queued requests after sleep/wake,
-duplicate suppression, DMA failure followed by a retry, lock order and
+duplicate suppression, DMA failure followed by a retry or a return to the
+previous requested brightness, lock order and
 overflow/range bounds. Feedback checks cover packet validation, stop, legacy
 mailbox compatibility, all six register-write failure positions, maximum
 gain/duration, forwarding, nested calls and ABI mismatch rejection.
 
 `tools/test-river-battery.py` still reproduces the historical 0267/0290/0291
-defects. The new runner tests the current 0346–0348 applied source. Host
+defects. The new runner tests the current 0346–0349 applied source. Host
 results establish software behavior; they do not prove motor output, charger
 operation, calibrated charge percentage or panel luminance.
 

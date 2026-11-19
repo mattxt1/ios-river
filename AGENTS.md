@@ -1,6 +1,6 @@
 # Working on ios-river
 
-- Latest task: battery/backlight/native-feedback candidate0348. Phone remains
+- Latest task: battery/backlight/native-feedback candidate0349. Phone remains
   last-known0345; SSH denied by session permissions, no device controls or
   audio setup/test succeeded. Read the newest NOTES.md and HARDWARE.md.
   Full Core Haptics, charging enable/policy and calibrated SOC remain open.

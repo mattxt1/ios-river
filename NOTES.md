@@ -5,6 +5,41 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff: verified0349 hardware candidate; SSH blocked (2026-11-19)
+
+The final candidate is PREPARED, NOT BOOTED. Branch codex/power-backlight-haptics
+contains0346 charger observations,0347 backlight ordering,0348 bounded native
+feedback and0349 failed-backlight-state invalidation. 0349 also fixes reversion
+to a previously successful brightness after an uncertain failed transfer.
+
+Candidate outputs/hardware/river-hardware-0349.img is27,168,768bytes/cmdline599.
+SHA9e1e80630e7eb85424f34fd08fe4beca5659137dc9c094c02361b1fc3bddf4b8.
+Kernel SHA65dfa0ecac4c6669d5ba12277e073b15ff418fc22c1e454cb313c9602b404efa,
+source5f082ba2fea73f9bb35f47e50aade9efe5669768. New isolated seed-copy build
+passed directly, including the workspace-only dsymutil diagnostics adaptation.
+Native manifest work/build/river-5f082ba2fea7-Gb7V3x/build-manifest.json.
+All applied C/C++/header source hashes match host-tested input snapshots.
+Combined UI/bridge SHA51c940fd789134e543fa6e382ce05721bcb53c3f3e51cb15509ebbb450146012.
+Preserves0345 UI source, renderer/camera/audio files and existing clock helper.
+Repack verifies every kernel segment and all unrelated RiverFiles data/metadata.
+Full0345rollback remains at the prior performance/batch345 artifact path,
+SHA5abd9cfbfe7aef83b9ea68dbd14e7a4eebc2b8b09f1caa66e62a42532f5e9415.
+Earlier0348candidate is SUPERSEDED/do-not-boot; final manifest selects0349.
+
+Host ASan/UBSan actual observer/poll, panel methods, haptic endpoint/play and
+ObjC hooks PASS, including failure/reversion. Legacy battery regression and
+UI/repack checks PASS; iOS16arm64 libraries/helper compile/signature PASS.
+Artifacts and host-source hash record: this Nov19 workspace outputs/hardware.
+
+Phone is LAST KNOWN0345. This session's read-only USB SSH was denied with
+Operation not permitted. No device action succeeded. No flash/reboot/hot deploy
+or audio init/enable/test occurred. Local source commits were not pushed.
+Next requires a session permitted to reach the device; verify product/hash,
+temporary boot only, confirm healthy home before brightness/feedback controls.
+Keep audio off per the existing no-audio-tonight instruction. Use HARDWARE.md
+for native-path/preference and battery cable/load checks. Neither full Core
+Haptics nor charging enable/thermal/MMI policy nor calibrated SOC is complete.
+
 ## Active handoff: battery/backlight/native feedback candidate (2026-11-19)
 
 Branch `codex/power-backlight-haptics` starts from the locally verified river
