@@ -256,3 +256,35 @@ Build the helper with the patch's `iokit/Kernel/arm` include directory. Tests:
 The candidate preserves the verified 0343 UI, audio, renderer and camera-service
 configuration. No forced icon visibility, speculative blending or clock changes
 are included. Runtime animation improvement remains unverified.
+
+
+### Image 0344 runtime results and next UI candidate 0345
+
+On 0344 the user confirms clear, quicker playback and working navigation/keyboard.
+One normal playback session accepted and completed 336896 frames; cleanup restored
+codec clocks/pins and muted output. Backend first-DMA timing was 773261 us, not a
+UI-to-acoustic measurement. The page cache reported 17773 hits/two builds with no
+GPU presentation drops or GPU-surface CPU copies in the sampled reporting periods.
+There is no controlled FPS improvement claim.
+
+The cued composition trace captured 139 present attempts over 8.466 seconds; every
+record used mask 1, alternating full-screen surfaces 2 and 4. Thus the sampled
+late-icon animation does not involve the kernel combining multiple enabled layers.
+It does not identify why the rendered canvas omits icons. The trace is stopped.
+A following 20.27-second CPU sample showed no recurrence of the earlier busy
+coreduetd/biomed condition; no service cap or disable was applied.
+
+A settled home-screen capture confirms a square Search background, despite the
+native material reporting a 15-point radius. Candidate 0345 clips the existing
+Search pill and its underlying page-control content to a capsule whose radius
+follows layout height. It adds no painted overlay and preserves visibility and
+opacity. The Spotlight field and folder repair are retained. Device validation
+is pending; the exact material/clipping failure is not established.
+
+The same UI batch avoids rescanning every window for the switcher wallpaper on
+each layout. It retains the source image view on the switcher root, observes new
+images on that view, and rescans when the source detaches or loses its image.
+The actual-source model test covers 600 layouts/one scan, changed images, bounds
+changes, detach/replacement and empty-source recovery. Expanded default-off
+geometry diagnostics include home/folder/scroll ancestors and masks-to-bounds.
+No app-closing animation improvement is claimed before testing.

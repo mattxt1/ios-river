@@ -5,6 +5,27 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0344 audio PASS/single-canvas trace; UI0345 preparing (2026-11-19)
+
+USER clear/quicker existingmemo/UIclicks + navigationPASS. NormalserviceON/healthy;
+setup+enable consumed ONCE. One session336896accepted=completed, zeroerrors,
+firstDMA773261us backendtiming, clocks/pins restored/ampmuted. Do not repeatinit.
+Cuedcompositiontrace0344 collected/stopped:139attempts/8.466sec, mask1throughout,
+surfaces2/4 alternating; notmultilayerkernelcompositioninthissample. No FPS or
+animationcauseclaim. Cache17773hits/2builds, sampledGPUdrop0/CPUcopy0. Current
+20.27secCPU sample no previousanalyticsrunaway; no service cap/disable applied.
+
+UI345source prepared: clip EXISTING Search pill+underlyingpagecontrolcontent to
+capsulefollowingnativebounds; nobitmapoverlay/hide/alphaforcing. Square settled
+Search captureconfirmed344, native materialradius15 alonewasinsufficient.
+Also caches switcherwallpaper sourceVIEW, observesimagechanges/rescansondetach
+or emptyimage. ActualObjCmodel600layouts/onescan+image/resize/replacementtests
+PASS; existingfoldermodelPASS; iOSbuild/signaturePASS. Newgeometryancestors+
+masksToBounds diagnosticsdefaultOFF. No UI hotdeploy/restart; phone still344.
+Pending optionalUSER whether iconsstilllate fromtest justcompleted. Nextcommit/
+package345 with SAME validatedkernel0342/audio/renderer/camera. Full344image
+carries343UI and is concrete rollback. Do not askfastbootuntilverifiedimage.
+
 ## Active handoff:0344 settled Search square confirmed; audio ON; cued composition pending (2026-11-19)
 
 USER confirms nav+keyboard work/homevisible. Home Search pill SQUARE when settled,

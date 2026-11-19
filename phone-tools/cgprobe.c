@@ -419,31 +419,45 @@ static void hide_material_children(id host)
 	}
 }
 
-/* The page control beneath the Search pill has its own square material. */
-static void hide_search_page_material(id pill)
+/* Clip the existing small Search materials; never add a painted plate.
+ * Both the visible pill and the page-control material beneath it need a
+ * capsule clip. Bounds follow native layout, including the morph animation. */
+static void clip_search_capsule(id host)
 {
-    id parent = ((id (*)(id, SEL))objc_msgSend)(pill, sel_registerName("superview"));
-    if (!parent || strcmp(object_getClassName(parent), "SBFolderScrollAccessoryView")) return;
-    id siblings = ((id (*)(id, SEL))objc_msgSend)(parent, sel_registerName("subviews"));
-    unsigned long n = ((unsigned long (*)(id, SEL))objc_msgSend)(siblings, sel_registerName("count"));
-    for (unsigned long i = 0; i < n; i++) {
-        id pc = ((id (*)(id, SEL, unsigned long))objc_msgSend)(siblings, sel_registerName("objectAtIndex:"), i);
-        if (strcmp(object_getClassName(pc), "SBIconListPageControl")) continue;
-        id subs = ((id (*)(id, SEL))objc_msgSend)(pc, sel_registerName("subviews"));
-        unsigned long count = ((unsigned long (*)(id, SEL))objc_msgSend)(subs, sel_registerName("count"));
-        for (unsigned long j = 0; j < count; j++) {
-            id content = ((id (*)(id, SEL, unsigned long))objc_msgSend)(subs, sel_registerName("objectAtIndex:"), j);
-            if (!strcmp(object_getClassName(content), "_UIPageControlContentView")) hide_material_children(content);
-        }
-    }
+ CGRect b=((CGRect(*)(id,SEL))objc_msgSend)(host,sel_registerName("bounds"));
+ if(b.size.height<4 || b.size.height>100 || b.size.width<b.size.height)return;
+ id layer=((id(*)(id,SEL))objc_msgSend)(host,sel_registerName("layer"));
+ if(!layer)return;
+ CGFloat radius=b.size.height/2;
+ if(((CGFloat(*)(id,SEL))objc_msgSend)(layer,sel_registerName("cornerRadius"))!=radius)
+  ((void(*)(id,SEL,CGFloat))objc_msgSend)(layer,sel_registerName("setCornerRadius:"),radius);
+ if(!((BOOL(*)(id,SEL))objc_msgSend)(layer,sel_registerName("masksToBounds")))
+  ((void(*)(id,SEL,BOOL))objc_msgSend)(layer,sel_registerName("setMasksToBounds:"),YES);
 }
-
+static void clip_search_page_material(id pill)
+{
+ id parent=((id(*)(id,SEL))objc_msgSend)(pill,sel_registerName("superview"));
+ if(!parent || strcmp(object_getClassName(parent),"SBFolderScrollAccessoryView"))return;
+ id siblings=((id(*)(id,SEL))objc_msgSend)(parent,sel_registerName("subviews"));
+ unsigned long n=((unsigned long(*)(id,SEL))objc_msgSend)(siblings,sel_registerName("count"));
+ for(unsigned long i=0;i<n;i++) {
+  id pc=((id(*)(id,SEL,unsigned long))objc_msgSend)(siblings,sel_registerName("objectAtIndex:"),i);
+  if(strcmp(object_getClassName(pc),"SBIconListPageControl"))continue;
+  id children=((id(*)(id,SEL))objc_msgSend)(pc,sel_registerName("subviews"));
+  unsigned long count=((unsigned long(*)(id,SEL))objc_msgSend)(children,sel_registerName("count"));
+  for(unsigned long j=0;j<count;j++) {
+   id content=((id(*)(id,SEL,unsigned long))objc_msgSend)(children,sel_registerName("objectAtIndex:"),j);
+   if(!strcmp(object_getClassName(content),"_UIPageControlContentView"))clip_search_capsule(content);
+  }
+ }
+}
 static void (*original_search_pill_layout)(id, SEL);
 static void probe_search_pill_layout(id self, SEL cmd)
 {
- /* The native pill participates in the Search-bar morph. A second bitmap
-  * plate kept its old radius and overlapped the native material. */
  if(original_search_pill_layout)original_search_pill_layout(self,cmd);
+ if(strcmp(object_getClassName(self),"SBHSearchPillView"))return;
+ clip_search_capsule(self);
+ clip_search_page_material(self);
 }
 
 static void (*original_folder_bg_layout)(id, SEL);
@@ -893,35 +907,42 @@ static void probe_library_layout(id self, SEL cmd)
 }
 
 /* A switcher-only replica of the existing wallpaper image, behind the cards. */
-static char switcher_wallpaper_key;
-static id find_wallpaper_image(id view, unsigned depth, BOOL replica)
+static char switcher_wallpaper_key, switcher_wallpaper_source_key;
+static id find_wallpaper_image_view(id view, unsigned depth, BOOL replica)
 {
     if (!view || depth > 16) return nil;
     const char *name = object_getClassName(view);
     if (strstr(name, "PBUISnapshotReplicaView")) replica = YES;
     if (replica && !strcmp(name, "UIImageView")) {
         id image = ((id (*)(id, SEL))objc_msgSend)(view, sel_registerName("image"));
-        if (image) return image;
+        if (image) return view;
     }
     id subs = ((id (*)(id, SEL))objc_msgSend)(view, sel_registerName("subviews"));
     unsigned long n = subs ? ((unsigned long (*)(id, SEL))objc_msgSend)(subs, sel_registerName("count")) : 0;
     for (unsigned long i = 0; i < n; i++) {
         id child = ((id (*)(id, SEL, unsigned long))objc_msgSend)(subs, sel_registerName("objectAtIndex:"), i);
-        id image = find_wallpaper_image(child, depth + 1, replica);
+        id image = find_wallpaper_image_view(child, depth + 1, replica);
         if (image) return image;
     }
     return nil;
 }
 static void update_switcher_wallpaper(id root)
 {
-    id wins = ((id (*)(id, SEL, BOOL, BOOL))objc_msgSend)((id)objc_getClass("UIWindow"),
-        sel_registerName("allWindowsIncludingInternalWindows:onlyVisibleWindows:"), YES, NO);
-    unsigned long n = wins ? ((unsigned long (*)(id, SEL))objc_msgSend)(wins, sel_registerName("count")) : 0;
-    id image = nil;
-    for (unsigned long i = 0; i < n && !image; i++) {
-        id win = ((id (*)(id, SEL, unsigned long))objc_msgSend)(wins, sel_registerName("objectAtIndex:"), i);
-        if (!strcmp(object_getClassName(win), "_SBWallpaperSecureWindow")) image = find_wallpaper_image(win, 0, NO);
+    id source = objc_getAssociatedObject(root, &switcher_wallpaper_source_key);
+    id window = source ? ((id (*)(id, SEL))objc_msgSend)(source, sel_registerName("window")) : nil;
+    id cachedImage = source ? ((id (*)(id, SEL))objc_msgSend)(source, sel_registerName("image")) : nil;
+    if (!cachedImage || !window || strcmp(object_getClassName(window), "_SBWallpaperSecureWindow")) {
+        source = nil;
+        id wins = ((id (*)(id, SEL, BOOL, BOOL))objc_msgSend)((id)objc_getClass("UIWindow"),
+            sel_registerName("allWindowsIncludingInternalWindows:onlyVisibleWindows:"), YES, NO);
+        unsigned long n = wins ? ((unsigned long (*)(id, SEL))objc_msgSend)(wins, sel_registerName("count")) : 0;
+        for (unsigned long i = 0; i < n && !source; i++) {
+            id win = ((id (*)(id, SEL, unsigned long))objc_msgSend)(wins, sel_registerName("objectAtIndex:"), i);
+            if (!strcmp(object_getClassName(win), "_SBWallpaperSecureWindow")) source = find_wallpaper_image_view(win, 0, NO);
+        }
+        objc_setAssociatedObject(root, &switcher_wallpaper_source_key, source, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
+    id image = source ? ((id (*)(id, SEL))objc_msgSend)(source, sel_registerName("image")) : nil;
     if (!image) return;
     CGRect b = ((CGRect (*)(id, SEL))objc_msgSend)(root, sel_registerName("bounds"));
     if (b.size.width <= 0 || b.size.height <= 0) return;
@@ -1540,7 +1561,9 @@ static void ui_trace_view(id v,unsigned depth)
  const char *name=object_getClassName(v);
  if(strstr(name,"Search") || strstr(name,"Backdrop") || strstr(name,"Material") ||
     strstr(name,"Icon") || strstr(name,"StatusBar") || strstr(name,"Wallpaper") ||
-    strstr(name,"Switcher") || strstr(name,"Animation") || strstr(name,"Window")) {
+    strstr(name,"Switcher") || strstr(name,"Animation") || strstr(name,"Window") ||
+    strstr(name,"Folder") || strstr(name,"HomeScreen") || strstr(name,"Scroll") ||
+    strstr(name,"PageControl") || !strcmp(name,"UIView") || strstr(name,"TransitionView")) {
   CGRect f=((CGRect(*)(id,SEL))objc_msgSend)(v,sel_registerName("frame"));
   id l=((id(*)(id,SEL))objc_msgSend)(v,sel_registerName("layer"));
   id presentation=l?((id(*)(id,SEL))objc_msgSend)(l,sel_registerName("presentationLayer")):nil;
@@ -1548,7 +1571,7 @@ static void ui_trace_view(id v,unsigned depth)
   unsigned long animations=keys?((unsigned long(*)(id,SEL))objc_msgSend)(keys,sel_registerName("count")):0;
   CGRect pf=presentation?((CGRect(*)(id,SEL))objc_msgSend)(presentation,sel_registerName("frame")):CGRectZero;
   CGColorRef background=l?((CGColorRef(*)(id,SEL))objc_msgSend)(l,sel_registerName("backgroundColor")):NULL;
-  ui_trace_line("depth=%u class=%s address=%p frame=%.1f,%.1f,%.1f,%.1f hidden=%d alpha=%.3f layer_opacity=%.3f presentation_opacity=%.3f animations=%lu presentation_frame=%.1f,%.1f,%.1f,%.1f corner_radius=%.3f background_alpha=%.3f opaque=%d contents=%d\n",
+  ui_trace_line("depth=%u class=%s address=%p frame=%.1f,%.1f,%.1f,%.1f hidden=%d alpha=%.3f layer_opacity=%.3f presentation_opacity=%.3f animations=%lu presentation_frame=%.1f,%.1f,%.1f,%.1f corner_radius=%.3f background_alpha=%.3f opaque=%d contents=%d masks_to_bounds=%d\n",
    depth,name,v,f.origin.x,f.origin.y,f.size.width,f.size.height,
    ((BOOL(*)(id,SEL))objc_msgSend)(v,sel_registerName("isHidden")),
    ((CGFloat(*)(id,SEL))objc_msgSend)(v,sel_registerName("alpha")),
@@ -1558,7 +1581,8 @@ static void ui_trace_view(id v,unsigned depth)
    l?((CGFloat(*)(id,SEL))objc_msgSend)(l,sel_registerName("cornerRadius")):0,
    background?CGColorGetAlpha(background):0,
    ((BOOL(*)(id,SEL))objc_msgSend)(v,sel_registerName("isOpaque")),
-   l&&((id(*)(id,SEL))objc_msgSend)(l,sel_registerName("contents"))!=nil);
+   l&&((id(*)(id,SEL))objc_msgSend)(l,sel_registerName("contents"))!=nil,
+   l?((BOOL(*)(id,SEL))objc_msgSend)(l,sel_registerName("masksToBounds")):NO);
  }
  id children=((id(*)(id,SEL))objc_msgSend)(v,sel_registerName("subviews"));
  unsigned long n=children?((unsigned long(*)(id,SEL))objc_msgSend)(children,sel_registerName("count")):0;
