@@ -5,6 +5,22 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0340 audio enabled; discovery four passes after initial timeout (2026-11-18)
+
+USERfreshhome/navigation/keyboard/WiFiPASS. WiFiSSH192.168.1.232working.
+InstalledlaunchdSHAexact/removedcapturesourceconfirmedbootstrap1102/advertised0.
+FIRSTboundeddiscoveryafterbootstilltimedout5sec(exit124). Subsequentfreshown
+traceprobe returneddevices0/761ms; THREEoriginalprobesPASS633/694/609ms. No
+recordingrequested. ThisissupportivebutinitialtimeoutUNRESOLVED; nofullfixclaim.
+NoUIrestarton0340. Evidenceperformance/batch340/discovery-after*/repeat*.
+Preflighthelper/candidate/originalSHAandfreshownershipPASS; oldstartupclockmarker
+notretainedinWiFi-heavykmsg. Producer_eventstatusconfirmskernelchange.
+Once-onlymutedaudiopreparePASS; --ios-enableONCEenabled1/worker1/error0/blocked0,
+queue262144. ServiceLEFTON; don'trepeatsetup/disablehealthyservice.
+PendingUSERnormalVoiceMemoscountingreplayTHENhome/Settingssearchkeyboardtest.
+Needreadonlypostappmic/queue/timestamp/cleanupandquerysnapshotwithNEWnames.
+Same0340boot, noprematurecamera/FPSclaim. FullstateinlocalCURRENT_TASK.md.
+
 ## Active handoff:0340 temporary boot accepted; home check pending (2026-11-18)
 
 UserconfirmedFASTBOOT; imageSHA/productriver/serialZY226HM8QBverified.
