@@ -68,7 +68,8 @@ for path in changed:
     # files still refer to an older absolute source directory.
     if Path(path).suffix not in ('.c','.cpp'):
         continue
-    objects=list((build/'build/xnu.obj').rglob(Path(path).stem+'.o'))
+    extension='.cpo' if Path(path).suffix=='.cpp' else '.o'
+    objects=list((build/'build/xnu.obj').rglob(Path(path).stem+extension))
     for obj in objects:
         obj.unlink()
 for name in ('clang','clang++'):
