@@ -5,6 +5,22 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0345 temporary boot accepted; fresh UI check pending (2026-11-19)
+
+USER confirms0344iconsSTILLappearLATE; noanimationimprovementclaim. ThenUSER
+readyfastboot; exact0345candidate/full344rollbackSHA/productriver/serial
+ZY226HM8QB verified. Temporaryfastbootbootexit0/send0.621s/boot0.216s; NOflash.
+0345SHA5abd9cfbfe7aef83b9ea68dbd14e7a4eebc2b8b09f1caa66e62a42532f5e9415.
+Awaitasyncfreshhome/WiFi/nav/keyboard+settledhomeSearchcapsule/Spotlight/folder
+appearancecheck. No345audioinit/control orgeometrytrace sent. Prepared local
+batch345/preflight.py+prepare-audio.py NOTRUN; useonlyafterhealthyhomeconfirmed,
+once-mutedprereqs+ios-enableONCE andleavehealthyserviceON. New345evidence names.
+Currentphone345, not344. Samevalidatedkernel0342/audio/renderer/camera, newUI
+clip/cache393058d. NohotUIreplace/restart. Thencombinedplaybackcheck andcued
+expandedancestorgeometrytrace forstillunresolvedlateicons. Composition344already
+singlecanvas139attempts; don'trepeatthattraceunnecessarily. Fullhandoffbelow.
+Evidencebatch345/temporary-boot-0345.json.
+
 ## Active handoff:0345 image VERIFIED; prepare combined UI/performance boot (2026-11-19)
 
 Candidate performance/batch345/artifacts/river-ui-performance-0345.img
