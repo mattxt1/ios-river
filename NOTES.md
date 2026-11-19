@@ -5,6 +5,20 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0343 temporary boot accepted; folder/Search check pending (2026-11-19)
+
+USERreadyfastboot; verifiedcandidate/pairedUIrollback/full341kernelUIrollback
+hashes/productriver/serialZY226HM8QB. fastbootbootexit0/send0.620s/boot0.216s;
+NOflash.343imageSHAeabaf5a8a1624fd129b30d1024729f50585263321e4a25dd3000638bee84b5b5.
+SamevalidatedaudiokernelPATCH341, UI343SHA199b0517b4d5d0952821d2d8dbb707ccb5f2149ff156b4382b5853d3722573e3.
+Awaitasyncfreshhome/nav/keyboard/WiFi/foldersbackgrounds+Spotlightfieldcheck.
+No343audioinit/controlsent. USB7.2workedlastboot; WiFi1.232timedout. Prepared
+localbatch343/preflight.py+prepare-audio.pyNOTRUN; new343evidencenames. Onlyafter
+responsivehome: readonlyfreshchecks, mutedsetupONCE+ios-enableONCE; preserve
+serviceON.343fixesfolderfallbackregressionCANDIDATE, notprovenruntimeyet.
+342SPIlatency/clearVoiceMemos/navuserPASS, trace16roundcollectedbutappclosing
+causeunproven. Blackstatusbarstripunresolved. LocalCURRENT_TASKfullhandoff.
+
 ## Active handoff:0342 audio noticeably improved PASS; folder repair ready to package (2026-11-18)
 
 USER: noticeablylessdelay, clearaudio+navworks. Backendlatestcodec619929us,
