@@ -5,6 +5,31 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0344 settled Search square confirmed; audio ON; cued composition pending (2026-11-19)
+
+USER confirms nav+keyboard work/homevisible. Home Search pill SQUARE when settled,
+round duringanimation; insideSpotlightfieldRIGHT. Screenshotbatch344/home-settled.png
+confirms rectangle78x30pt. UI343unchanged on344, not yetattributedtokerneleffect.
+Read-onlyfreshownership/helper/UI/rendererhashchecksPASS; fixedclock retained.
+Pagecache runtime13529hits/2builds, sampledGPUdrop0/CPUcopy0; NOTFPSgainproof.
+InitialrootcompositionREADcompatibleversionPASS/total0 (traceOFF). No startyet.
+
+Boundedsettledgeometry64rounds2138038B fullycollected:
+batch344/river-ui-geometry-26-804151095481.txt. Bothpagecontrolmaterialandbackdrop
+pillmaterial78x30/corner15/opaque1, pillhostradius0. A radiusvaluealonehasnot
+establishedclippingstate/cause. Don'trestoreoldbitmapoverlay/doublecornerregression
+orapplywidevisibilitychanges. NoUIlibchanges/hotrestarton344.
+
+MutedprereqsONCE+ios-enableONCE344PASS; enabled1worker1blocked0error0, idlequeue
+262144. LEAVE normalserviceON; don'trepeat. device/ios-enabled.json recordsit.
+AwaitUSERcombinedasync playback-existingmemo/keyboardclear+quicker/navcheck AND
+Alreadyopeningclosing20sec. OnAlreadyreply IMMEDIATELY run
+batch344/capture-composition.py (preparedNOTRUN), native--start,12sec,--stop,
+--read; defaultOFF ring256/30sec/1200maxattempts. Uniqueevidence/O_EXCL guard.
+Thiscuedmetadata trace is the mainpendingtest; no screenshotloop orUIgeometry
+trace neededwhileuseranimates. Thenreadnewaudio/counterstatuswithuniquefilenames.
+No344performance/closingfixclaim; Spotlightblackstatusbarstripstillpending.
+
 ## Active handoff:0344 temporary boot accepted; fresh home check pending (2026-11-19)
 
 USERreadyfastboot. Exact0344candidate+full343rollbackSHA/productriver/serial
