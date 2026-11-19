@@ -1,0 +1,87 @@
+diff --git a/bsd/dev/river_codec_clock.h b/bsd/dev/river_codec_clock.h
+--- a/bsd/dev/river_codec_clock.h
++++ b/bsd/dev/river_codec_clock.h
+@@ -66,25 +66,25 @@
+ ri_clock_read(uint16_t reg)
+ {
+  if (!ri_clock_read_allowed(reg)) return 0xffff;
+- ri_wr(ri_codec_pin[1], 4, 0); delay(5);
++ ri_wr(ri_codec_pin[1], 4, 0); ri_codec_spi_delay();
+  (void)ri_codec_byte(0x80); (void)ri_codec_byte(0);
+  (void)ri_codec_byte((uint8_t)(reg >> 8)); (void)ri_codec_byte((uint8_t)reg);
+  (void)ri_codec_byte(0); (void)ri_codec_byte(0);
+  uint16_t value = (uint16_t)ri_codec_byte(0) << 8;
+  value |= ri_codec_byte(0);
+- ri_wr(ri_codec_pin[1], 4, 2); delay(5);
++ ri_wr(ri_codec_pin[1], 4, 2); ri_codec_spi_delay();
+  return value;
+ }
+ static bool
+ ri_clock_write(uint16_t reg, uint16_t value)
+ {
+  if (!ri_clock_write_allowed(reg)) return false;
+- ri_wr(ri_codec_pin[1], 4, 0); delay(5);
++ ri_wr(ri_codec_pin[1], 4, 0); ri_codec_spi_delay();
+  (void)ri_codec_byte(0); (void)ri_codec_byte(0);
+  (void)ri_codec_byte((uint8_t)(reg >> 8)); (void)ri_codec_byte((uint8_t)reg);
+  (void)ri_codec_byte(0); (void)ri_codec_byte(0);
+  (void)ri_codec_byte((uint8_t)(value >> 8)); (void)ri_codec_byte((uint8_t)value);
+- ri_wr(ri_codec_pin[1], 4, 2); delay(5);
++ ri_wr(ri_codec_pin[1], 4, 2); ri_codec_spi_delay();
+  /* CTRL_UPD is a command bit, excluded from immediate N validation.
+   * The caller explicitly rearms and clears it around each update strobe. */
+  /* GPn_LVL and mixer x_STSn are live status, not configuration.
+diff --git a/bsd/dev/river_codec_probe.h b/bsd/dev/river_codec_probe.h
+--- a/bsd/dev/river_codec_probe.h
++++ b/bsd/dev/river_codec_probe.h
+@@ -11,15 +11,30 @@
+ static int ri_codec_attempted;
+ static char ri_codec_note[256] = "not requested";
+ 
++/* SPI edges need a minimum dwell, not a scheduler sleep. On this port
++ * delay(5) may assert_wait/thread_block when cpu_idle_latency is unknown.
++ * Keep the proven five microsecond wire timing; do not change global delay,
++ * PLL settling, power sequencing, interrupt masks or amplifier health leases. */
++static void
++ri_codec_spi_delay(void)
++{
++ uint64_t interval;
++ clock_interval_to_absolutetime_interval(5,NSEC_PER_USEC,&interval);
++ uint64_t deadline=mach_absolute_time()+interval;
++ while(mach_absolute_time()<deadline) {
++  __asm__ volatile("" ::: "memory");
++ }
++}
++
+ static uint8_t
+ ri_codec_byte(uint8_t tx)
+ {
+  uint8_t rx = 0;
+  for (unsigned bit = 0; bit < 8; bit++) {
+   ri_wr(ri_codec_pin[2], 4, (tx & 0x80) ? 2 : 0);
+-  delay(5);
++  ri_codec_spi_delay();
+   ri_wr(ri_codec_pin[0], 4, 2);
+-  delay(5);
++  ri_codec_spi_delay();
+   rx = (uint8_t)((rx << 1) | (ri_rd(ri_codec_pin[3], 4) & 1));
+   ri_wr(ri_codec_pin[0], 4, 0);
+   tx <<= 1;
+@@ -33,7 +48,7 @@
+  /* Only identity and revision reads are permitted by this probe. */
+  if (reg > 1) return 0xffff;
+  ri_wr(ri_codec_pin[1], 4, 0);
+- delay(5);
++ ri_codec_spi_delay();
+  (void)ri_codec_byte(0x80);
+  (void)ri_codec_byte(0);
+  (void)ri_codec_byte(0);
+@@ -43,7 +58,7 @@
+  uint16_t value = (uint16_t)ri_codec_byte(0) << 8;
+  value |= ri_codec_byte(0);
+  ri_wr(ri_codec_pin[1], 4, 2);
+- delay(5);
++ ri_codec_spi_delay();
+  return value;
+ }
+ 

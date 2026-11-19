@@ -441,138 +441,30 @@ static void hide_search_page_material(id pill)
 static void (*original_search_pill_layout)(id, SEL);
 static void probe_search_pill_layout(id self, SEL cmd)
 {
-	original_search_pill_layout(self, cmd);
-	if (strcmp(object_getClassName(self), "SBHSearchPillView") != 0) return;
-	id layer = ((id (*)(id, SEL))objc_msgSend)(self, sel_registerName("layer"));
-	if (((CGColorRef (*)(id, SEL))objc_msgSend)(layer, sel_registerName("backgroundColor")))
-		((void (*)(id, SEL, CGColorRef))objc_msgSend)(layer, sel_registerName("setBackgroundColor:"), NULL);
-	((void (*)(id, SEL, BOOL))objc_msgSend)(self, sel_registerName("setOpaque:"), NO);
-	((void (*)(id, SEL, BOOL))objc_msgSend)(layer, sel_registerName("setOpaque:"), NO);
-	Ivar bgiv = class_getInstanceVariable(object_getClass(self), "_backgroundView");
-	id bg = bgiv ? object_getIvar(self, bgiv) : nil;
-	if (bg) ((void (*)(id, SEL, BOOL))objc_msgSend)(bg, sel_registerName("setHidden:"), YES);
-	hide_material_children(self);
-	hide_search_page_material(self);
-	CGRect b = ((CGRect (*)(id, SEL))objc_msgSend)(self, sel_registerName("bounds"));
-	style_plate(self, b.size.height / 2, 0.25);
+ /* The native pill participates in the Search-bar morph. A second bitmap
+  * plate kept its old radius and overlapped the native material. */
+ if(original_search_pill_layout)original_search_pill_layout(self,cmd);
 }
 
 static void (*original_folder_bg_layout)(id, SEL);
 static void probe_folder_bg_layout(id self, SEL cmd)
 {
-	if (original_folder_bg_layout) original_folder_bg_layout(self, cmd);
-	if (!strstr(object_getClassName(self), "FolderBackgroundView")) return;
-	CGRect b = ((CGRect (*)(id, SEL))objc_msgSend)(self, sel_registerName("bounds"));
-	if (b.size.width < 10.0f || b.size.height < 10.0f) return;
-
-	id layer = ((id (*)(id, SEL))objc_msgSend)(self, sel_registerName("layer"));
-	if (layer) {
-		((void (*)(id, SEL, id))objc_msgSend)(layer, sel_registerName("setFilters:"), nil);
-		CGFloat radius = (b.size.width < 120.0f) ? 14.0f : 30.0f;
-		((void (*)(id, SEL, CGFloat))objc_msgSend)(layer, sel_registerName("setCornerRadius:"), radius);
-		((void (*)(id, SEL, BOOL))objc_msgSend)(layer, sel_registerName("setMasksToBounds:"), YES);
-
-		CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
-		CGFloat alpha = (b.size.width < 120.0f) ? 0.32f : 0.38f;
-		CGFloat comps[4] = {1.0f, 1.0f, 1.0f, alpha};
-		CGColorRef col = CGColorCreate(cs, comps);
-		((void (*)(id, SEL, CGColorRef))objc_msgSend)(layer, sel_registerName("setBackgroundColor:"), col);
-		CGColorRelease(col);
-		CGColorSpaceRelease(cs);
-	}
-
-	Ivar tv_iv = class_getInstanceVariable(object_getClass(self), "_tintView");
-	id tv = tv_iv ? object_getIvar(self, tv_iv) : nil;
-	if (tv) {
-		((void (*)(id, SEL, BOOL))objc_msgSend)(tv, sel_registerName("setHidden:"), YES);
-		((void (*)(id, SEL, CGFloat))objc_msgSend)(tv, sel_registerName("setAlpha:"), 0.0f);
-	}
-
-	Ivar bv_iv = class_getInstanceVariable(object_getClass(self), "_blurView");
-	id bv = bv_iv ? object_getIvar(self, bv_iv) : nil;
-	if (bv) {
-		id bl = ((id (*)(id, SEL))objc_msgSend)(bv, sel_registerName("layer"));
-		if (bl) {
-			((void (*)(id, SEL, id))objc_msgSend)(bl, sel_registerName("setFilters:"), nil);
-		}
-		((void (*)(id, SEL, BOOL))objc_msgSend)(bv, sel_registerName("setHidden:"), YES);
-		((void (*)(id, SEL, CGFloat))objc_msgSend)(bv, sel_registerName("setAlpha:"), 0.0f);
-	}
-
-	((void (*)(id, SEL, CGFloat))objc_msgSend)(self, sel_registerName("setAlpha:"), 1.0f);
-	((void (*)(id, SEL, BOOL))objc_msgSend)(self, sel_registerName("setHidden:"), NO);
+ /* Native material and animated corner geometry must have one owner. */
+ if(original_folder_bg_layout) original_folder_bg_layout(self,cmd);
 }
 
 static void (*original_floaty_folder_layout)(id, SEL);
 static void probe_floaty_folder_layout(id self, SEL cmd)
 {
-	if (original_floaty_folder_layout) original_floaty_folder_layout(self, cmd);
-	if (!strstr(object_getClassName(self), "FloatyFolderView")) return;
-
-	Ivar pbv_iv = class_getInstanceVariable(object_getClass(self), "_pageBackgroundViews");
-	id pbv = pbv_iv ? object_getIvar(self, pbv_iv) : nil;
-	if (pbv) {
-		unsigned long count = ((unsigned long (*)(id, SEL))objc_msgSend)(pbv, sel_registerName("count"));
-		for (unsigned long i = 0; i < count; i++) {
-			id bgv = ((id (*)(id, SEL, unsigned long))objc_msgSend)(pbv, sel_registerName("objectAtIndex:"), i);
-			if (bgv) {
-				((void (*)(id, SEL, CGFloat))objc_msgSend)(bgv, sel_registerName("setAlpha:"), 1.0f);
-				((void (*)(id, SEL, BOOL))objc_msgSend)(bgv, sel_registerName("setHidden:"), NO);
-				id bgl = ((id (*)(id, SEL))objc_msgSend)(bgv, sel_registerName("layer"));
-				if (bgl) {
-					((void (*)(id, SEL, id))objc_msgSend)(bgl, sel_registerName("setFilters:"), nil);
-					((void (*)(id, SEL, BOOL))objc_msgSend)(bgl, sel_registerName("setShouldRasterize:"), NO);
-					CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
-					CGFloat comps[4] = {1.0f, 1.0f, 1.0f, 0.40f};
-					CGColorRef col = CGColorCreate(cs, comps);
-					((void (*)(id, SEL, CGColorRef))objc_msgSend)(bgl, sel_registerName("setBackgroundColor:"), col);
-					((void (*)(id, SEL, CGFloat))objc_msgSend)(bgl, sel_registerName("setCornerRadius:"), 30.0f);
-					((void (*)(id, SEL, BOOL))objc_msgSend)(bgl, sel_registerName("setMasksToBounds:"), YES);
-					CGColorRelease(col);
-					CGColorSpaceRelease(cs);
-				}
-			}
-		}
-	}
-
-	id subviews = ((id (*)(id, SEL))objc_msgSend)(self, sel_registerName("subviews"));
-	unsigned long count = subviews ? ((unsigned long (*)(id, SEL))objc_msgSend)(subviews, sel_registerName("count")) : 0;
-	for (unsigned long i = 0; i < count; i++) {
-		id sv = ((id (*)(id, SEL, unsigned long))objc_msgSend)(subviews, sel_registerName("objectAtIndex:"), i);
-		CGRect f = ((CGRect (*)(id, SEL))objc_msgSend)(sv, sel_registerName("frame"));
-		const char *cname = object_getClassName(sv);
-		if (strstr(cname, "Background") || strstr(cname, "Clip") || (f.size.width > 200 && f.size.height > 200)) {
-			id l = ((id (*)(id, SEL))objc_msgSend)(sv, sel_registerName("layer"));
-			if (l) {
-				((void (*)(id, SEL, id))objc_msgSend)(l, sel_registerName("setFilters:"), nil);
-				((void (*)(id, SEL, BOOL))objc_msgSend)(l, sel_registerName("setShouldRasterize:"), NO);
-				CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
-				CGFloat comps[4] = {1.0f, 1.0f, 1.0f, 0.40f};
-				CGColorRef col = CGColorCreate(cs, comps);
-				((void (*)(id, SEL, CGColorRef))objc_msgSend)(l, sel_registerName("setBackgroundColor:"), col);
-				((void (*)(id, SEL, CGFloat))objc_msgSend)(l, sel_registerName("setCornerRadius:"), 30.0f);
-				((void (*)(id, SEL, BOOL))objc_msgSend)(l, sel_registerName("setMasksToBounds:"), YES);
-				CGColorRelease(col);
-				CGColorSpaceRelease(cs);
-			}
-		}
-	}
+ /* Native material and animated corner geometry must have one owner. */
+ if(original_floaty_folder_layout) original_floaty_folder_layout(self,cmd);
 }
 
 static void (*original_folder_icon_img_layout)(id, SEL);
 static void probe_folder_icon_img_layout(id self, SEL cmd)
 {
-	if (original_folder_icon_img_layout) original_folder_icon_img_layout(self, cmd);
-	if (strcmp(object_getClassName(self), "SBFolderIconImageView") != 0) return;
-	/* Preserve the native preview grid; replace only the material/solid plate. */
-	const char *names[] = {"_backgroundView", "_solidColorBackgroundView"};
-	for (unsigned i = 0; i < 2; i++) {
-		Ivar iv = class_getInstanceVariable(object_getClass(self), names[i]);
-		id bg = iv ? object_getIvar(self, iv) : nil;
-		if (bg && !((BOOL (*)(id, SEL))objc_msgSend)(bg, sel_registerName("isHidden")))
-			((void (*)(id, SEL, BOOL))objc_msgSend)(bg, sel_registerName("setHidden:"), YES);
-	}
-	style_plate(self, 14, 0.35);
+ /* Native material and animated corner geometry must have one owner. */
+ if(original_folder_icon_img_layout) original_folder_icon_img_layout(self,cmd);
 }
 
 static void (*original_search_backdrop_layout)(id, SEL);
@@ -1177,7 +1069,8 @@ static void clear_blackout_in_view_mode(id view, BOOL switcher)
 {
 	if (!view) return;
 	const char *cname = object_getClassName(view);
-	if (strstr(cname, "SearchBackdropView") || strstr(cname, "SBHLibrarySearchController") ||
+	if (strstr(cname, "Folder") || strstr(cname, "SearchBackdropView") || strcmp(cname, "SBHSearchPillView") == 0 ||
+	    strcmp(cname, "SBHSearchBar") == 0 || strstr(cname, "SBHLibrarySearchController") ||
 	    strcmp(cname, "SBHomeScreenBackdropView") == 0 || strcmp(cname, "SBFFeatherBlurView") == 0 ||
 	    strcmp(cname, "SBHFeatherBlurView") == 0) return;
 	if (switcher && strcmp(cname, "SBWallpaperEffectView") == 0 &&
@@ -1597,6 +1490,65 @@ static void fix_all_blackouts(void)
 	}
 }
 
+/* One-shot geometry-only transition trace. Never read labels, text, image
+ * contents or application documents; disabled unless the host creates the flag. */
+static int ui_trace_fd = -1;
+static unsigned ui_trace_round;
+static char ui_trace_buffer[65536];
+static size_t ui_trace_used;
+static unsigned ui_trace_nodes;
+static void ui_trace_line(const char *fmt, ...)
+{
+ if(ui_trace_used >= sizeof(ui_trace_buffer)-1)return;
+ va_list ap;va_start(ap,fmt);
+ int n=vsnprintf(ui_trace_buffer+ui_trace_used,sizeof(ui_trace_buffer)-ui_trace_used,fmt,ap);
+ va_end(ap);if(n>0)ui_trace_used+=(size_t)n<sizeof(ui_trace_buffer)-ui_trace_used?(size_t)n:sizeof(ui_trace_buffer)-ui_trace_used-1;
+}
+static void ui_trace_view(id v,unsigned depth)
+{
+ if(!v || depth>24 || ui_trace_nodes++>=512)return;
+ const char *name=object_getClassName(v);
+ if(strstr(name,"Search") || strstr(name,"Backdrop") || strstr(name,"Material") ||
+    strstr(name,"Icon") || strstr(name,"StatusBar") || strstr(name,"Wallpaper") ||
+    strstr(name,"Switcher") || strstr(name,"Animation") || strstr(name,"Window")) {
+  CGRect f=((CGRect(*)(id,SEL))objc_msgSend)(v,sel_registerName("frame"));
+  id l=((id(*)(id,SEL))objc_msgSend)(v,sel_registerName("layer"));
+  id presentation=l?((id(*)(id,SEL))objc_msgSend)(l,sel_registerName("presentationLayer")):nil;
+  id keys=l?((id(*)(id,SEL))objc_msgSend)(l,sel_registerName("animationKeys")):nil;
+  unsigned long animations=keys?((unsigned long(*)(id,SEL))objc_msgSend)(keys,sel_registerName("count")):0;
+  ui_trace_line("depth=%u class=%s address=%p frame=%.1f,%.1f,%.1f,%.1f hidden=%d alpha=%.3f layer_opacity=%.3f presentation_opacity=%.3f animations=%lu\n",
+   depth,name,v,f.origin.x,f.origin.y,f.size.width,f.size.height,
+   ((BOOL(*)(id,SEL))objc_msgSend)(v,sel_registerName("isHidden")),
+   ((CGFloat(*)(id,SEL))objc_msgSend)(v,sel_registerName("alpha")),
+   l?((float(*)(id,SEL))objc_msgSend)(l,sel_registerName("opacity")):0,
+   presentation?((float(*)(id,SEL))objc_msgSend)(presentation,sel_registerName("opacity")):-1,animations);
+ }
+ id children=((id(*)(id,SEL))objc_msgSend)(v,sel_registerName("subviews"));
+ unsigned long n=children?((unsigned long(*)(id,SEL))objc_msgSend)(children,sel_registerName("count")):0;
+ for(unsigned long i=0;i<n && ui_trace_nodes<512;i++)ui_trace_view(((id(*)(id,SEL,unsigned long))objc_msgSend)(children,sel_registerName("objectAtIndex:"),i),depth+1);
+}
+static void ui_trace_snapshot(void)
+{
+ if(ui_trace_fd<0)return;
+ ui_trace_used=0;ui_trace_nodes=0;
+ ui_trace_line("round=%u wall_time=%.6f\n",ui_trace_round,CFAbsoluteTimeGetCurrent());
+ id windows=((id(*)(id,SEL,BOOL,BOOL))objc_msgSend)((id)objc_getClass("UIWindow"),sel_registerName("allWindowsIncludingInternalWindows:onlyVisibleWindows:"),YES,YES);
+ unsigned long n=windows?((unsigned long(*)(id,SEL))objc_msgSend)(windows,sel_registerName("count")):0;
+ for(unsigned long i=0;i<n && ui_trace_nodes<512;i++)ui_trace_view(((id(*)(id,SEL,unsigned long))objc_msgSend)(windows,sel_registerName("objectAtIndex:"),i),0);
+ size_t sent=0;
+ while(sent<ui_trace_used){ssize_t k=write(ui_trace_fd,ui_trace_buffer+sent,ui_trace_used-sent);if(k<=0)break;sent+=(size_t)k;}
+ if(sent==ui_trace_used && ++ui_trace_round<16) {
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW,100*NSEC_PER_MSEC),dispatch_get_main_queue(),^{ui_trace_snapshot();});
+ } else {close(ui_trace_fd);ui_trace_fd=-1;}
+}
+static void ui_trace_request(void)
+{
+ if(ui_trace_fd>=0)return;
+ char path[160];snprintf(path,sizeof(path),"/private/var/tmp/river-ui-geometry-%d-%.0f.txt",getpid(),CFAbsoluteTimeGetCurrent()*1000);
+ int fd=open(path,O_WRONLY|O_CREAT|O_EXCL,0600);if(fd<0)return;
+ ui_trace_fd=fd;ui_trace_round=0;ui_trace_snapshot();
+}
+
 __attribute__((constructor)) static void
 probe_loaded(void)
 {
@@ -1615,6 +1567,10 @@ probe_loaded(void)
 	dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
 		while (1) {
 			sleep(2);
+			if (access("/tmp/river_ui_trace", F_OK) == 0) {
+				unlink("/tmp/river_ui_trace");
+				dispatch_async(dispatch_get_main_queue(), ^{ui_trace_request();});
+			}
 			if (access("/tmp/style_dump", F_OK) == 0) {
 				unlink("/tmp/style_dump");
 				dispatch_async(dispatch_get_main_queue(), ^{ style_diagnostic(); });

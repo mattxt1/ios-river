@@ -5,6 +5,49 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## Active handoff:0341 blur PASS/latency remains; next SPI+shape batch preparing (2026-11-18)
+
+USER0341responsive/navigation/keyboardwork, SpotlightblurWORKS. Appclosinganimation
+UNCHANGED; Spotlightblackstatusbarstrip+overlappingsearch-fieldcornergeometries;
+folderanimationalsotwocornerradii. USERsoundstilldelayed/navworks. Realdisplay
+captureSUCCEEDEDusingexplicitCA surfaces2/4 (notguess/default), confirms132pxblack
+statusbarregion+twofieldshapes. Captureslocalbatch342/spotlight-surface{2,4}.png.
+Ownreadonlyimage-list: SpotlightPID452doesNOTloadcgprobe. StaticSpotlightfield/
+blackstripnotproventoSpringBoardshim; don'tclaimhomepillfixalonefixesthem.
+
+NormalsetupcompletedONCE+ios-enableONCE341; leavehealthyserviceON.6playback
+sessions2,497,536accepted=completed, mic1session381952deliveredframes/0timestamp
+gaps/fullclock/pin/routecleanup. Userreportsdelaynotaudioqualityfailure; no
+extraqualityloops. Backendstagesmeasuredowner34us/route2966us/codec1170394us/
+output1353394us/firstDMA1353626us; earlierworstcodec4906468us/output5225525us.
+Thisisbackendstartup, NOTacousticlatency. Buf1024changeinsufficient.
+
+Codelead: codecSPIbitbangingusesdelay(5) everyedge; XNUml_delay_should_spinreturns
+FALSEwhenCPUidlelatencyunknown, anddelaythenassert_wait/thread_block. Thiscan
+stretchthousandsofedges. NewkernelPATCH0341 replacesONLYcodecSPI5usdwellswith
+localabsolutetimebusywait (same5usminimum, interrupts/preemptionleftenabled),
+NOTglobaldelayorclocksettling/amplifierlease. Actualmode0edge/identity/invalid
+register/jittertestsPASS; normalcoordinator/race/queue/volume/rearmregressionsPASS.
+PrimarytimingreferenceCirrusDS1085F2p22 https://statics.cirrus.com/pubs/proDatasheet/CS47L35_F2.pdf
+(minSPIhigh/low15.3ns; retained5usconservative). Devicebenefitunverified.
+
+NextUIcandidatephone-tools/cgprobe.c removesfixedbitmappillandfolderplates,
+restoresnativeanimatedfolderbackground/floaty/iconshape; preservesfolder/search
+subtreesfromgenericclearworkaround. Thisaddressesownoverlaymorphgeometry,
+NOTprovenstaticSpotlightfieldfix. Addsboundedone-shotGEOMETRY-ONLYtrace flag
+/tmp/river_ui_trace -> /private/var/tmp/river-ui-geometry-PID-TIME.txt (16rounds,
+100ms,512nodes/round,64KiBcap/round). No text/contents read. DefaultOFF; no
+layoutlogging; usermustbe cuedaroundclosinggesturewhenhosttriggersflag.
+ThisrunsSpringBoardonly, won'tseeinsideSpotlightremoteprocess. CompilePASS.
+NativeUIlibnotdeployed. Keepstatusbar/Spotlightfieldandappclosingrootcausepending;
+don'tfakefixwithbroadopaqueoverlay. Localbatch342/base/new/test-spi-edge.py.
+
+Nextcommit0341patchBEFOREnativebuildfromretained340tree, thenpackageimageREV342
+from341base(newkernel/newUIlib, rendererp0340/cameracfgretained). Verifiedprevious
+341CANDIDATEimageincludesUI341libraryandkernel340, soITrestoresbothasconcrete
+rollback(older338-340imagesdon'trestoreUIlib). AskfastbootONLYafterverifiedbuild.
+Don'trepeat341audioinitormutehealthyservice. ReadlocalCURRENT_TASKforpreviouspaths.
+
 ## Active handoff:0341 temporary boot accepted; fresh UI check pending (2026-11-18)
 
 Userconfirmedfastboot; exactcandidate+UIrollbackimagehashes/productriver/serial
