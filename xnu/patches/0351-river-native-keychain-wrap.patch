@@ -1,0 +1,225 @@
+diff --git a/iokit/Kernel/arm/RiverKeyWrap.h b/iokit/Kernel/arm/RiverKeyWrap.h
+new file mode 100644
+--- /dev/null
++++ b/iokit/Kernel/arm/RiverKeyWrap.h
+@@ -0,0 +1,89 @@
++/* River's 32-byte keychain item keys use RFC 3394 AES key wrap. */
++#ifndef RIVER_KEY_WRAP_H
++#define RIVER_KEY_WRAP_H
++
++enum { RIVER_AKS_SEED_BYTES = 32, RIVER_AKS_KEY_BYTES = 32, RIVER_AKS_WRAPPED_BYTES = 40 };
++
++/* Derive a distinct 128-bit KEK for each supported keychain protection class.
++ * A single block of AES-256 is a PRF over the fixed, distinct labels. */
++static bool
++river_aks_kek(const uint8_t seed[RIVER_AKS_SEED_BYTES], uint8_t keyclass, uint8_t kek[16])
++{
++	const uint8_t label[16] = {'R', 'i', 'v', 'e', 'r', 'A', 'K', 'S', 'v', '1', 0, 0, 0, 0, 0, keyclass};
++	aes_encrypt_ctx context;
++	bool ok = aes_encrypt_key256(seed, &context) == 0 && aes_encrypt(label, kek, &context) == 0;
++	memset_s(&context, sizeof(context), 0, sizeof(context));
++	return ok;
++}
++
++static bool
++river_aks_wrap(const uint8_t kek[16], const uint8_t input[RIVER_AKS_KEY_BYTES],
++    uint8_t output[RIVER_AKS_WRAPPED_BYTES])
++{
++	aes_encrypt_ctx context;
++	if (aes_encrypt_key128(kek, &context) != 0) {
++		memset_s(&context, sizeof(context), 0, sizeof(context));
++		return false;
++	}
++	uint8_t block[16];
++	memset(output, 0xa6, 8);
++	memcpy(output + 8, input, RIVER_AKS_KEY_BYTES);
++	bool ok = true;
++	for (unsigned round = 0; round < 6 && ok; ++round) {
++		for (unsigned index = 1; index <= 4; ++index) {
++			memcpy(block, output, 8);
++			memcpy(block + 8, output + 8 * index, 8);
++			ok = aes_encrypt(block, block, &context) == 0;
++			if (!ok) {
++				break;
++			}
++			block[7] ^= 4 * round + index;
++			memcpy(output, block, 8);
++			memcpy(output + 8 * index, block + 8, 8);
++		}
++	}
++	if (!ok) {
++		memset_s(output, RIVER_AKS_WRAPPED_BYTES, 0, RIVER_AKS_WRAPPED_BYTES);
++	}
++	memset_s(block, sizeof(block), 0, sizeof(block));
++	memset_s(&context, sizeof(context), 0, sizeof(context));
++	return ok;
++}
++
++static bool
++river_aks_unwrap(const uint8_t kek[16], const uint8_t input[RIVER_AKS_WRAPPED_BYTES],
++    uint8_t output[RIVER_AKS_KEY_BYTES])
++{
++	aes_decrypt_ctx context;
++	if (aes_decrypt_key128(kek, &context) != 0) {
++		memset_s(&context, sizeof(context), 0, sizeof(context));
++		return false;
++	}
++	uint8_t block[16], a[8];
++	const uint8_t iv[8] = {0xa6, 0xa6, 0xa6, 0xa6, 0xa6, 0xa6, 0xa6, 0xa6};
++	memcpy(a, input, 8);
++	memcpy(output, input + 8, RIVER_AKS_KEY_BYTES);
++	bool ok = true;
++	for (int round = 5; round >= 0 && ok; --round) {
++		for (unsigned index = 4; index > 0; --index) {
++			memcpy(block, a, 8);
++			block[7] ^= 4 * round + index;
++			memcpy(block + 8, output + 8 * (index - 1), 8);
++			ok = aes_decrypt(block, block, &context) == 0;
++			if (!ok) {
++				break;
++			}
++			memcpy(a, block, 8);
++			memcpy(output + 8 * (index - 1), block + 8, 8);
++		}
++	}
++	ok = ok && timingsafe_bcmp(a, iv, sizeof(iv)) == 0;
++	if (!ok) {
++		memset_s(output, RIVER_AKS_KEY_BYTES, 0, RIVER_AKS_KEY_BYTES);
++	}
++	memset_s(a, sizeof(a), 0, sizeof(a));
++	memset_s(block, sizeof(block), 0, sizeof(block));
++	memset_s(&context, sizeof(context), 0, sizeof(context));
++	return ok;
++}
++#endif
+diff --git a/iokit/Kernel/arm/SweetKeyStore.cpp b/iokit/Kernel/arm/SweetKeyStore.cpp
+--- a/iokit/Kernel/arm/SweetKeyStore.cpp
++++ b/iokit/Kernel/arm/SweetKeyStore.cpp
+@@ -24,6 +24,14 @@
+ #include <IOKit/IOMemoryDescriptor.h>
+ #include <libkern/c++/OSString.h>
+ #include <sys/proc.h>
++#if defined(RIVER)
++#include <libkern/crypto/aes.h>
++#include <sys/fcntl.h>
++#include <sys/kauth.h>
++#include <sys/stat.h>
++#include <sys/vnode.h>
++#include "RiverKeyWrap.h"
++#endif
+ 
+ /* libaks selectors (AppleKeyStore.framework, iOS 16.7). */
+ enum {
+@@ -170,6 +178,99 @@
+ 	       (uint32_t)args->structureOutputDescriptor->getLength() : args->structureOutputSize;
+ }
+ 
++#if defined(RIVER)
++static bool
++river_aks_is_securityd(vfs_context_t context)
++{
++	if (kauth_getuid() != 64) {
++		return false;
++	}
++	vnode_t executable = proc_getexecutablevnode(current_proc());
++	if (!executable) {
++		return false;
++	}
++	vnode_t expected = NULLVP;
++	const int error = vnode_lookup("/usr/libexec/securityd", VNODE_LOOKUP_NOFOLLOW, &expected, context);
++	const bool trusted = error == 0 && executable == expected;
++	if (expected) {
++		vnode_put(expected);
++	}
++	vnode_put(executable);
++	return trusted;
++}
++
++static bool
++river_aks_load_seed(vfs_context_t context, uint8_t seed[RIVER_AKS_SEED_BYTES])
++{
++	vnode_t vnode = NULLVP;
++	static const char path[] = "/private/var/keybags/river-wrap-v1";
++	if (vnode_open(path, FREAD | O_NOFOLLOW, 0, VNODE_LOOKUP_NOFOLLOW, &vnode, context) != 0) {
++		return false;
++	}
++	struct vnode_attr attributes;
++	VATTR_INIT(&attributes);
++	VATTR_WANTED(&attributes, va_uid);
++	VATTR_WANTED(&attributes, va_mode);
++	VATTR_WANTED(&attributes, va_nlink);
++	VATTR_WANTED(&attributes, va_data_size);
++	bool valid = vnode_isreg(vnode) && vnode_getattr(vnode, &attributes, context) == 0 &&
++	    VATTR_ALL_SUPPORTED(&attributes) && attributes.va_uid == 0 &&
++	    (attributes.va_mode & ALLPERMS) == 0400 && attributes.va_nlink == 1 &&
++	    attributes.va_data_size == RIVER_AKS_SEED_BYTES;
++	if (valid) {
++		int remaining = RIVER_AKS_SEED_BYTES;
++		const int error = vn_rdwr(UIO_READ, vnode, reinterpret_cast<caddr_t>(seed),
++		    RIVER_AKS_SEED_BYTES, 0, UIO_SYSSPACE, IO_NOAUTH, vfs_context_ucred(context),
++		    &remaining, vfs_context_proc(context));
++		valid = error == 0 && remaining == 0;
++	}
++	vnode_close(vnode, FREAD, context);
++	return valid;
++}
++
++static IOReturn
++river_aks_crypt(uint32_t selector, IOExternalMethodArguments *args)
++{
++	const bool wrap = selector == kAKSWrapKey;
++	const size_t input_size = wrap ? RIVER_AKS_KEY_BYTES : RIVER_AKS_WRAPPED_BYTES;
++	const size_t output_size = wrap ? RIVER_AKS_WRAPPED_BYTES : RIVER_AKS_KEY_BYTES;
++	if (args->scalarInputCount != 2 || !args->scalarInput ||
++	    args->scalarOutputCount != (wrap ? 1u : 0u) || (wrap && !args->scalarOutput) ||
++	    args->structureInputDescriptor || args->structureOutputDescriptor ||
++	    !args->structureInput || args->structureInputSize != input_size || !args->structureOutput) {
++		return kIOReturnBadArgument;
++	}
++	if (args->structureOutputSize < output_size) {
++		return kIOReturnNoSpace;
++	}
++	const uint64_t bag = args->scalarInput[0], keyclass = args->scalarInput[1];
++	/* Only the ordinary system bag on River's existing no-passcode platform. */
++	if (bag != SWEET_AKS_SYSTEM_HANDLE || keyclass < 6 || keyclass > 11) {
++		return kIOReturnUnsupported;
++	}
++	vfs_context_t context = vfs_context_kernel();
++	if (!river_aks_is_securityd(context)) {
++		return kIOReturnNotPrivileged;
++	}
++	uint8_t seed[RIVER_AKS_SEED_BYTES] = {};
++	uint8_t kek[16] = {};
++	uint8_t output[RIVER_AKS_WRAPPED_BYTES] = {};
++	IOReturn result = kIOReturnNotReady;
++	if (river_aks_load_seed(context, seed) && river_aks_kek(seed, keyclass, kek)) {
++		const uint8_t *input = static_cast<const uint8_t *>(args->structureInput);
++		const bool ok = wrap ? river_aks_wrap(kek, input, output) : river_aks_unwrap(kek, input, output);
++		result = ok ? sweet_aks_struct_out(args, output, output_size) : kIOReturnBadArgument;
++		if (result == kIOReturnSuccess && wrap) {
++			args->scalarOutput[0] = keyclass;
++		}
++	}
++	memset_s(seed, sizeof(seed), 0, sizeof(seed));
++	memset_s(kek, sizeof(kek), 0, sizeof(kek));
++	memset_s(output, sizeof(output), 0, sizeof(output));
++	return result;
++}
++#endif
++
+ IOReturn
+ AppleKeyStoreUserClient::externalMethod(uint32_t selector, IOExternalMethodArguments *args,
+     __unused IOExternalMethodDispatch *dispatch, __unused OSObject *target,
+@@ -184,6 +285,12 @@
+ 	uint64_t arg0 = in_scalars > 0 ? args->scalarInput[0] : 0;
+ 
+ 	switch (selector) {
++#if defined(RIVER)
++	case kAKSWrapKey:
++	case kAKSUnwrapKey:
++		ret = river_aks_crypt(selector, args);
++		break;
++#endif
+ 	case kAKSOpen:
+ 	case kAKSUnloadBag:
+ 	case kAKSSetSystem:
