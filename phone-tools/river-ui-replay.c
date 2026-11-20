@@ -180,8 +180,21 @@ static bool number(const char *text, double min, double max, double *result)
     return end != text && !*end && isfinite(*result) && *result >= min && *result <= max;
 }
 
+/* The kernel publishes this only after the fit staging buffer is ready. */
+static int viewport(void)
+{
+    io_service_t display = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleCLCD"));
+    if (!display) return 1;
+    CFTypeRef value = IORegistryEntryCreateCFProperty(display, CFSTR("RiverDisplayFit"), NULL, 0);
+    IOObjectRelease(display);
+    puts(value == kCFBooleanTrue ? "fit" : "crop");
+    if (value) CFRelease(value);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
+    if (argc == 2 && !strcmp(argv[1], "viewport")) return viewport();
     double value[5];
     if (argc == 3 && !strcmp(argv[1], "stackshot") &&
         number(argv[2], 1, INT32_MAX, &value[0]) && trunc(value[0]) == value[0])
@@ -196,6 +209,6 @@ int main(int argc, char **argv)
         if (number(argv[6], 32, 1200, &value[4]))
             return gesture(value[0], value[1], value[2], value[3], (unsigned)value[4], argc == 8);
     }
-    fprintf(stderr, "usage: river-ui-replay screen SURFACE_ID | stackshot PID | gesture X Y X2 Y2 MS [edge]\n");
+    fprintf(stderr, "usage: river-ui-replay viewport | screen SURFACE_ID | stackshot PID | gesture X Y X2 Y2 MS [edge]\n");
     return 2;
 }

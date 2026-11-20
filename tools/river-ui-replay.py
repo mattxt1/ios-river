@@ -99,6 +99,10 @@ class River:
         installed = self.read("helper-sha", [BIN + "river-file-sha339", self.helper])
         if installed.split() != [digest.encode(), str(len(data)).encode()]:
             raise RuntimeError("deployed helper does not match the local binary")
+        if args.mode in ("spotlight", "gesture"):
+            viewport = self.read("viewport", [self.helper, "viewport"]).decode().strip()
+            if viewport != args.viewport:
+                raise RuntimeError(f"installed viewport is {viewport}; replay requested {args.viewport}")
 
     def read(self, name, argv, timeout=18, data=None):
         command = argv if isinstance(argv, str) else shlex.join(argv)
@@ -209,7 +213,7 @@ def replay(args, river):
     try:
         state = river.snapshot("baseline")
     except NoPresentation:
-        if not args.confirmed_home or args.mode not in ("spotlight", "gesture"):
+        if not args.confirmed_home or args.mode not in ("spotlight", "gesture") or args.from_state != "home":
             raise
         state = "home"
         river.mark("baseline-confirmed-home", reason="no new attempt on idle screen")
@@ -219,8 +223,11 @@ def replay(args, river):
     if state == "spotlight" and args.mode == "spotlight" and args.start_spotlight:
         state = river.snapshot("initial-return-home", home)
     if state != "home":
-        raise RuntimeError("active replay requires a verified Home screen")
+        if args.mode != "gesture" or state != args.from_state:
+            raise RuntimeError("active replay requires its verified starting screen")
     if args.mode == "gesture":
+        if state != args.from_state:
+            raise RuntimeError(f"gesture requires {args.from_state}; observed {state}")
         if river.snapshot("gesture", gesture_args(args.points, args.viewport)) != args.expect:
             raise RuntimeError(f"gesture did not reach {args.expect}")
         return
@@ -248,6 +255,7 @@ def main():
     parser.add_argument("--runs", type=int, default=2, choices=range(1, 11))
     parser.add_argument("--points", nargs=5, type=int, metavar=("X", "Y", "X2", "Y2", "MS"))
     parser.add_argument("--expect", choices=("home", "spotlight"))
+    parser.add_argument("--from-state", choices=("home", "spotlight"), default="home")
     parser.add_argument("--viewport", choices=("crop", "fit"), default="crop")
     parser.add_argument("--camera", type=int, help="AVFoundation video input index for an external panel recording")
     parser.add_argument("--camera-fps", type=int, choices=(24, 25, 30, 50, 60), default=30)

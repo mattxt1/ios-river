@@ -31,6 +31,33 @@ favor validating a GPU composition pass and corresponding touch geometry
 before enabling a new display mode.
 
 
+### 0350 RGB fit candidate
+
+The 0350 image selects fit with `riverblit=2`. The existing A5xx copy writes
+logical layers into a cached 1125×2436 staging buffer and waits for its fence.
+The CPU resamples that owned buffer into the existing RGB flip buffer with
+an aspect-preserving 1048×2270 viewport. This keeps the old panel pipe and
+avoids reading the live render surface on the CPU. It handles successive
+partial logical layers with the same viewport. A failed layer leaves the
+last panel frame visible and requires a full layer to recover the staging
+buffer. The default `riverblit=1` crop stays available.
+
+The [Pixel 5 port's status-bar hook](https://github.com/DenialOfGravity/ios-redfin/blob/74fac586427ec79484eb1c9ba21a22c35341848c/phone/fps/SweetSB.m)
+moves UIKit's leading region because the Pixel hole is on the left.
+[River's cutout overlay](https://github.com/LineageOS/android_device_motorola_river/blob/f9b320caf51d7c75041d921ff63f9116f6065001/overlay/frameworks/base/core/res/res/values/config.xml)
+places the cutout at the top center with a maximum width of 160 px and a
+depth of 110 px. River retains UIKit's split status bar, with the clock
+in its left region. The stock 44-point portrait status-bar band maps
+to about 123 panel pixels in the fitted viewport. Verify clock clearance
+and the full top and bottom edges on the physical panel after boot.
+
+The replay now checks the running viewport before sending gestures.
+`gesture --from-state spotlight` allows an edge tap on a verified Spotlight
+backdrop to be tested as a transition to Home. Capture screenshots and
+presentation reports around each edge gesture. Software-injected touch
+verifies the transformed coordinates and iOS gesture behavior. A physical
+touch check verifies the actual digitizer's alignment.
+
 ## River UI replay over SSH
 
 `tools/river-ui-replay.py` checks the installed SpringBoard library SHA,

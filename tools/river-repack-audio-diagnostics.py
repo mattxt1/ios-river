@@ -328,7 +328,9 @@ def main():
                     cmdline_bytes=len(cmdline), kernel_payload_segments_verified=True,
                     clock_helper_sha256=digest(replacement), temporary_boot_only=True)
     manifest['unrelated_riverfiles_verified'] = True
-    manifest['native_hardware_bridge_opt_in'] = args.native_feedback
+    manifest['native_hardware_bridge_opt_in'] = b'riverfeedback=1' in cmdline.split()
+    if args.rgb_display_fit:
+        manifest['rgb_display_fit'] = True
     if ui_library is not None:
         manifest['ui_library_sha256'] = digest(ui_library)
         manifest['ui_library_path'] = '/usr/local/lib/libcgprobe.dylib'

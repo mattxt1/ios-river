@@ -5,6 +5,36 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## 0350 River display fit candidate (2026-11-19)
+
+Patch 0350 provides a full 1125×2436 logical canvas in a centered
+1048×2270 viewport, through the established RGB scanout. The GPU copies
+into a cached staging buffer and the CPU resamples after the fence. The
+physical HID path and replay helper use the same nearest-pixel transform.
+The replay checks the live viewport before it sends input.
+
+The Redfin reference moves the status-bar leading region to the right
+because its camera hole crosses that region. River's centered cutout
+fits within the horizontal split and beneath the fitted portrait
+status-bar band. The 0350 candidate keeps the native iPhone X clock layout.
+Actual clearance, panel fit and gesture behavior require phone tests.
+
+The exact kernel source is `4ba1efeea36702430ca8c5d487b2082cc247c837`.
+The native build, signed arm64 replay helper, ASan/UBSan geometry checks
+and repack checks passed. The verified 0350 boot image preserves the 0349
+firmware and RiverFiles byte for byte. The only embedded command-line
+change is `riverblit=1` to `riverblit=2`. Image SHA-256 is
+`7eb3e19850c5d595400d00ae45670d38739841d638229ac5debe1f4d3c6ab124`.
+
+Private manifest, boot guard and artifacts:
+`/Users/matttyson/Developer/Codex/2026-11-19/continue-ios-river-read-this-handoff/work/display-fit`.
+The 0349 image is the verified rollback. The first Wi-Fi SSH probe timed
+out and fastboot listed no accessible unit. 0350 has not been sent.
+After fastboot enumerates, use the guarded temporary boot and check the
+`RIVER FIT` kernel markers, actual clock and full canvas, then run the
+fit-mode Spotlight cycle and separate edge tap/swipe transitions. Capture
+an on-device raw touch sample to validate the physical digitizer.
+
 ## 0349 direct Spotlight replay (2026-11-19)
 
 The signed, hash-verified iOS 16 helper dispatched a synthetic Spotlight
