@@ -153,6 +153,8 @@ def main():
                     help='Optional launchd configuration changing only the disabled capture-source advertisement')
     ap.add_argument('--ui-library', type=Path, help='Optional signed arm64 UI library; installs at its existing SpringBoard load path')
     ap.add_argument('--ui-library-sha256', help='Required exact fingerprint when carrying a UI library')
+    ap.add_argument('--rgb-display-fit', action='store_true',
+                    help='Select the RGB scanout fit mode of a fit-capable River kernel')
     ap.add_argument('--native-feedback', action='store_true', help='Opt in to the combined native hardware bridge (requires a bridge-bearing UI library)')
     ap.add_argument('--adsp-helper', type=Path)
     ap.add_argument('--wifi-check-helper', type=Path, help='Optional bounded connectivity probe')
@@ -186,6 +188,11 @@ def main():
     if args.native_feedback:
         require(args.ui_library is not None, 'Native feedback requires the combined UI/bridge library')
         cmdline = select_native_feedback(cmdline)
+    if args.rgb_display_fit:
+        tokens = cmdline.split(b' ')
+        require([token for token in tokens if token.startswith(b'riverblit=')] == [b'riverblit=1'],
+                'Expected one standard River GPU present argument')
+        cmdline = b' '.join(b'riverblit=2' if token == b'riverblit=1' else token for token in tokens)
     if args.renderer_library_name is not None:
         cmdline = select_renderer(cmdline, args.renderer_library_name)
     if args.msgbuf_bytes is not None:

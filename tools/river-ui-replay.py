@@ -30,8 +30,8 @@ def panel_point(x, y, viewport):
         raise ValueError("gesture coordinate is outside the panel")
     if viewport == "crop":
         return (x + 20) / 1125, (y + 83) / 2436
-    logical_x = max(0, min(1124, (x - 16) * 1125 // 1048))
-    return logical_x / 1125, (y * 2436 // 2270) / 2436
+    logical_x = max(0, min(1124, ((x - 16) * 1125 + 524) // 1048))
+    return logical_x / 1125, ((y * 2436 + 1135) // 2270) / 2436
 
 
 def gesture_args(values, viewport):

@@ -1,0 +1,264 @@
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -83,6 +83,7 @@
+ static uint64_t river_present_ns, river_present_rows, river_presents, river_direct;
+ static int river_zc;	/* boot-arg riverzc=1: scan iOS's scanout-pool surface directly */
+ static uint64_t river_blit_page_hits, river_blit_page_builds;
++static bool river_panel_fit_enabled;
+ static int river_blit = -1;	/* boot-arg riverblit=1: present with the GPU 2D blitter (0197) */
+ static bool river_blit_flushed;
+ static bool river_blit_drop_frame;	/* 0198: this present's GPU blit failed: do not flip */
+@@ -100,6 +101,14 @@
+ /* iOS's display power state (RequestPowerChange), for touch-to-wake in SweetHID. */
+ static volatile bool sweet_fb_off;
+ extern "C" bool sweet_fb_display_off(void);
++#if defined(RIVER)
++extern "C" bool river_panel_fit_active(void);
++bool
++river_panel_fit_active(void)
++{
++	return __atomic_load_n(&river_panel_fit_enabled, __ATOMIC_ACQUIRE);
++}
++#endif
+ bool
+ sweet_fb_display_off(void)
+ {
+@@ -133,6 +142,7 @@
+ #include <sys/proc.h>
+ #if defined(RIVER)
+ #include "river_frame_clock.h"
++#include "river_display_fit.h"
+ #endif
+ 
+ enum {
+@@ -202,6 +212,13 @@
+ 	void riverFlush(void);
+ 	void riverMdpSetup(void);
+ 	void fitScanFrom(uint64_t pa);
++	void presentPanelFit(const uint8_t *rec, uint32_t mask);
++	IOBufferMemoryDescriptor *fPanelStage;
++	uint64_t fPanelStagePhys;
++	bool fPanelStageValid;
++	uint16_t fPanelColumns[RIVER_VIEW_WIDTH];
++	uint32_t fPanelFitFrames, fPanelFitDrops;
++	uint64_t fPanelFitElapsed, fPanelFitReport;
+ 	uint32_t      fPipeFlush;     /* CTL_FLUSH bits of ABL's splash pipe (+ CTL) */
+ 	uint32_t      fBootFormat, fBootUnpack;	/* ABL's 24bpp SRC_FORMAT / UNPACK_PATTERN */
+ 	bool          fBackClean;	/* back buffer's dirty rows already cleaned */
+@@ -1162,6 +1179,94 @@
+ 	return ok;
+ }
+ 
++#if defined(RIVER)
++/* Copy logical layers into cached memory using the existing fenced GPU copy.
++ * Only the cached staging buffer is read by the CPU. Keep the last complete
++ * panel frame on any copy failure and require a new full base after a drop. */
++void
++AppleCLCD::presentPanelFit(const uint8_t *rec, uint32_t mask)
++{
++	uint64_t start_time = mach_absolute_time();
++	bool copied = false;
++	for (uint32_t layer = 0; layer < SWEET_FB_LAYERS; layer++) {
++		uint32_t id = get32(rec, 0x54 + 4 * layer);
++		if (!(mask & (1u << layer)) || !id) continue;
++		SweetSurface *surface = sweet_surface_copy(id);
++		if (!surface || surface == fSurface) {
++			OSSafeReleaseNULL(surface);
++			continue;
++		}
++		const uint8_t *a = rec + 0x64 + 16 * layer;
++		const uint8_t *b = rec + 0xc4 + 16 * layer;
++		int32_t sx = (int32_t)get32(a, 0), sy = (int32_t)get32(a, 4);
++		int32_t dx = (int32_t)get32(b, 0), dy = (int32_t)get32(b, 4);
++		int32_t w = (int32_t)get32(b, 8), h = (int32_t)get32(b, 12);
++		if (sx < 0 || sy < 0) sx = sy = 0;
++		if (dx < 0 || dy < 0) dx = dy = 0;
++		if (w <= 0 || h <= 0) { w = surface->width; h = surface->height; }
++		w = MIN(w, MIN((int32_t)surface->width - sx, (int32_t)RIVER_CANVAS_WIDTH - dx));
++		h = MIN(h, MIN((int32_t)surface->height - sy, (int32_t)RIVER_CANVAS_HEIGHT - dy));
++		if (w <= 0 || h <= 0) {
++			surface->release();
++			continue;
++		}
++		uint64_t end = (uint64_t)surface->offset + (uint64_t)(sy + h - 1) * surface->bytesPerRow +
++		    (uint64_t)(sx + w) * 4;
++		const uint64_t *pages = NULL;
++		uint32_t count = 0;
++		uint64_t offset = 0;
++		bool hit = false;
++		bool valid = (!surface->bytesPerElement || surface->bytesPerElement == 4) &&
++		    surface->elementWidth == 1 && surface->elementHeight == 1 && surface->memory &&
++		    (uint64_t)(sx + w) * 4 <= surface->bytesPerRow && end <= surface->memory->getLength();
++		if (valid && !surface->gpuTouched) {
++			uintptr_t va = surface->kernelAddress();
++			if (va) sweet_dcache_clean((vm_offset_t)(va + surface->offset),
++			    (unsigned)(end - surface->offset));
++			else valid = false;
++		}
++		int error = valid && surface->getBlitPages(&pages, &count, &offset, &hit) ?
++		    river_gpu_blit(pages, count, offset, surface->bytesPerRow, sx, sy,
++		    fPanelStagePhys, fPanelStage->getLength(), RIVER_CANVAS_STRIDE, dx, dy, w, h, 50) : EINVAL;
++		surface->release();
++		if (error) {
++			fPanelStageValid = false;
++			if (fPanelFitDrops++ < 5) IOLog("RIVER FIT: dropped logical layer %u (%d)\n", layer, error);
++			return;
++		}
++		if (dx == 0 && dy == 0 && w == RIVER_CANVAS_WIDTH && h == RIVER_CANVAS_HEIGHT)
++			fPanelStageValid = true;
++		copied = true;
++	}
++	if (!copied || !fPanelStageValid) return;
++
++	/* Initial CPU writes were cleaned at setup. Drop CPU read caches after
++	 * the fenced GPU writes before sampling the staging buffer. */
++	auto *source = (const uint8_t *)fPanelStage->getBytesNoCopy();
++	flush_dcache64((addr64_t)(uintptr_t)source, (unsigned)fPanelStage->getLength(), FALSE);
++	river_fit_frame(source, backBuffer(), fRowBytes, fPanelColumns);
++	river_flip_valid[fFlipIdx ^ 1] = false;
++	fBackClean = false;
++	flipBack();
++	if (!fPanelFitReport) {
++		IOLog("RIVER FIT: RGB scanout 1125x2436 -> 1048x2270 at x=16\n");
++		fPanelFitReport = start_time;
++	}
++	uint64_t now = mach_absolute_time(), ns;
++	absolutetime_to_nanoseconds(now - start_time, &ns);
++	fPanelFitElapsed += ns;
++	fPanelFitFrames++;
++	absolutetime_to_nanoseconds(now - fPanelFitReport, &ns);
++	if (ns >= 10000000000ULL) {
++		IOLog("RIVER FIT: %u frames, copy/resample/flip avg %llu us, %u dropped\n",
++		    fPanelFitFrames, fPanelFitElapsed / 1000 / fPanelFitFrames, fPanelFitDrops);
++		fPanelFitReport = now;
++		fPanelFitElapsed = 0;
++		fPanelFitFrames = fPanelFitDrops = 0;
++	}
++}
++#endif
++
+ void
+ AppleCLCD::present(const uint8_t *rec)
+ {
+@@ -1204,6 +1309,18 @@
+ 		return;
+ 	}
+ 	fConsShown = false;
++#if defined(RIVER)
++	if (fPanelStage) {
++		presentPanelFit(rec, mask);
++		if (!fConsolePaused) {
++			int quiet = 0;
++			fConsolePaused = true;
++			if (PE_parse_boot_argn("sweetfb_noconsole", &quiet, sizeof(quiet)) && quiet)
++				sweet_console_muted = 1;
++		}
++		return;
++	}
++#endif
+ 	if (directPresent(rec)) {
+ 		if (!fConsolePaused) {
+ 			int quiet = 0;
+@@ -1658,8 +1775,32 @@
+ 		IOLog("RIVER MDP: no contiguous flip buffers; keeping the 24bpp copy\n");
+ 		return;
+ 	}
++	int mode = 0;
++	PE_parse_boot_argn("riverblit", &mode, sizeof(mode));
++	if (mode == 2 && !strcmp(pname, "RGB0") && fWidth == RIVER_PANEL_WIDTH &&
++	    fHeight == RIVER_PANEL_HEIGHT && fLogicalW == RIVER_CANVAS_WIDTH &&
++	    fLogicalH == RIVER_CANVAS_HEIGHT) {
++		const vm_size_t size = (vm_size_t)RIVER_CANVAS_STRIDE * RIVER_CANVAS_HEIGHT;
++		fPanelStage = IOBufferMemoryDescriptor::inTaskWithPhysicalMask(kernel_task,
++		    kIODirectionInOut | kIOMemoryPhysicallyContiguous, size, 0x00000000fffff000ull);
++		if (fPanelStage) {
++			fPanelStagePhys = fPanelStage->getPhysicalSegment(0, NULL, kIOMemoryMapperNone);
++			if (!fPanelStagePhys) OSSafeReleaseNULL(fPanelStage);
++		}
++		if (fPanelStage) {
++			void *buffer = fPanelStage->getBytesNoCopy();
++			memset(buffer, 0, size);
++			flush_dcache64((addr64_t)(uintptr_t)buffer, (unsigned)size, FALSE);
++			for (uint32_t x = 0; x < RIVER_VIEW_WIDTH; x++)
++				fPanelColumns[x] = (uint16_t)river_fit_axis(x, RIVER_VIEW_WIDTH, RIVER_CANVAS_WIDTH);
++			setProperty("RiverDisplayFit", true);
++			__atomic_store_n(&river_panel_fit_enabled, true, __ATOMIC_RELEASE);
++		} else {
++			IOLog("RIVER FIT: staging buffer unavailable; crop retained\n");
++		}
++	}
+ 	int fit = 0;
+-	PE_parse_boot_argn("riverfitmdp", &fit, sizeof(fit));
++	if (!fPanelStage) PE_parse_boot_argn("riverfitmdp", &fit, sizeof(fit));
+ 	if (fit && fWidth == 1080 && fHeight == 2270 &&
+ 	    fLogicalW == 1125 && fLogicalH == 2436 && !strcmp(pname, "RGB0")) {
+ 		const vm_size_t fitSize = (vm_size_t)4608 * 2436;
+diff --git a/iokit/Kernel/arm/hid/SweetHID.cpp b/iokit/Kernel/arm/hid/SweetHID.cpp
+--- a/iokit/Kernel/arm/hid/SweetHID.cpp
++++ b/iokit/Kernel/arm/hid/SweetHID.cpp
+@@ -461,6 +461,11 @@
+ 	return true;
+ }
+ 
++#if defined(RIVER)
++#include "../river_display_fit.h"
++extern "C" bool river_panel_fit_active(void);
++#endif
++
+ static uint32_t sweet_touch_moves[SWEET_TOUCH_FINGERS];	/* per touch, for the log */
+ 
+ void
+@@ -482,6 +487,12 @@
+ 	 * A lift reports no position: it ends where the finger last was. */
+ 	int fx = fFitMdp ? (x <= 16 ? 0 : (x >= 1064 ? 1124 : ((x - 16) * 1125) / 1048)) : x + fOffX;
+ 	int fy = fFitMdp ? (y * 2436) / SWEET_TOUCH_HEIGHT : y + fOffY;
++#if defined(RIVER)
++	if (river_panel_fit_active()) {
++		fx = river_fit_axis(x - RIVER_VIEW_LEFT, RIVER_VIEW_WIDTH, RIVER_CANVAS_WIDTH);
++		fy = river_fit_axis(y, RIVER_PANEL_HEIGHT, RIVER_CANVAS_HEIGHT);
++	}
++#endif
+ 	IOFixed nx = down ? (IOFixed)(((int64_t)fx << 16) / fLogicalW) : fX[finger];
+ 	IOFixed ny = down ? (IOFixed)(((int64_t)fy << 16) / fLogicalH) : fY[finger];
+ 	bool moved = down && (nx != fX[finger] || ny != fY[finger]);
+diff --git a/iokit/Kernel/arm/river_display_fit.h b/iokit/Kernel/arm/river_display_fit.h
+new file mode 100644
+--- /dev/null
++++ b/iokit/Kernel/arm/river_display_fit.h
+@@ -0,0 +1,35 @@
++#ifndef RIVER_DISPLAY_FIT_H
++#define RIVER_DISPLAY_FIT_H
++
++#include <stdint.h>
++
++enum {
++	RIVER_PANEL_WIDTH = 1080, RIVER_PANEL_HEIGHT = 2270,
++	RIVER_CANVAS_WIDTH = 1125, RIVER_CANVAS_HEIGHT = 2436,
++	RIVER_VIEW_WIDTH = 1048, RIVER_VIEW_LEFT = 16, RIVER_CANVAS_STRIDE = 4608,
++};
++
++/* Nearest source pixel. The same transform is used for fit sampling and HID. */
++static inline uint32_t
++river_fit_axis(int32_t position, uint32_t displayed, uint32_t logical)
++{
++	if (position <= 0) return 0;
++	if ((uint32_t)position >= displayed) return logical - 1;
++	return ((uint32_t)position * logical + displayed / 2) / displayed;
++}
++
++static inline void
++river_fit_frame(const uint8_t *stage, uint8_t *panel, uint32_t stride, const uint16_t *columns)
++{
++	for (uint32_t y = 0; y < RIVER_PANEL_HEIGHT; y++) {
++		uint32_t source_y = river_fit_axis(y, RIVER_PANEL_HEIGHT, RIVER_CANVAS_HEIGHT);
++		const uint32_t *in = (const uint32_t *)(stage + source_y * RIVER_CANVAS_STRIDE);
++		uint32_t *out = (uint32_t *)(panel + y * stride);
++		for (uint32_t x = 0; x < RIVER_VIEW_LEFT; x++) out[x] = 0xff000000;
++		for (uint32_t x = 0; x < RIVER_VIEW_WIDTH; x++) out[RIVER_VIEW_LEFT + x] = in[columns[x]];
++		for (uint32_t x = RIVER_VIEW_LEFT + RIVER_VIEW_WIDTH; x < RIVER_PANEL_WIDTH; x++)
++			out[x] = 0xff000000;
++	}
++}
++
++#endif
