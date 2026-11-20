@@ -5,6 +5,22 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## 0350 Bold Text SpringBoard crash loop (2026-11-20)
+
+The user reported a persistent pinwheel immediately after enabling Bold Text.
+Trusted Wi-Fi SSH captured process stacks and the latest UI kernel events.
+SpringBoard PID 26 and replacement PIDs 2101, 2110, 2116, 2123, 2132
+and 2147 exited
+with SIGSEGV, PC and fault address zero, and the same framework call stack.
+Symbolication places the caller in CoreImage, called through CoreUI and
+UIKitCore. Private symbols were redacted, so the specific missing target
+and the Bold Text dependency remain unidentified. backboardd PID 60
+remained alive and the fit path continued reporting frames through the
+crashes. This is a SpringBoard crash/relaunch loop.
+
+Evidence in `/Users/matttyson/Developer/Codex/2026-11-19/continue-ios-river-read-this-handoff/work/display-fit/20261120T094020900038Z-bold-text-spinner`.
+No preference changes, restarts or reboot were sent.
+
 ## 0350 fit and edge transitions pass after recovery (2026-11-20)
 
 The user reported that 0350 recovered without a rollback and normal physical
