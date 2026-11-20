@@ -5,6 +5,25 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## 0350 first device boot (2026-11-20)
+
+Guarded fastboot verified the River serial, product, 0350 image and exact
+0349 rollback. Temporary boot accepted at 00:11 Eastern. No partition was
+flashed. USB serial log reached SpringBoard. The pinned USB SSH connection
+worked with Curve25519 key exchange despite intermittent banner timeouts.
+
+The signed replay helper read `fit` from AppleCLCD. The kernel reported
+RGB scanout at 1048×2270 with x=16. Its first retained intervals reported
+3, 10 and 18 completed frames at average copy/resample/flip times of
+32.4, 35.9 and 46.4 ms. The third reported four dropped logical layers
+with ETIMEDOUT. Kernel HID recorded physical touches near the edge,
+but that does not establish a successful iOS edge action.
+
+The first fit replay hit zero new baseline presentation attempts and
+preserved kernel, SpringBoard and backboardd evidence without sending
+gestures. The display and clock check still depends on physical observation.
+Private evidence: `/Users/matttyson/Developer/Codex/2026-11-19/continue-ios-river-read-this-handoff/work/display-fit`.
+
 ## 0350 River display fit candidate (2026-11-19)
 
 Patch 0350 provides a full 1125×2436 logical canvas in a centered
