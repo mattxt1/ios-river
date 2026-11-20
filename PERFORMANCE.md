@@ -48,8 +48,11 @@ moves UIKit's leading region because the Pixel hole is on the left.
 places the cutout at the top center with a maximum width of 160 px and a
 depth of 110 px. River retains UIKit's split status bar, with the clock
 in its left region. The stock 44-point portrait status-bar band maps
-to about 123 panel pixels in the fitted viewport. Verify clock clearance
-and the full top and bottom edges on the physical panel after boot.
+to about 123 panel pixels in the fitted viewport. On 0350 the user confirmed
+clock clearance, both top and bottom edges visible, and restored physical
+touch after an earlier unresponsive period. Text appeared rougher with the
+nearest-neighbor fit. The agent verified left and right edge swipes into
+Spotlight and edge backdrop taps back to Home over Wi-Fi SSH.
 
 The replay now checks the running viewport before sending gestures.
 `gesture --from-state spotlight` allows an edge tap on a verified Spotlight

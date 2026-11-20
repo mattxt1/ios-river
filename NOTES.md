@@ -5,6 +5,26 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## 0350 fit and edge transitions pass after recovery (2026-11-20)
+
+The user reported that 0350 recovered without a rollback and normal physical
+touch was working. They confirmed the clock cleared the notch and both
+the top and bottom of the interface were visible. They noted rougher text
+with the fitted viewport. 0350 uses nearest-neighbor resampling. The cause
+of the earlier period when Home did not respond remains unconfirmed.
+
+The agent verified the running fit viewport and replayed taps and swipes
+over trusted Wi-Fi SSH. In portrait, down swipes at physical panel x=40
+and x=1039 (y=635 to 1450) opened Spotlight. A backdrop tap at y=990 on
+each side returned to Home. The compositor traces and visual checkpoints
+confirmed both sequences. These were injected gestures on River. The user's
+physical touch observation was separate. The runner finished on Home.
+
+Private evidence at
+`/Users/matttyson/Developer/Codex/2026-11-19/continue-ios-river-read-this-handoff/work/display-fit/20261120T093344619217Z-edge-replay`.
+USB SSH timed out before issuing input. No rollback, reboot, or process
+restart was sent. River remains on 0350.
+
 ## 0350 Home touch failure report (2026-11-20)
 
 The user reports that Home does not respond to physical touch. A trusted USB
