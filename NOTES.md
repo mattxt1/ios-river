@@ -5,6 +5,22 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## 0350 Home touch failure report (2026-11-20)
+
+The user reports that Home does not respond to physical touch. A trusted USB
+SSH capture shows the touch driver receiving physical finger down, movement
+and lift, including edge gestures. The fitted scanout continued to report
+completed frames, mostly 200–300 per 10-second reporting window at about
+29 ms per copy/resample/flip. That does not establish that the content
+changed or that iOS acted on the touch. The failed replay stopped at
+the SSH helper verification before sending a synthetic gesture. Both
+trusted SSH routes later timed out. The source of the touch failure has
+not been isolated. The next comparison is a temporary return to verified
+0349 and a physical Home and Spotlight touch check.
+
+Evidence: `/Users/matttyson/Developer/Codex/2026-11-19/continue-ios-river-read-this-handoff/work/display-fit/20261120T062444394565Z-live-192.168.7.2.txt`.
+No restart, new image or workaround was sent during diagnosis.
+
 ## 0350 first device boot (2026-11-20)
 
 Guarded fastboot verified the River serial, product, 0350 image and exact
