@@ -3,6 +3,41 @@
 > Current results are summarized first. Earlier dated sections below are
 > historical records and may describe superseded candidates or pending checks.
 
+## 0352 automatic Wi-Fi join verified (2026-11-20)
+
+The approved software-backed native keychain persisted a synthetic test item
+across a temporary boot, and River joined its saved network without a second
+password entry. The optional 0352 launchd service uses MobileWiFi to request
+association for the sole eligible saved network. On a fresh temporary boot
+the user confirmed automatic join with Settings closed. USB/Wi-Fi probes
+verified state 4/result 1 and ordinary Internet traffic via en0. See NOTES.md
+for the candidate hash, rollback and validation. A Control Center
+disconnect was confirmed over USB. Re-enabling Wi-Fi there restored
+association and Internet access with Settings closed. No password was
+requested during either test.
+
+## 0350 fresh boot did not automatically associate (2026-11-20)
+
+Guarded temporary 0350 boot accepted. With Settings untouched, trusted USB
+SSH observed en0 scanning then idle and association result 0. The retained
+trace shows 31 completed scans with results and no association request.
+The native Wi-Fi plist has one legacy known-network entry. This count gives
+no evidence about the target password or its auto-join policy. The same
+boot repeatedly returned kIOReturnUnsupported to securityd key wrapping
+(selector 10). This points to a native keychain dependency to verify before
+attributing the failure to association behavior. See NOTES.md for the
+read-only observations and the prepared synthetic keychain follow-up.
+The fresh boot also reproduced the Bold Text SpringBoard crash loop and
+the new crash evidence is preserved. A subsequent 0350 temporary boot
+recovered Home after reverting Bold Text. On that boot, a synthetic item
+add via native Security.framework returned errSecNotAvailable (-25291).
+No Wi-Fi credentials were queried. [Apple's keychain item implementation](https://github.com/apple-oss-distributions/Security/blob/main/keychain/securityd/SecDbKeychainItemV7.m)
+uses AppleKeyStore wrapping and unwrapping for ordinary keychain item keys.
+The observed native storage failure and unsupported wrap calls warrant
+verifying the exact 16.7 wrap/unwrap ABI and a persistent key source before
+changing the Wi-Fi association policy. Fresh-boot automatic rejoin and
+post-disconnect recovery remain open.
+
 ##0326 normal connectivity and authenticated Wi-Fi SSH verified
 
 Bluecheckmark, nativeDHCP BOUND, usable defaultDNS/generalNWI and unbound

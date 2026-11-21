@@ -5,6 +5,179 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## 0352 saved-network startup and reconnect service (2026-11-20)
+
+The flushed 0351 boot still scanned without sending an association request
+after physical unlock with Settings closed. MobileWiFi reported one
+remembered, enabled network, with user auto-join enabled and no first-join
+suppression. The on-device native association probe requested that saved
+profile through MobileWiFi and connected without asking for credentials.
+Native state/result and normal Internet traffic via en0 passed.
+
+Commit `dfc55f0` adds a small boot service using the same native request.
+It waits for the native first-unlock state and sustained disconnection,
+checks the radio and iOS auto-join policy, and requests the sole remembered
+network if eligible. It keeps the native request alive during association
+and backs off scheduled retries. It does not handle passwords or choose
+among multiple saved profiles. The verified temporary 0352 image has the
+same 0351 kernel, 0350 display fit and firmware. Its only RiverFiles changes
+are the signed service and one launchd job. Repack tests and signing passed.
+Image SHA-256 `e842e12ac610d3b9e5fbdc8a3de3c914685b150661e93b79da27097826e24fda`.
+The verified rollback is 0351. On the first 0352 temporary boot the user
+confirmed automatic association with Settings closed. The host observed
+the transition from idle to state 4/result 1, and an unbound HTTP probe
+returned the Apple success marker via en0. The on-device startup helper
+hash matched the packaged binary. Its launchd log showed startup and
+request_status=0.
+
+With Settings closed, the user disconnected through Control Center. Trusted
+USB confirmed state 0 and Wi-Fi SSH was unavailable. The user then
+re-enabled Wi-Fi from Control Center and saw the icon return automatically.
+The host again verified state 4/result 1 and ordinary HTTP 200 with the
+Apple success marker over en0. Both the fresh-boot join and the Control
+Center reconnect passed with the saved password and no Settings visit.
+This run used one eligible saved network. River remains on temporary 0352.
+
+Private boot and network evidence is in the local November 20
+device-usability workspace under `work`.
+
+## 0351 native keychain candidate (2026-11-20)
+
+Commit `3e35a01` adds ordinary River system-keybag AES key wrap and unwrap
+behind the native AppleKeyStore service. The iOS 16.7 framework calls were
+verified from the local read-only image. Both operations take bag and key
+class scalars. Wrap additionally returns the resulting class. The candidate
+accepts 32-byte item keys and returns 40-byte RFC 3394 wrapped keys. It
+separates ordinary classes 6 through 11, checks the caller against the
+installed securityd executable and service UID, and rejects other bags and
+classes. The existing no-passcode model applies. There is no hardware-backed
+storage or passcode protection on River.
+
+The user explicitly approved software-backed keychain storage, and the
+signed provisioning helper generated a persistent root-only wrapping seed
+on River. No seed or credential data was transferred. Host tests compared
+the wrapping implementation with CommonCrypto and checked class separation,
+tampering and failed-unwrap clearing under ASan/UBSan. The native build,
+image hash and packaging checks passed. Image SHA-256
+`00f328cce1b6ab0c50d76c16099d86349ce4ad42d83c2581fa2d5a52900455f5`.
+Its base and verified rollback is 0350. The exact command line, RiverFiles,
+and firmware match the base.
+
+The image and test helpers are local in the November 20 device-usability
+workspace's `work` directory. The first guarded 0351 temporary boot
+was accepted. USB kernel logs showed securityd wrap and unwrap returning
+success and the signed probe saved and read back its synthetic native
+keychain item. The probe leaves that item only until it can be read and
+removed after a fresh boot.
+
+The user confirmed Home works and enrolled Wi-Fi once in Settings. The
+initial join passed native state 4/result 1 and the ordinary HTTP probe
+returned the success marker via en0. The same verified 0351 image was then
+booted again. With Settings closed the user saw no Wi-Fi icon. The retained
+trace showed successful wrap/unwrap, completed scans, and no association
+request. The read-and-delete probe returned errSecItemNotFound after one
+transport timeout, so that attempt cannot distinguish a lost item from
+deletion during the timed-out request. The software seed persisted, and
+automatic rejoin failed.
+
+Before the next boot the synthetic item was recreated and read on the same
+boot. Both fsync and F_FULLFSYNC reported success for the keychain database,
+WAL and Wi-Fi preferences. After another temporary 0351 boot, a read-only
+SecItemCopyMatching returned success and the data matched. A separate read
+and delete then removed the synthetic item. Native keychain persistence is
+therefore confirmed on the flushed boot path. On that same boot the user
+selected the saved Wi-Fi network in Settings and joined without a password
+prompt. Native association and ordinary en0 Internet traffic passed. Both
+fsync and F_FULLFSYNC reported success for the keychain database, WAL and
+Wi-Fi plist after that join. Automatic rejoin and disconnect recovery remain
+pending. User Wi-Fi credentials were not copied, queried or logged.
+
+## 0350 Lock Screen recovered after reverting Bold Text (2026-11-20)
+
+The user returned River to its Motorola bootloader. The guarded runner
+verified the product, 0350 image and 0349 rollback and temporarily booted
+0350 again. The user still saw black. USB SSH eventually returned and the
+fresh kernel capture contained four further SpringBoard SIGSEGVs. These
+records were saved before changing the preference.
+
+The read-only observer found `EnhancedTextLegibilityEnabled=1` in the
+mobile user's `com.apple.Accessibility` domain and identified the native
+`AXSettings` accessor and setter. The signed recovery helper called the
+setter as mobile. The initial readback still showed the setting enabled,
+but a later independent mobile readback showed both native and on-disk
+values were 0 before any fallback write. The user confirmed the Lock Screen
+appeared. SpringBoard PID 368 and backboardd PID 60 were stable across
+follow-up USB checks. The read-only display observer verified Home and the
+0350 fit viewport, with 14 presentation attempts in the observation window.
+The user then confirmed that physical Home navigation works.
+No process restart was requested. Wi-Fi scanned and returned to idle with
+association result 0. Lock Screen and Home recovery do not establish a Bold
+Text rendering fix.
+
+With Home verified, a signed iOS Security.framework probe attempted to add a
+synthetic generic-password item in its own access group. SecItemAdd returned
+`errSecNotAvailable` (-25291). No item was created and the probe never read
+the device's Wi-Fi credentials. This confirms a native keychain failure on
+the current boot independently of Wi-Fi. The Wi-Fi-specific save and
+retrieval paths and the secure device-backed wrap/unwrap implementation
+remain unresolved.
+
+Private evidence in the 2026-11-20 device-usability workspace under `work`,
+including `recovery-prechange-springboard.txt`. Fastboot evidence in
+the display-fit directory under `20261120T230533026654Z-boot`.
+
+## 0350 black screen and loss of network control (2026-11-20)
+
+The user confirmed the display was black after the fresh temporary boot.
+The Mac still enumerated River XNU USB Ethernet and the host interface held
+its expected IPv4 address. Neighbor discovery was incomplete, USB ICMP
+received no answers, and USB and Wi-Fi SSH did not authenticate. Fastboot did
+not enumerate. Reseating the cable produced a new River USB device instance,
+but ICMP still received no replies and the user still saw black. The local
+signed Bold Text read-only observer compiled but could not run on the phone.
+No device settings or boot state were changed by the agent during this
+follow-up. Preserve the captured matching SpringBoard crash
+evidence before any recovery restart.
+
+## 0350 fresh-boot native Wi-Fi and keychain baseline (2026-11-20)
+
+River was already in fastboot at the start. The earlier Bold Text crash
+evidence was present on the Mac. The guarded runner verified the exact 0350
+and 0349 image hashes and the River product, then sent a temporary 0350 boot.
+Fastboot accepted it. Trusted USB SSH authenticated intermittently. It found
+SpringBoard, backboardd, wifid, configd, securityd and keybagd. The display
+replay observer saw no new presentation and captured SpringBoard/backboardd
+stacks, PID-scoped stackshots and the kernel ring. The ring contains 11
+SpringBoard SIGSEGVs with PC and fault address zero. All 11 backtraces match
+the earlier Bold Text crash stack after removing the shared-cache slide.
+Fresh-boot Home verification and active testing remain blocked by the crash
+loop. The new diagnostics are in the local work directory's
+`fresh-0350-screen` subdirectory.
+
+Before any Wi-Fi setting or join action, en0 reported state 1 (scanning) and
+later 0 (idle), with association result 0 both times. The retained kernel
+trace had 31 completed scans with results and no SET20 association request.
+The native SystemConfiguration Wi-Fi preferences contained one entry in
+the legacy known-network list. The observer reported counts only. This
+establishes the presence of a remembered network record. The target's
+identity, auto-join policy and credential availability remain unverified.
+
+The fresh-boot kernel ring contained 73 securityd key-wrap calls returning
+0xe00002c7 (kIOReturnUnsupported). The exact 0350 AppleKeyStore source declares
+selectors 10/11 for wrap and unwrap, and routes both to the unsupported
+default. This gives a concrete native keychain failure to isolate before
+changing Wi-Fi driver policy. The ring does not identify the requesting
+client behind each securityd call. A signed synthetic SecItem add/read/delete
+probe is prepared locally. Confirm responsive Home before running it, then
+correlate a new test operation with the AppleKeyStore log and verify the
+Wi-Fi-specific save and retrieval path before choosing a fix.
+
+The local work directory
+`/Users/matttyson/Developer/Codex/2026-11-20/ios-river-device-usability/work`
+contains the count-only summaries and observers. Existing Wi-Fi credentials
+were not copied or printed. No partitions were flashed, and no Settings,
+join, disconnect, or process restart actions were sent. Leave River on 0350.
+
 ## 0350 Bold Text SpringBoard crash loop (2026-11-20)
 
 The user reported a persistent pinwheel immediately after enabling Bold Text.
