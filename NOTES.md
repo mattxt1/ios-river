@@ -5,6 +5,550 @@
 > ownership and paths. The phone state is not known from this file alone. Start
 > with [README.md](README.md) for the reconciled River summary.
 
+## 0352 saved-network startup and reconnect service (2026-11-20)
+
+The flushed 0351 boot still scanned without sending an association request
+after physical unlock with Settings closed. MobileWiFi reported one
+remembered, enabled network, with user auto-join enabled and no first-join
+suppression. The on-device native association probe requested that saved
+profile through MobileWiFi and connected without asking for credentials.
+Native state/result and normal Internet traffic via en0 passed.
+
+Commit `dfc55f0` adds a small boot service using the same native request.
+It waits for the native first-unlock state and sustained disconnection,
+checks the radio and iOS auto-join policy, and requests the sole remembered
+network if eligible. It keeps the native request alive during association
+and backs off scheduled retries. It does not handle passwords or choose
+among multiple saved profiles. The verified temporary 0352 image has the
+same 0351 kernel, 0350 display fit and firmware. Its only RiverFiles changes
+are the signed service and one launchd job. Repack tests and signing passed.
+Image SHA-256 `e842e12ac610d3b9e5fbdc8a3de3c914685b150661e93b79da27097826e24fda`.
+The verified rollback is 0351. On the first 0352 temporary boot the user
+confirmed automatic association with Settings closed. The host observed
+the transition from idle to state 4/result 1, and an unbound HTTP probe
+returned the Apple success marker via en0. The on-device startup helper
+hash matched the packaged binary. Its launchd log showed startup and
+request_status=0.
+
+With Settings closed, the user disconnected through Control Center. Trusted
+USB confirmed state 0 and Wi-Fi SSH was unavailable. The user then
+re-enabled Wi-Fi from Control Center and saw the icon return automatically.
+The host again verified state 4/result 1 and ordinary HTTP 200 with the
+Apple success marker over en0. Both the fresh-boot join and the Control
+Center reconnect passed with the saved password and no Settings visit.
+This run used one eligible saved network. River remains on temporary 0352.
+
+Private boot and network evidence is in the local November 20
+device-usability workspace under `work`.
+
+## 0351 native keychain candidate (2026-11-20)
+
+Commit `3e35a01` adds ordinary River system-keybag AES key wrap and unwrap
+behind the native AppleKeyStore service. The iOS 16.7 framework calls were
+verified from the local read-only image. Both operations take bag and key
+class scalars. Wrap additionally returns the resulting class. The candidate
+accepts 32-byte item keys and returns 40-byte RFC 3394 wrapped keys. It
+separates ordinary classes 6 through 11, checks the caller against the
+installed securityd executable and service UID, and rejects other bags and
+classes. The existing no-passcode model applies. There is no hardware-backed
+storage or passcode protection on River.
+
+The user explicitly approved software-backed keychain storage, and the
+signed provisioning helper generated a persistent root-only wrapping seed
+on River. No seed or credential data was transferred. Host tests compared
+the wrapping implementation with CommonCrypto and checked class separation,
+tampering and failed-unwrap clearing under ASan/UBSan. The native build,
+image hash and packaging checks passed. Image SHA-256
+`00f328cce1b6ab0c50d76c16099d86349ce4ad42d83c2581fa2d5a52900455f5`.
+Its base and verified rollback is 0350. The exact command line, RiverFiles,
+and firmware match the base.
+
+The image and test helpers are local in the November 20 device-usability
+workspace's `work` directory. The first guarded 0351 temporary boot
+was accepted. USB kernel logs showed securityd wrap and unwrap returning
+success and the signed probe saved and read back its synthetic native
+keychain item. The probe leaves that item only until it can be read and
+removed after a fresh boot.
+
+The user confirmed Home works and enrolled Wi-Fi once in Settings. The
+initial join passed native state 4/result 1 and the ordinary HTTP probe
+returned the success marker via en0. The same verified 0351 image was then
+booted again. With Settings closed the user saw no Wi-Fi icon. The retained
+trace showed successful wrap/unwrap, completed scans, and no association
+request. The read-and-delete probe returned errSecItemNotFound after one
+transport timeout, so that attempt cannot distinguish a lost item from
+deletion during the timed-out request. The software seed persisted, and
+automatic rejoin failed.
+
+Before the next boot the synthetic item was recreated and read on the same
+boot. Both fsync and F_FULLFSYNC reported success for the keychain database,
+WAL and Wi-Fi preferences. After another temporary 0351 boot, a read-only
+SecItemCopyMatching returned success and the data matched. A separate read
+and delete then removed the synthetic item. Native keychain persistence is
+therefore confirmed on the flushed boot path. On that same boot the user
+selected the saved Wi-Fi network in Settings and joined without a password
+prompt. Native association and ordinary en0 Internet traffic passed. Both
+fsync and F_FULLFSYNC reported success for the keychain database, WAL and
+Wi-Fi plist after that join. Automatic rejoin and disconnect recovery remain
+pending. User Wi-Fi credentials were not copied, queried or logged.
+
+## 0350 Lock Screen recovered after reverting Bold Text (2026-11-20)
+
+The user returned River to its Motorola bootloader. The guarded runner
+verified the product, 0350 image and 0349 rollback and temporarily booted
+0350 again. The user still saw black. USB SSH eventually returned and the
+fresh kernel capture contained four further SpringBoard SIGSEGVs. These
+records were saved before changing the preference.
+
+The read-only observer found `EnhancedTextLegibilityEnabled=1` in the
+mobile user's `com.apple.Accessibility` domain and identified the native
+`AXSettings` accessor and setter. The signed recovery helper called the
+setter as mobile. The initial readback still showed the setting enabled,
+but a later independent mobile readback showed both native and on-disk
+values were 0 before any fallback write. The user confirmed the Lock Screen
+appeared. SpringBoard PID 368 and backboardd PID 60 were stable across
+follow-up USB checks. The read-only display observer verified Home and the
+0350 fit viewport, with 14 presentation attempts in the observation window.
+The user then confirmed that physical Home navigation works.
+No process restart was requested. Wi-Fi scanned and returned to idle with
+association result 0. Lock Screen and Home recovery do not establish a Bold
+Text rendering fix.
+
+With Home verified, a signed iOS Security.framework probe attempted to add a
+synthetic generic-password item in its own access group. SecItemAdd returned
+`errSecNotAvailable` (-25291). No item was created and the probe never read
+the device's Wi-Fi credentials. This confirms a native keychain failure on
+the current boot independently of Wi-Fi. The Wi-Fi-specific save and
+retrieval paths and the secure device-backed wrap/unwrap implementation
+remain unresolved.
+
+Private evidence in the 2026-11-20 device-usability workspace under `work`,
+including `recovery-prechange-springboard.txt`. Fastboot evidence in
+the display-fit directory under `20261120T230533026654Z-boot`.
+
+## 0350 black screen and loss of network control (2026-11-20)
+
+The user confirmed the display was black after the fresh temporary boot.
+The Mac still enumerated River XNU USB Ethernet and the host interface held
+its expected IPv4 address. Neighbor discovery was incomplete, USB ICMP
+received no answers, and USB and Wi-Fi SSH did not authenticate. Fastboot did
+not enumerate. Reseating the cable produced a new River USB device instance,
+but ICMP still received no replies and the user still saw black. The local
+signed Bold Text read-only observer compiled but could not run on the phone.
+No device settings or boot state were changed by the agent during this
+follow-up. Preserve the captured matching SpringBoard crash
+evidence before any recovery restart.
+
+## 0350 fresh-boot native Wi-Fi and keychain baseline (2026-11-20)
+
+River was already in fastboot at the start. The earlier Bold Text crash
+evidence was present on the Mac. The guarded runner verified the exact 0350
+and 0349 image hashes and the River product, then sent a temporary 0350 boot.
+Fastboot accepted it. Trusted USB SSH authenticated intermittently. It found
+SpringBoard, backboardd, wifid, configd, securityd and keybagd. The display
+replay observer saw no new presentation and captured SpringBoard/backboardd
+stacks, PID-scoped stackshots and the kernel ring. The ring contains 11
+SpringBoard SIGSEGVs with PC and fault address zero. All 11 backtraces match
+the earlier Bold Text crash stack after removing the shared-cache slide.
+Fresh-boot Home verification and active testing remain blocked by the crash
+loop. The new diagnostics are in the local work directory's
+`fresh-0350-screen` subdirectory.
+
+Before any Wi-Fi setting or join action, en0 reported state 1 (scanning) and
+later 0 (idle), with association result 0 both times. The retained kernel
+trace had 31 completed scans with results and no SET20 association request.
+The native SystemConfiguration Wi-Fi preferences contained one entry in
+the legacy known-network list. The observer reported counts only. This
+establishes the presence of a remembered network record. The target's
+identity, auto-join policy and credential availability remain unverified.
+
+The fresh-boot kernel ring contained 73 securityd key-wrap calls returning
+0xe00002c7 (kIOReturnUnsupported). The exact 0350 AppleKeyStore source declares
+selectors 10/11 for wrap and unwrap, and routes both to the unsupported
+default. This gives a concrete native keychain failure to isolate before
+changing Wi-Fi driver policy. The ring does not identify the requesting
+client behind each securityd call. A signed synthetic SecItem add/read/delete
+probe is prepared locally. Confirm responsive Home before running it, then
+correlate a new test operation with the AppleKeyStore log and verify the
+Wi-Fi-specific save and retrieval path before choosing a fix.
+
+The local work directory
+`/Users/matttyson/Developer/Codex/2026-11-20/ios-river-device-usability/work`
+contains the count-only summaries and observers. Existing Wi-Fi credentials
+were not copied or printed. No partitions were flashed, and no Settings,
+join, disconnect, or process restart actions were sent. Leave River on 0350.
+
+## 0350 Bold Text SpringBoard crash loop (2026-11-20)
+
+The user reported a persistent pinwheel immediately after enabling Bold Text.
+Trusted Wi-Fi SSH captured process stacks and the latest UI kernel events.
+SpringBoard PID 26 and replacement PIDs 2101, 2110, 2116, 2123, 2132
+and 2147 exited
+with SIGSEGV, PC and fault address zero, and the same framework call stack.
+Symbolication places the caller in CoreImage, called through CoreUI and
+UIKitCore. Private symbols were redacted, so the specific missing target
+and the Bold Text dependency remain unidentified. backboardd PID 60
+remained alive and the fit path continued reporting frames through the
+crashes. This is a SpringBoard crash/relaunch loop.
+
+Evidence in `/Users/matttyson/Developer/Codex/2026-11-19/continue-ios-river-read-this-handoff/work/display-fit/20261120T094020900038Z-bold-text-spinner`.
+No preference changes, restarts or reboot were sent.
+
+## 0350 fit and edge transitions pass after recovery (2026-11-20)
+
+The user reported that 0350 recovered without a rollback and normal physical
+touch was working. They confirmed the clock cleared the notch and both
+the top and bottom of the interface were visible. They noted rougher text
+with the fitted viewport. 0350 uses nearest-neighbor resampling. The cause
+of the earlier period when Home did not respond remains unconfirmed.
+
+The agent verified the running fit viewport and replayed taps and swipes
+over trusted Wi-Fi SSH. In portrait, down swipes at physical panel x=40
+and x=1039 (y=635 to 1450) opened Spotlight. A backdrop tap at y=990 on
+each side returned to Home. The compositor traces and visual checkpoints
+confirmed both sequences. These were injected gestures on River. The user's
+physical touch observation was separate. The runner finished on Home.
+
+Private evidence at
+`/Users/matttyson/Developer/Codex/2026-11-19/continue-ios-river-read-this-handoff/work/display-fit/20261120T093344619217Z-edge-replay`.
+USB SSH timed out before issuing input. No rollback, reboot, or process
+restart was sent. River remains on 0350.
+
+## 0350 Home touch failure report (2026-11-20)
+
+The user reports that Home does not respond to physical touch. A trusted USB
+SSH capture shows the touch driver receiving physical finger down, movement
+and lift, including edge gestures. The fitted scanout continued to report
+completed frames, mostly 200–300 per 10-second reporting window at about
+29 ms per copy/resample/flip. That does not establish that the content
+changed or that iOS acted on the touch. The failed replay stopped at
+the SSH helper verification before sending a synthetic gesture. Both
+trusted SSH routes later timed out. The source of the touch failure has
+not been isolated. The next comparison is a temporary return to verified
+0349 and a physical Home and Spotlight touch check.
+
+Evidence: `/Users/matttyson/Developer/Codex/2026-11-19/continue-ios-river-read-this-handoff/work/display-fit/20261120T062444394565Z-live-192.168.7.2.txt`.
+No restart, new image or workaround was sent during diagnosis.
+
+## 0350 first device boot (2026-11-20)
+
+Guarded fastboot verified the River serial, product, 0350 image and exact
+0349 rollback. Temporary boot accepted at 00:11 Eastern. No partition was
+flashed. USB serial log reached SpringBoard. The pinned USB SSH connection
+worked with Curve25519 key exchange despite intermittent banner timeouts.
+
+The signed replay helper read `fit` from AppleCLCD. The kernel reported
+RGB scanout at 1048×2270 with x=16. Its first retained intervals reported
+3, 10 and 18 completed frames at average copy/resample/flip times of
+32.4, 35.9 and 46.4 ms. The third reported four dropped logical layers
+with ETIMEDOUT. Kernel HID recorded physical touches near the edge,
+but that does not establish a successful iOS edge action.
+
+The first fit replay hit zero new baseline presentation attempts and
+preserved kernel, SpringBoard and backboardd evidence without sending
+gestures. The display and clock check still depends on physical observation.
+Private evidence: `/Users/matttyson/Developer/Codex/2026-11-19/continue-ios-river-read-this-handoff/work/display-fit`.
+
+## 0350 River display fit candidate (2026-11-19)
+
+Patch 0350 provides a full 1125×2436 logical canvas in a centered
+1048×2270 viewport, through the established RGB scanout. The GPU copies
+into a cached staging buffer and the CPU resamples after the fence. The
+physical HID path and replay helper use the same nearest-pixel transform.
+The replay checks the live viewport before it sends input.
+
+The Redfin reference moves the status-bar leading region to the right
+because its camera hole crosses that region. River's centered cutout
+fits within the horizontal split and beneath the fitted portrait
+status-bar band. The 0350 candidate keeps the native iPhone X clock layout.
+Actual clearance, panel fit and gesture behavior require phone tests.
+
+The exact kernel source is `4ba1efeea36702430ca8c5d487b2082cc247c837`.
+The native build, signed arm64 replay helper, ASan/UBSan geometry checks
+and repack checks passed. The verified 0350 boot image preserves the 0349
+firmware and RiverFiles byte for byte. The only embedded command-line
+change is `riverblit=1` to `riverblit=2`. Image SHA-256 is
+`7eb3e19850c5d595400d00ae45670d38739841d638229ac5debe1f4d3c6ab124`.
+
+Private manifest, boot guard and artifacts:
+`/Users/matttyson/Developer/Codex/2026-11-19/continue-ios-river-read-this-handoff/work/display-fit`.
+The 0349 image is the verified rollback. The first Wi-Fi SSH probe timed
+out and fastboot listed no accessible unit. 0350 has not been sent.
+After fastboot enumerates, use the guarded temporary boot and check the
+`RIVER FIT` kernel markers, actual clock and full canvas, then run the
+fit-mode Spotlight cycle and separate edge tap/swipe transitions. Capture
+an on-device raw touch sample to validate the physical digitizer.
+
+## 0349 direct Spotlight replay (2026-11-19)
+
+The signed, hash-verified iOS 16 helper dispatched a synthetic Spotlight
+swipe over trusted Wi-Fi SSH on the existing boot. The replay runner picked
+the current full-canvas IOSurface from the framebuffer trace and classified
+visual checkpoints against private reference frames. An early bottom-edge
+dismissal instead opened App Switcher, so the runner halted and collected
+complete kernel, SpringBoard and backboardd captures before any manual
+follow-up. No process or kernel restart was issued. A separate early
+screenshot transfer stalled even though the phone was responsive. Smaller
+grayscale checkpoints addressed the transfer overhead.
+
+The corrected flow, pull down from Home and tap the empty Spotlight backdrop,
+completed two fully verified Home → Spotlight → Home cycles. No freeze
+occurred in those cycles. River ended on Home on 0349. The tool also accepts
+physical panel coordinates for edge taps and swipes with separate crop and
+fit transforms. The physical fit mode still needs its own on-device checks.
+
+Optional external-panel video is available through a selected Mac camera.
+The silent MP4 capture lifecycle and encoding passed with synthetic input.
+A camera aimed at the physical panel was not used in this run.
+
+Private reference frames and evidence remain outside Git at
+`/Users/matttyson/Developer/Codex/2026-11-19/continue-ios-river-read-this-handoff/work/replay`. In that directory, `spotlight-backdrop` is the successful
+two-cycle run and `spotlight-two-cycles` contains the App Switcher failure
+checkpoint, stacks and retained kernel log.
+
+## 0349 Spotlight follow-up and capture readiness (2026-11-19)
+
+Traced the captured user return address to the self-task deallocation trap
+and the VM map removal path in the exact 0349 native source. VM map removal
+can wait for an entry in transition or for a kernel wiring to clear. The old
+user stacks do not identify either wait. The kernel warning immediately
+around the freeze symbolicates to RiverGPU BO_IMPORT asking to prepare an
+already read-only descriptor for read/write access (RiverGPU.cpp:279).
+The same warning appeared repeatedly in both responsive and degraded
+sessions, so it does not identify the stuck deallocation.
+
+Built and deployed a signed, readback-verified, PID-scoped stackshot helper
+at `/private/var/tmp/river-stackshot-7a8331573d18`. The on-device suite
+returned successful stackshots with thread wait records for the healthy
+compositor and for the missing-wallpaper state. Source, captures and the
+trusted Wi-Fi capture script remain local at
+`/Users/matttyson/Developer/Codex/2026-11-19/continue-ios-river-read-this-handoff/work/spotlight`.
+
+The user opened Spotlight normally in both retests on unchanged 0349.
+In the intervening Today View/App Library sequence, App Library lost its
+wallpaper. Its diagnostic capture showed ongoing framebuffer presentation
+and did not contain the old compositor deallocation stack. Record the
+wallpaper loss separately. No change to VM removal, GPU import or the
+boot image was made. A fresh persistent Spotlight stall is needed to
+capture the actual blocked kernel path before selecting a fix.
+
+The user's five near-term milestones and display-fit priority are recorded
+at the top of PERFORMANCE.md.
+
+## 0349 persistent Spotlight freeze (2026-11-19)
+
+The user reported a full UI freeze opening Spotlight from Home. Trusted
+Wi-Fi SSH remained available. Three rapid samples of SpringBoard, backboardd,
+Spotlight and searchd plus the kernel ring were captured before controls.
+SpringBoard's main stack repeatedly entered `mach_msg2_trap` through QuartzCore
+and UIKitCore. Kernel touch reports continued after the last logged GPU
+presentation window at device time 2311.037811. The frozen stack capture at
+2379.545438 still had no newer presentation window.
+
+The user approved one SpringBoard restart. PID 26 received SIGTERM and launchd
+started PID 615, but the user still saw no responsive Home. The new main
+thread reached a different QuartzCore Mach wait. backboardd stayed PID 60:
+its thread 3 held the same QuartzCore stack at `mach_vm_deallocate` in the
+frozen and post-restart samples. In the earlier responsive baseline that
+thread was in a Mach message wait. This identifies the compositor thread
+to investigate. The specific kernel wait or resource owner is unknown.
+
+The user then approved one backboardd restart. PID 60 received SIGTERM.
+Both `/bin/ps` and `psx` reported new backboardd PID 656 and SpringBoard
+PID 658. GPU presentation counters resumed, with 140 presents in the first
+logged window after restart. The user confirmed the screen was responsive.
+The full Spotlight freeze remains unfixed.
+
+Private evidence in the original task workspace at
+`outputs/hardware/device-0349/20261119T220038258798Z-spotlight-freeze`.
+The device remains on 0349. No kernel reboot or audio changes were made.
+
+## 0349 device qualification and responsiveness baseline (2026-11-19)
+
+User confirmed Home, Settings navigation and Spotlight typing. USB SSH still
+timed out. Trusted Wi-Fi SSH at 192.168.1.232 verified the exact installed
+0349 bridge and captured kernel logs, battery/charger and IOPS state, and CPU
+and stack samples. Removed the collector's dependency on the unavailable iOS
+`uname` command and reran successfully. The audio backend reported
+attempted=0 and enabled=0. No audio controls were sent.
+
+- Settings brightness applies immediately and smoothly and survives lock/wake.
+  Successful DSI writes appear in the kernel log. Control Center shows the
+  brightness level but the brightness slider cannot be dragged. Its volume
+  slider works.
+- Connected baseline read 3719 mV, 0 mA and 16% estimated, external power
+  present and charging inactive. The user unplugged and reconnected USB.
+  The timed series finished before the disconnected sample, which was
+  captured separately at 3550 mV, −651 mA and 5% estimated, external=0,
+  path=0x02. The later reconnected sample read 3680 mV, −158 mA and 13%
+  estimated, external=1, path=0x95. All three show state 7, command 0 and
+  charging=0. Kernel samples independently corroborate external=0 then 1.
+- AW8691 initialized and the helper reported ready=1. No tactile response
+  was felt in Spotlight typing or Home icon long-press. A hash-verified
+  standalone UIKit impact command and a separate direct 100 ms request
+  both exited successfully. The user felt neither pulse.
+- The user reports intermittent hitching during scroll deceleration and
+  1–2 second freezes when swiping Home pages. The initial 58.4-second CPU
+  interval recorded coreduetd 55%, biomed 46% and aggregated 45% of one core.
+  Captured point-in-time SpringBoard, backboardd and Preferences stacks.
+  A separate cued Home swipe run captured 19 SpringBoard and 19 backboardd
+  stacks and a post-run kernel ring. In its 38.5-second CPU interval,
+  aggregated used 82%, SpringBoard 73% and backboardd 60% of one core.
+  During this run the user saw a long freeze entering Today View and a
+  smaller hitch entering App Library. Ordinary Home page swipes stayed
+  responsive in this run. SpringBoard logged five bursts of unbalanced
+  widget-controller appearance transitions. Three full 10-second windows
+  inside the sampled interval recorded 282, 347 and 242 GPU presents with
+  zero reported drops. Frame gaps and the exact cause remain unmeasured.
+  Retain Today View entry as the first reproduction case.
+
+Private evidence in the original task workspace under
+`outputs/hardware/device-0349/20261119T215037971458Z-collect` and
+`outputs/hardware/device-0349/20261119T215304822890Z-stacks`. Leave the device
+on 0349. See HARDWARE.md for the live power, brightness and haptics status.
+
+## 0349 temporary boot accepted; system and hardware qualification pending (2026-11-19)
+
+The new session used approved USB access to enumerate the expected River serial,
+verify product `river`, and run the prepared 0349 image through the existing
+guarded runner. Preflight verified the candidate, full 0345 rollback, helper and
+embedded command line. Fastboot reported 0.622 s to send and 0.215 s to boot.
+The command was `fastboot boot`. No partitions were flashed.
+
+River XNU enumerated over USB Ethernet, and two ICMP probes returned. USB SSH
+initially refused port 22, then reached the Dropbear banner on one attempt and
+stalled waiting for the key-exchange reply. No SSH session authenticated.
+The established Wi-Fi fallback timed out. A 40-second listen on the existing
+USB kernel-log endpoint received no packets. The final USB check showed the
+host interface active at 192.168.7.1 with incomplete ARP for 192.168.7.2,
+four unanswered ICMP probes, and another SSH timeout. This establishes loss
+of USB network reachability after the earlier replies. Home, navigation and
+typing have not been confirmed. The private runner capture
+is in `outputs/hardware/device-0349/20261119T214301083024Z-boot` of the original
+November 19 task workspace. The prior empty-device logs predate this boot.
+
+No battery, brightness, haptics or process diagnostics ran. Continue on this
+0349 boot if a trusted SSH connection and fresh Home become available. Preserve
+any user-reported pauses with timestamps and capture stacks when possible.
+No audio setup or controls were sent.
+
+## Active handoff:0349 boot authorized; host device access blocked (2026-11-19)
+
+User is starting a new chat because permission controls are absent here. Read
+RESUME-0349.md for exact checkout, images/hashes, state, authorizations and next
+steps. AGENTS.md points new agents to it. No further device attempt was made
+while preparing the handoff;0349remains unbooted. Resume the existing checkout
+on this Mac so the unpushed commits and private candidate files are available.
+
+Follow-up: user explicitly refuses manual boot and requires normal device work
+through this chat. Do not redirect them to execute the boot themselves. Replug
+is visible to macOS IOUSB, but fastboot still lists nothing. Additional diagnosis:
+shell ps is denied; log show explicitly reports Cannot run while sandboxed;
+CODEX_SANDBOX_NETWORK_DISABLED=1. User config is workspace-write/on-request,
+while active session policy disables sandbox approval escalation. No firmware or
+fastboot installation change is indicated by this evidence. Restoring task
+execution permissions requires the app's user-controlled permissions setting;
+do not edit policy files or route commands through another backend to bypass it.
+After an authorized permissions refresh, recheck fastboot/product and use the
+verified0349 runner directly here. Boot/testing authorization remains in force.
+
+User has phone ready in fastboot and authorizes temporary0349boot/testing and
+baseline collection before the usability milestones. Exact candidate/rollback
+hashes,599byte embedded XNU line/nativefeedback mode and helper hash pass.
+macOS IOUSB sees Fastboot river S with the expected serial. Session fastboot
+devices is empty; bounded serial getvar was cancelled while waiting. SSH toUSB
+address explicitly fails Operation not permitted. Guarded boot runner stops on
+missing accessible device BEFORE sending any image. No boot/flash/control or
+audio setup succeeded. Phone remains in reported fastboot, not confirmed0349.
+
+New tools/river-hardware-session.py provides pinned preflight, temporary boot,
+read-only baseline capture and optional wait-stack capture. Simulated absent/
+wrong device, wrong product, bad hash, boot-only command and failure guards pass.
+Local evidence outputs/hardware/device-0349, latest boot attempt ends inaccessible.
+The manual-Terminal suggestion was superseded by the user's refusal: the next
+agent must run boot directly in a permitted session. After healthy home/navigation/
+keyboard confirmation run collect --home-ready. Captures remain outside Git.
+Actual battery/brightness/haptics validation and freeze baseline remain pending;
+keep audio off under the prior instruction. Do not retry boot blindly after an
+ambiguous transfer timeout. HARDWARE.md describes capture semantics and gates.
+
+## Active handoff: comparative research; usability first (2026-11-19)
+
+User reports frequent brief freezes and little perceived progress over many boots.
+They request a comprehensive comparison with ongoing HackiOS work and explicitly
+exclude telephony from current priorities. See HACKIOS-COMPARISON-2026-11-19.md.
+Survey covers native HakiOS/UniXNU, Apollo (two distinct implementations),
+Sailfish, Spes, Bergamota/Chlorophyll, Flame, Topaz and early/hosted projects.
+Some current logs supersede old README claims; no independent hardware testing
+of other ports. Recommended next work: capture and fix actual recurring waits,
+measure unique frame intervals/tails, finish automatic native lifecycle and
+brightness/power/haptic user flows. Do not equate 60Hz scanout, host tests or
+short successful navigation checks with solved responsiveness. No code import,
+build or device controls during research. Phone still LAST KNOWN0345; candidate
+0349 remains UNBOOTED, and existing no-audio-tonight instruction still applies.
+
+## Active handoff: verified0349 hardware candidate; SSH blocked (2026-11-19)
+
+The final candidate is PREPARED, NOT BOOTED. Branch codex/power-backlight-haptics
+contains0346 charger observations,0347 backlight ordering,0348 bounded native
+feedback and0349 failed-backlight-state invalidation. 0349 also fixes reversion
+to a previously successful brightness after an uncertain failed transfer.
+
+Candidate outputs/hardware/river-hardware-0349.img is27,168,768bytes/cmdline599.
+SHA9e1e80630e7eb85424f34fd08fe4beca5659137dc9c094c02361b1fc3bddf4b8.
+Kernel SHA65dfa0ecac4c6669d5ba12277e073b15ff418fc22c1e454cb313c9602b404efa,
+source5f082ba2fea73f9bb35f47e50aade9efe5669768. New isolated seed-copy build
+passed directly, including the workspace-only dsymutil diagnostics adaptation.
+Native manifest work/build/river-5f082ba2fea7-Gb7V3x/build-manifest.json.
+All applied C/C++/header source hashes match host-tested input snapshots.
+Combined UI/bridge SHA51c940fd789134e543fa6e382ce05721bcb53c3f3e51cb15509ebbb450146012.
+Preserves0345 UI source, renderer/camera/audio files and existing clock helper.
+Repack verifies every kernel segment and all unrelated RiverFiles data/metadata.
+Full0345rollback remains at the prior performance/batch345 artifact path,
+SHA5abd9cfbfe7aef83b9ea68dbd14e7a4eebc2b8b09f1caa66e62a42532f5e9415.
+Earlier0348candidate is SUPERSEDED/do-not-boot; final manifest selects0349.
+
+Host ASan/UBSan actual observer/poll, panel methods, haptic endpoint/play and
+ObjC hooks PASS, including failure/reversion. Legacy battery regression and
+UI/repack checks PASS; iOS16arm64 libraries/helper compile/signature PASS.
+Artifacts and host-source hash record: this Nov19 workspace outputs/hardware.
+
+Phone is LAST KNOWN0345. This session's read-only USB SSH was denied with
+Operation not permitted. No device action succeeded. No flash/reboot/hot deploy
+or audio init/enable/test occurred. Local source commits were not pushed.
+Next requires a session permitted to reach the device; verify product/hash,
+temporary boot only, confirm healthy home before brightness/feedback controls.
+Keep audio off per the existing no-audio-tonight instruction. Use HARDWARE.md
+for native-path/preference and battery cable/load checks. Neither full Core
+Haptics nor charging enable/thermal/MMI policy nor calibrated SOC is complete.
+
+## Active handoff: battery/backlight/native feedback candidate (2026-11-19)
+
+Branch `codex/power-backlight-haptics` starts from the locally verified river
+checkpoint3e868f2. Patches0346–0348 add read-only charger validity/publication,
+DSI backlight ordering/retry eligibility and an opt-in bounded AW8691 native
+feedback endpoint. Combined SpringBoard UI/bridge library preserves0345 UI
+source. UIKit generator coverage is a candidate, not full system/Core Haptics
+integration; charge enable/policy and learned SOC remain unfinished.
+
+ASan/UBSan host observer/poll, backlight, endpoint/play and actual ObjC hook
+checks PASS. Legacy battery regression and UI/repack tests PASS. iOS16 arm64
+bridge, combined UI library and status helper compile/signature PASS.
+Native kernel sourceec9445d built successfully in an isolated copy of the
+verified0342 job. Initial dSYM stderr filter was denied by the sandbox;
+executed the same dsymutil directly, renamed DWARF and resumed successfully.
+Kernel SHAb3c3a3efd29bd77b34915884c54fcd2ff448500e5bfbcde691f88feebcff5de7.
+Manifest: current workspace work/build/river-ec9445d13c1a-9MnR0q/native-build-complete.json.
+
+Phone remains LAST KNOWN0345. Read-only USB SSH attempt was denied by host
+session permissions (Operation not permitted); no device action succeeded,
+no reboot/flash/hot replace and no audio init/enable/test. Prepare/verify the
+0348 temporary image against exact0345 rollback before asking for fastboot.
+New candidate requires healthy-home confirmation then read-only reporting,
+brightness and cued native feedback checks. See HARDWARE.md. Keep artifacts,
+firmware, SSH credentials and captures outside Git. Current checkout is in
+this task's work/ios-river, not the earlier Nov12 checkout.
+
 ## Active handoff: image 0345 visuals pass; checkpoint before further work (2026-11-19)
 
 The user confirms Spotlight, the settled home-screen Search pill and folders

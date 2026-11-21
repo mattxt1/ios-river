@@ -8,6 +8,21 @@ An existing work directory or kernel is never silently reused. It uses a shared
 ccache, but cache hits and build speed depend on paths and toolchain versions.
 CI remains an independent reference.
 
+For an offline incremental build in a **new copy** of an existing local job,
+set `RIVER_LOCAL_BUILD_SEED` to that job. Its archived numbered patches must
+match an exact prefix of the current committed series. Historical jobs with
+incomplete archived incremental inputs additionally need
+`RIVER_LOCAL_BUILD_SEED_MANIFEST`: a successful native build manifest whose
+kernel SHA-256 and ancestor source revision verify. The helper compares all
+available old inputs and the complete committed prefix before applying only
+new patches. It records source and patch hashes. This is an incremental
+seed continuation, not a fresh upstream reproduction.
+
+The seed stays untouched. APFS clone copying is currently required; sufficient
+disk space is still needed for new objects/logs. A workspace-only adaptation
+runs the same `dsymutil` invocation with diagnostics visible directly, avoiding
+the upstream bash process-substitution filter that this host sandbox denies.
+
 ## Requirements
 
 - macOS with a full Xcode installation, its command-line tools, and sufficient

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Exercise the actual container editor's UI add/replace/fallback behavior."""
-import ast
+"""Exercise UI and Wi-Fi service changes in the actual container editor."""
+import importlib.util
 from pathlib import Path
 import struct
+import plistlib
 
 path = Path(__file__).with_name('river-repack-audio-diagnostics.py')
-tree = ast.parse(path.read_text())
-ns = {'struct': struct}
-exec(compile(ast.Module(body=[n for n in tree.body if isinstance(n, ast.FunctionDef)
-     and n.name in ('require', 'replace_helper')], type_ignores=[]), str(path), 'exec'), ns)
+spec = importlib.util.spec_from_file_location("river_repack_diagnostics", path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
 
 
 def pack(entries):
@@ -32,7 +32,7 @@ clock = b'/usr/local/bin/river-codec-clock'
 ui = b'/usr/local/lib/libcgprobe.dylib'
 other = b'/usr/local/bin/unrelated'
 base = pack([(clock, 0o755, b'clock', 7), (other, 0o700, b'unchanged', 9)])
-edit = ns['replace_helper']
+edit = module.replace_helper
 candidate = edit(base, b'clock', ui_library=b'candidate')
 assert unpack(candidate) == {**unpack(base), ui: (0o755, b'candidate', 0)}
 rollback = edit(candidate, b'clock', ui_library=b'original')
@@ -46,3 +46,36 @@ except ValueError:
 else:
     raise AssertionError('Duplicate UI library accepted')
 print('PASS actual UI library add/replace/rollback, duplicate rejection and unrelated file/metadata preservation')
+select=module.select_native_feedback
+assert select(b'rd=emmc0s64')==b'rd=emmc0s64 riverfeedback=1'
+assert len(select(b'x'*583))==599
+for invalid in [b'riverfeedback=0',b'rd=emmc0s64 riverfeedback=1',b'x'*592]:
+    try:select(invalid)
+    except ValueError:pass
+    else:raise AssertionError('Duplicate/overlength feedback command line accepted')
+print('PASS native feedback opt-in preserves existing command line and rejects duplicates/608-byte overflow')
+
+launchd_path = b'/System/Library/xpc/launchd.plist'
+autojoin_path = b'/usr/local/bin/river-wifi-autojoin'
+original_config = {'LaunchDaemons': {'existing': {'Label': 'existing'}}, 'BootTasks': ['keep']}
+with_launchd = pack([(clock, 0o755, b'clock', 7),
+                     (launchd_path, 0o644, plistlib.dumps(original_config), 8),
+                     (other, 0o700, b'unchanged', 9)])
+autojoin = edit(with_launchd, b'clock', wifi_autojoin=b'autojoin')
+files = unpack(autojoin)
+assert files[autojoin_path] == (0o755, b'autojoin', 0)
+assert files[other] == unpack(with_launchd)[other]
+assert files[launchd_path][::2] == (0o644, 8)
+config = plistlib.loads(files[launchd_path][1])
+job = config['LaunchDaemons'].pop('/System/Library/LaunchDaemons/org.river.wifi-autojoin.plist')
+assert job['ProgramArguments'] == [autojoin_path.decode()]
+assert job['RunAtLoad'] and job['KeepAlive']
+assert config == original_config
+for invalid in (base, autojoin):
+    try:
+        edit(invalid, b'clock', wifi_autojoin=b'autojoin')
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('Missing launchd or duplicate Wi-Fi auto-join job was accepted')
+print('PASS optional Wi-Fi auto-join job and helper with unrelated launchd jobs preserved')

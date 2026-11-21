@@ -1,8 +1,15 @@
 # Working on ios-river
 
-- Current image 0345: user confirms Spotlight, settled Search pill and folders
+- Read the newest NOTES.md and HARDWARE.md before device work. The agent
+  temporarily booted 0349 directly, and the user confirmed Home, navigation
+  and typing. Trusted Wi-Fi SSH worked when USB SSH was unreliable.
+  `RESUME-0349.md` records the historical pre-boot handoff and exact artifacts.
+  Continue in the Nov19 checkout on branch codex/power-backlight-haptics.
+  Exclude telephony from the current work.
+
+- On image 0345 the user confirmed Spotlight, settled Search pill and folders
   look good. No more audio testing tonight (November 19); do not initialize or
-  enable audio on this boot tonight. Latest clear/quicker playback/navigation
+  enable audio on 0349 tonight. Latest clear/quicker playback/navigation
   confirmation is 0344, whose enabled service ended at reboot. Record and push
   the checkpoint before further changes. Late home-screen icons remain open;
   no animation/FPS improvement claim. Read the newest NOTES.md handoff.

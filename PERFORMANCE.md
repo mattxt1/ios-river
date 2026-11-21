@@ -1,4 +1,128 @@
-# River performance: first combined candidate
+# River performance
+
+## Near-term priorities (November 19)
+
+1. Capture and eliminate recurring pauses in repeatable normal-use flows.
+   Spotlight's persistent freeze is the current case. Track Today View,
+   App Library and scroll deceleration separately.
+2. Measure presentation timing and evaluate a lower-resolution GPU-scaled
+   profile against the same gestures at the existing resolution. Log
+   individual presentation intervals and missed refreshes.
+3. Finish automatic audio and Wi-Fi startup and recovery.
+4. Complete normal brightness control, accurate battery and charging behavior,
+   and system haptics.
+5. Expand app compatibility through complete Files, media, notification and
+   sensor workflows.
+
+### Display fit
+
+Display fit is an explicit usability priority alongside presentation timing.
+The default River path crops the 1125×2436 iPhone X canvas to the 1080×2270
+panel. A centered aspect-preserving fit would display approximately
+1048×2270, with about 16 pixels per side. Validate the full canvas, edge touch
+and gestures, safe-area and notch placement, portrait and landscape, and
+lock/wake on device. Test the lower-resolution profile with the same fit and
+input transform so rendering load can be compared independently.
+
+The prior CPU probe fit a still frame but flickered during scrolling. The
+VIG0 test produced a blue screen. The A5xx scaler probe left its destination
+unchanged. See the October 23 display-fit entry in NOTES.md. These results
+favor validating a GPU composition pass and corresponding touch geometry
+before enabling a new display mode.
+
+
+### 0350 RGB fit candidate
+
+The 0350 image selects fit with `riverblit=2`. The existing A5xx copy writes
+logical layers into a cached 1125×2436 staging buffer and waits for its fence.
+The CPU resamples that owned buffer into the existing RGB flip buffer with
+an aspect-preserving 1048×2270 viewport. This keeps the old panel pipe and
+avoids reading the live render surface on the CPU. It handles successive
+partial logical layers with the same viewport. A failed layer leaves the
+last panel frame visible and requires a full layer to recover the staging
+buffer. The default `riverblit=1` crop stays available.
+
+The [Pixel 5 port's status-bar hook](https://github.com/DenialOfGravity/ios-redfin/blob/74fac586427ec79484eb1c9ba21a22c35341848c/phone/fps/SweetSB.m)
+moves UIKit's leading region because the Pixel hole is on the left.
+[River's cutout overlay](https://github.com/LineageOS/android_device_motorola_river/blob/f9b320caf51d7c75041d921ff63f9116f6065001/overlay/frameworks/base/core/res/res/values/config.xml)
+places the cutout at the top center with a maximum width of 160 px and a
+depth of 110 px. River retains UIKit's split status bar, with the clock
+in its left region. The stock 44-point portrait status-bar band maps
+to about 123 panel pixels in the fitted viewport. On 0350 the user confirmed
+clock clearance, both top and bottom edges visible, and restored physical
+touch after an earlier unresponsive period. Text appeared rougher with the
+nearest-neighbor fit. The agent verified left and right edge swipes into
+Spotlight and edge backdrop taps back to Home over Wi-Fi SSH.
+
+The replay now checks the running viewport before sending gestures.
+`gesture --from-state spotlight` allows an edge tap on a verified Spotlight
+backdrop to be tested as a transition to Home. Capture screenshots and
+presentation reports around each edge gesture. Software-injected touch
+verifies the transformed coordinates and iOS gesture behavior. A physical
+touch check verifies the actual digitizer's alignment.
+
+## River UI replay over SSH
+
+`tools/river-ui-replay.py` checks the installed SpringBoard library SHA,
+stages and verifies its private helper, and replays a mid-screen pull into
+Spotlight followed by a tap on the empty backdrop to return to Home. It uses a fresh
+framebuffer trace to pick the latest full-canvas, single-layer IOSurface.
+It saves a downsampled visual checkpoint and checks it against known Home
+and Spotlight reference frames. A mismatch or timed-out observation stops
+the flow and captures the kernel log, process list, userspace stacks and
+PID-scoped kernel stackshots. The runner never restarts services or the phone.
+A transport failure, an idle screen with no new presents, and a UI freeze
+are distinct outcomes. Inspect the evidence before classifying a failure.
+
+Build into a local work directory:
+
+```sh
+xcrun --sdk iphoneos clang -arch arm64 -miphoneos-version-min=16.0 \
+  -Wall -Wextra -Werror phone-tools/river-ui-replay.c \
+  -framework IOKit -framework CoreFoundation -framework IOSurface -lz \
+  -o "$RIVER_REPLAY_WORK/river-ui-replay"
+codesign -s - --entitlements phone-tools/river-ui-replay-ents.plist \
+  "$RIVER_REPLAY_WORK/river-ui-replay"
+codesign --verify "$RIVER_REPLAY_WORK/river-ui-replay"
+```
+
+Run from the repo with River awake and unlocked. Use trusted SSH and a new
+private capture directory. Use the `observe` mode with no reference arguments
+to collect new reference frames and verify their states visually. A quiet
+screen may require capturing immediately after it changes. Save the exact
+Home layout and Spotlight with the keyboard visible at a matching theme and
+orientation. References and captures may contain private screen content.
+
+```sh
+python3 tools/river-ui-replay.py spotlight --runs 2 \
+  --helper "$RIVER_REPLAY_WORK/river-ui-replay" \
+  --identity /Users/matttyson/Developer/Codex/.device-ssh/id_ed25519 \
+  --home-reference "$RIVER_REPLAY_WORK/home.pgm" \
+  --spotlight-reference "$RIVER_REPLAY_WORK/spotlight.pgm" \
+  --output "$RIVER_REPLAY_WORK/replay-01"
+```
+
+Use `--confirmed-home` only after a fresh physical Home observation. It covers
+the case where idle Home produces no new frame. Use `capture` for read-only
+diagnostics without reference images. Wi-Fi is the default trusted SSH
+transport. Use `--host 192.168.7.2` when USB SSH is healthy.
+
+For edge checks, use the `gesture` mode with `--points X Y X2 Y2 MS` and
+`--expect home|spotlight`. The points are physical 1080×2270 panel pixels.
+Equal endpoints produce a tap. A gesture starting within 48 pixels of an
+edge carries the digitizer edge flag. Crop is the 0349 default. The separate
+`--viewport fit` transform is for a candidate using the centered 1048×2270
+fit. Selecting it in the runner does not change the phone's display mode.
+An unchanged screen with the expected baseline does not prove a tap landed.
+Use a visible state change or a calibration target for that check.
+
+For physical-panel video, aim a Mac-connected camera at River and pass its
+AVFoundation video index with `--camera INDEX`. List the inputs with
+`ffmpeg -f avfoundation -list_devices true -i ""`. The runner records silent
+H.264 to `panel.mp4` and writes host UTC gesture and camera markers to
+`events.jsonl`. Use the camera to check clipping and physical touch alignment.
+Frame comparisons inside the runner use logical compositor pixels and the
+presentation trace describes attempts. Neither measures the physical panel.
 
 ## Current checkpoint: image 0345, November 19
 

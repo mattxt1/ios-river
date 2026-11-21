@@ -11,6 +11,7 @@ import json
 import os
 import re
 from pathlib import Path
+import plistlib
 import struct
 import tempfile
 
@@ -18,7 +19,18 @@ import adt
 import mkpayload
 from river_camera_service import validate_capture_removal
 
+WIFI_AUTOJOIN_PATH = b'/usr/local/bin/river-wifi-autojoin'
+LAUNCHD_PATH = b'/System/Library/xpc/launchd.plist'
+
 NAMES = ('RiverGPUFW', 'RiverWCNSSMeta', 'RiverWCNSSImage', 'RiverWCNSSNV', 'RiverFiles')
+
+
+def select_native_feedback(cmdline):
+    tokens = cmdline.split(b' ')
+    require(not any(t.startswith(b'riverfeedback=') for t in tokens), 'Native feedback mode already specified')
+    result = cmdline + b' riverfeedback=1'
+    require(len(result) < 608, 'Native feedback command line exceeds fixed field')
+    return result
 
 
 def select_renderer(cmdline, name):
@@ -45,7 +57,26 @@ def require(condition, message):
         raise ValueError(message)
 
 
-def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None, network_state=None, ipconfig=None, wifi_check=None, launchd=None, ui_library=None):
+def with_wifi_autojoin(launchd):
+    config = plistlib.loads(launchd)
+    label = 'org.river.wifi-autojoin'
+    path = f'/System/Library/LaunchDaemons/{label}.plist'
+    jobs = config['LaunchDaemons']
+    require(path not in jobs, 'Wi-Fi auto-join job is already present')
+    jobs[path] = {
+        'Label': label,
+        'ProgramArguments': [WIFI_AUTOJOIN_PATH.decode('ascii')],
+        'UserName': 'root',
+        'RunAtLoad': True,
+        'KeepAlive': True,
+        'ThrottleInterval': 60,
+        'StandardOutPath': '/private/var/tmp/river-wifi-autojoin.log',
+        'StandardErrorPath': '/private/var/tmp/river-wifi-autojoin.log',
+    }
+    return plistlib.dumps(config, fmt=plistlib.FMT_BINARY, sort_keys=False)
+
+
+def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None, network_state=None, ipconfig=None, wifi_check=None, launchd=None, ui_library=None, wifi_autojoin=None):
     require(blob[:8] == b'RIVFILES', 'Invalid RiverFiles magic')
     count, = struct.unpack_from('<I', blob, 8)
     require(count <= 64 and 12 + count * 128 <= len(blob), 'Invalid file table')
@@ -67,11 +98,13 @@ def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None, ne
             ui_found += 1
             if ui_library is not None:
                 data = ui_library
-        if name.split(b'\0')[0] == b'/System/Library/xpc/launchd.plist':
+        if name.split(b'\0')[0] == LAUNCHD_PATH:
             launchd_found += 1
             if launchd is not None:
                 validate_capture_removal(data, launchd)
                 data = launchd
+            if wifi_autojoin is not None:
+                data = with_wifi_autojoin(data)
         if name.split(b'\0')[0] == b'/usr/local/bin/river-codec-clock':
             found += 1
             data = replacement
@@ -104,8 +137,12 @@ def replace_helper(blob, replacement, adsp=None, wifi_monitor=None, net=None, ne
     require(ui_found <= 1, 'Duplicate UI library')
     if ui_library is not None and not ui_found:
         entries.append((b'/usr/local/lib/libcgprobe.dylib', 0o755, ui_library, 0))
-    if launchd is not None:
+    if launchd is not None or wifi_autojoin is not None:
         require(launchd_found == 1, 'Expected exactly one existing launchd configuration')
+    if wifi_autojoin is not None:
+        require(not any(name.split(b'\0')[0] == WIFI_AUTOJOIN_PATH for name, _, _, _ in entries),
+                'Wi-Fi auto-join helper is already present')
+        entries.append((WIFI_AUTOJOIN_PATH, 0o755, wifi_autojoin, 0))
     require(adsp_found <= 1, 'Duplicate ADSP helper')
     if adsp is not None and not adsp_found:
         entries.append((b'/usr/local/bin/river-adsp-status', 0o755, adsp, 0))
@@ -145,11 +182,15 @@ def main():
                     help='Optional launchd configuration changing only the disabled capture-source advertisement')
     ap.add_argument('--ui-library', type=Path, help='Optional signed arm64 UI library; installs at its existing SpringBoard load path')
     ap.add_argument('--ui-library-sha256', help='Required exact fingerprint when carrying a UI library')
+    ap.add_argument('--rgb-display-fit', action='store_true',
+                    help='Select the RGB scanout fit mode of a fit-capable River kernel')
+    ap.add_argument('--native-feedback', action='store_true', help='Opt in to the combined native hardware bridge (requires a bridge-bearing UI library)')
     ap.add_argument('--adsp-helper', type=Path)
     ap.add_argument('--wifi-check-helper', type=Path, help='Optional bounded connectivity probe')
     ap.add_argument('--ipconfig-helper', type=Path, help='Optional read-only native DHCP/media reader')
     ap.add_argument('--network-state-helper', type=Path, help='Optional read-only kernel/SC state reader')
     ap.add_argument('--net-helper', type=Path, help='Optional existing Wi-Fi daemon with publication observations')
+    ap.add_argument('--wifi-autojoin-helper', type=Path, help='Install the opt-in saved-network startup service')
     ap.add_argument('--wifi-monitor-helper', type=Path, help='Optional bounded read-only Wi-Fi monitor diagnostics')
     ap.add_argument('--msgbuf-bytes', type=int, choices=(131072, 262144, 1048576),
                     help='Optional bounded kernel log buffer for temporary diagnostics')
@@ -174,6 +215,14 @@ def main():
         require(size <= vs and off + size <= len(prior), 'Invalid payload segment')
     cmdline = prior[0x48:0x2a8].split(b'\0')[0]
     require(len(cmdline) < 608 and b'rd=emmc0s64' in cmdline, 'Unexpected command line')
+    if args.native_feedback:
+        require(args.ui_library is not None, 'Native feedback requires the combined UI/bridge library')
+        cmdline = select_native_feedback(cmdline)
+    if args.rgb_display_fit:
+        tokens = cmdline.split(b' ')
+        require([token for token in tokens if token.startswith(b'riverblit=')] == [b'riverblit=1'],
+                'Expected one standard River GPU present argument')
+        cmdline = b' '.join(b'riverblit=2' if token == b'riverblit=1' else token for token in tokens)
     if args.renderer_library_name is not None:
         cmdline = select_renderer(cmdline, args.renderer_library_name)
     if args.msgbuf_bytes is not None:
@@ -236,7 +285,12 @@ def main():
         require(len(ui_library) >= 32 and ui_library[:8] == bytes.fromhex('cffaedfe0c000001') and
                 struct.unpack_from('<I', ui_library, 12)[0] == 6, 'Expected arm64 Mach-O UI dylib')
         require(digest(ui_library) == args.ui_library_sha256.lower(), 'UI library fingerprint mismatch')
-    blobs['RiverFiles'] = replace_helper(prior_files, replacement, adsp_helper, wifi_helper, net_helper, network_state, ipconfig, wifi_check, launchd, ui_library)
+    wifi_autojoin = args.wifi_autojoin_helper.read_bytes() if args.wifi_autojoin_helper else None
+    if wifi_autojoin is not None:
+        require(wifi_autojoin[:8] == bytes.fromhex('cffaedfe0c000001'), 'Expected arm64 Wi-Fi auto-join helper')
+    blobs['RiverFiles'] = replace_helper(prior_files, replacement, adsp_helper, wifi_helper,
+                                       net_helper, network_state, ipconfig, wifi_check, launchd,
+                                       ui_library, wifi_autojoin)
     # Compare the actual containers: every unrelated file and metadata survives.
     def files(blob):
         result = {}
@@ -248,8 +302,12 @@ def main():
         return result
     before, after = files(prior_files), files(blobs['RiverFiles'])
     changed = {b'/usr/local/bin/river-codec-clock': replacement}
-    if launchd is not None:
-        changed[b'/System/Library/xpc/launchd.plist'] = launchd
+    if wifi_autojoin is not None:
+        changed[WIFI_AUTOJOIN_PATH] = wifi_autojoin
+        changed[LAUNCHD_PATH] = with_wifi_autojoin(launchd if launchd is not None else before[LAUNCHD_PATH][2])
+        require(after[WIFI_AUTOJOIN_PATH][:2] == (0o755, 0), 'Unexpected Wi-Fi helper metadata')
+    elif launchd is not None:
+        changed[LAUNCHD_PATH] = launchd
     if ui_library is not None:
         changed[b'/usr/local/lib/libcgprobe.dylib'] = ui_library
     for name, data in [(b'/usr/local/bin/river-adsp-status', adsp_helper),
@@ -309,12 +367,18 @@ def main():
                     cmdline_bytes=len(cmdline), kernel_payload_segments_verified=True,
                     clock_helper_sha256=digest(replacement), temporary_boot_only=True)
     manifest['unrelated_riverfiles_verified'] = True
+    manifest['native_hardware_bridge_opt_in'] = b'riverfeedback=1' in cmdline.split()
+    if args.rgb_display_fit:
+        manifest['rgb_display_fit'] = True
     if ui_library is not None:
         manifest['ui_library_sha256'] = digest(ui_library)
         manifest['ui_library_path'] = '/usr/local/lib/libcgprobe.dylib'
     if launchd is not None:
         manifest['camera_launchd_sha256'] = digest(launchd)
-        manifest['only_capture_source_advertisement_changed'] = True
+        manifest['only_capture_source_advertisement_changed'] = wifi_autojoin is None
+    if wifi_autojoin is not None:
+        manifest['wifi_autojoin_helper_sha256'] = digest(wifi_autojoin)
+        manifest['wifi_autojoin_launchd_sha256'] = digest(after[LAUNCHD_PATH][2])
     if args.renderer_library_name is not None:
         manifest['staged_renderer_path'] = '/usr/local/lib/' + args.renderer_library_name
     if wifi_check is not None:

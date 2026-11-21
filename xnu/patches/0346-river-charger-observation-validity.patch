@@ -1,0 +1,220 @@
+diff --git a/bsd/dev/river_battery.h b/bsd/dev/river_battery.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/river_battery.h
+@@ -0,0 +1,18 @@
++/* River read-only QG/SMB5 observation. No charger policy writes. */
++#ifndef RIVER_BATTERY_H
++#define RIVER_BATTERY_H
++#include <stdbool.h>
++struct river_battery_observation {
++ unsigned mv, soc;
++ int ma;
++ unsigned path, state, error, temperature, modes, command;
++ bool external, capable, charging, full;
++};
++#ifdef __cplusplus
++extern "C" {
++#endif
++bool river_battery_observe(struct river_battery_observation *out);
++#ifdef __cplusplus
++}
++#endif
++#endif
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -4,6 +4,7 @@
+  */
+ #if defined(RIVER)
+ #include <sys/param.h>
++#include "river_battery.h"
+ #include <sys/sysctl.h>
+ #include <sys/random.h>
+ #include <kern/locks.h>
+@@ -3636,70 +3637,86 @@
+  return 0;
+ }
+ 
+-/* River hardware battery reading function.
+- * Thread-safe with atomic ri_power_busy exclusion. No PMIC writes.
+- * Reads 4-byte last ADC (V and I in single atomic SPMI burst), DCDC path and CHGR status.
+- * Voltage is converted using Motorola's 194637/1000 uV per count.
+- * Current is converted using Motorola's 152588/1000 uA per count.
+- * Apple IOPMPowerSource convention: negative mA = discharging, positive mA = charging. */
++/* Serialize mapping and every observation. Read-only register snapshots;
++ * neither the SPMI burst nor the bracket check freezes the QG ADC hardware.
++ * A changed cable/state rejects the frame rather than mixing transitions. */
+ bool
+-river_battery_sample(unsigned *out_mv, int *out_ma, bool *out_external, bool *out_charging, bool *out_full, unsigned *out_soc)
+-{
++river_battery_observe(struct river_battery_observation *out)
++{
++ if (!out) return false;
++ int expected = 0;
++ if (!__atomic_compare_exchange_n(&ri_power_busy, &expected, 1, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) return false;
++ bool ok = false, input = false, blocked = false;
++ struct river_battery_observation sample = {0};
++ uint32_t vi = 0, path_after = 0, state_after = 0;
+  if (!ri_power_qg || !ri_charge_chgr || !ri_charge_dcdc) {
+   vm_offset_t core = ri_map(0x0200f000);
+-  if (!core) return false;
++  if (!core) goto done;
+   if (!ri_power_qg) ri_power_qg = ri_spmi_obs(core, 0x248);
+   if (!ri_charge_chgr) ri_charge_chgr = ri_spmi_obs(core, 0x210);
+   if (!ri_charge_dcdc) ri_charge_dcdc = ri_spmi_obs(core, 0x211);
+-  if (!ri_power_usb) ri_power_usb = ri_spmi_obs(core, 0x213);
+-  if (!ri_power_qg || !ri_charge_chgr || !ri_charge_dcdc) return false;
+- }
+- int expected = 0;
+- if (!__atomic_compare_exchange_n(&ri_power_busy, &expected, 1, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) return false;
+- uint32_t vi_pair = 0, path = 0, chg_stat = 0;
+- bool ok = ri_power_read(ri_power_qg, 0xc0, 4, &vi_pair) &&
+-           ri_power_read(ri_charge_dcdc, 0x0b, 1, &path) &&
+-           ri_power_read(ri_charge_chgr, 0x06, 1, &chg_stat);
++  if (!ri_power_qg || !ri_charge_chgr || !ri_charge_dcdc) goto done;
++ }
++ if (!ri_power_read(ri_charge_dcdc, 0x0b, 1, &sample.path) ||
++     !ri_power_read(ri_charge_chgr, 0x06, 1, &sample.state) ||
++     !ri_power_read(ri_power_qg, 0xc0, 4, &vi) ||
++     !ri_power_read(ri_charge_chgr, 0x07, 1, &sample.error) ||
++     !ri_power_read(ri_charge_chgr, 0x0d, 1, &sample.temperature) ||
++     !ri_power_read(ri_charge_chgr, 0x0b, 1, &sample.modes) ||
++     !ri_power_read(ri_charge_chgr, 0x42, 1, &sample.command) ||
++     !ri_power_read(ri_charge_chgr, 0x06, 1, &state_after) ||
++     !ri_power_read(ri_charge_dcdc, 0x0b, 1, &path_after)) goto done;
++ if (sample.path != path_after || sample.state != state_after) goto done;
++ {
++  uint32_t vr = vi & 0xffffu, ir = vi >> 16;
++  if (vr == 0 || vr == 0x8000u || ir == 0x8000u) goto done;
++  sample.mv = (unsigned)((194637ULL * vr) / 1000000ULL);
++  if (sample.mv < 2800 || sample.mv > 4600) goto done;
++  int32_t signed_ir = ir < 0x8000u ? (int32_t)ir : (int32_t)ir - 65536;
++  sample.ma = -(int)((152588LL * signed_ir) / 1000000LL);
++ }
++ /* SMB5 POWER_PATH: valid source plus USB/DC in use. USB suspend does not
++  * invalidate a separately active DC path. SOFT JEITA limits may still charge;
++  * hard HOT/COLD/AFP bits and battery overvoltage preclude a capable report.
++  * This says nothing about learned capacity or unimplemented MMI voters. */
++ sample.external = (sample.path & 1u) && (sample.path & 0x18u);
++ input = (sample.path & 8u) || ((sample.path & 0x10u) && !(sample.path & 0x40u));
++ blocked = (sample.error & 2u) || (sample.temperature & 0x0fu);
++ sample.capable = sample.external && input && !blocked && (sample.command & 1u);
++ sample.state &= 7u;
++ sample.charging = sample.capable && (sample.modes & 7u) && sample.state >= 1u && sample.state <= 4u;
++ sample.full = sample.external && !blocked && sample.state == 5u;
++ sample.soc = sample.full ? 100 : jg30_estimate_soc(sample.mv, sample.ma);
++ *out = sample;
++ ok = true;
++done:
+  __atomic_store_n(&ri_power_busy, 0, __ATOMIC_RELEASE);
+- uint16_t v_raw = (uint16_t)(vi_pair & 0xffffu);
+- uint16_t i_raw = (uint16_t)((vi_pair >> 16) & 0xffffu);
+- /* Current is needed for the discharge load compensation. A reset/invalid
+-  * current is not a measured zero and must not silently change the SOC
+-  * estimator's input. Keep the previous whole sample until VI is complete. */
+- if (!ok || v_raw == 0x8000u || v_raw == 0 || i_raw == 0x8000u) return false;
+- uint32_t uv = (uint32_t)((194637ULL * (uint64_t)v_raw) / 1000);
+- unsigned mv = uv / 1000;
+- if (mv < 2800 || mv > 4600) return false;
+- int ma = 0;
+- if (i_raw != 0x8000u) {
+-  int32_t signed_ir = (i_raw & 0x8000u) ? (int32_t)i_raw - 65536 : (int32_t)i_raw;
+-  int32_t ua = (int32_t)((152588LL * signed_ir) / 1000);
+-  ma = -(int)(ua / 1000);
+- }
+- bool ext = (path & 0x10u) && (path & 0x01u);
+- uint32_t st = chg_stat & 7u;
+- /* DISABLE_CHARGE(7) is an observation, not a request to enable charging.
+-  * Polling and diagnostic reads must not override charger policy. */
+- bool chg = ext && (st >= 1u && st <= 4u);
+- bool full = ext && (st == 5u);
+- unsigned soc = full ? 100 : jg30_estimate_soc(mv, ma);
+- if (out_mv) *out_mv = mv;
+- if (out_ma) *out_ma = ma;
+- if (out_external) *out_external = ext;
+- if (out_charging) *out_charging = chg;
+- if (out_full) *out_full = full;
+- if (out_soc) *out_soc = soc;
++ return ok;
++}
++
++bool
++river_battery_sample(unsigned *out_mv, int *out_ma, bool *out_external, bool *out_charging, bool *out_full, unsigned *out_soc)
++{
++ struct river_battery_observation sample;
++ if (!river_battery_observe(&sample)) return false;
++ if (out_mv) *out_mv = sample.mv;
++ if (out_ma) *out_ma = sample.ma;
++ if (out_external) *out_external = sample.external;
++ if (out_charging) *out_charging = sample.charging;
++ if (out_full) *out_full = sample.full;
++ if (out_soc) *out_soc = sample.soc;
+  return true;
+ }
+ 
+ static int
+ river_battery_sysctl SYSCTL_HANDLER_ARGS
+ {
+- unsigned mv = 0, soc = 0; int ma = 0; bool ext = false, chg = false, full = false;
+- if (!river_battery_sample(&mv, &ma, &ext, &chg, &full, &soc)) return EIO;
+- char note[160];
+- snprintf(note, sizeof(note), "voltage_mv=%u amperage_ma=%d external=%d charging=%d full=%d soc=%u",
+-     mv, ma, ext, chg, full, soc);
++ struct river_battery_observation sample;
++ if (!river_battery_observe(&sample)) return EIO;
++ char note[320];
++ snprintf(note, sizeof(note), "voltage_mv=%u amperage_ma=%d external=%d charging=%d full=%d soc=%u capable=%d path=%#x state=%u error=%#x temp_status=%#x modes=%#x command=%#x estimated=1",
++     sample.mv, sample.ma, sample.external, sample.charging, sample.full, sample.soc,
++     sample.capable, sample.path, sample.state, sample.error, sample.temperature, sample.modes, sample.command);
+  return sysctl_handle_string(oidp, note, 0, req);
+ }
+ SYSCTL_PROC(_debug, OID_AUTO, river_battery, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
+diff --git a/iokit/Kernel/arm/SweetBattery.cpp b/iokit/Kernel/arm/SweetBattery.cpp
+--- a/iokit/Kernel/arm/SweetBattery.cpp
++++ b/iokit/Kernel/arm/SweetBattery.cpp
+@@ -12,6 +12,9 @@
+ #include <IOKit/pwr_mgt/IOPMPowerSource.h>
+ #include <libkern/c++/OSCollectionIterator.h>
+ #include <pexpert/pexpert.h>
++#if defined(RIVER)
++#include "../../../bsd/dev/river_battery.h"
++#endif
+ /* bsd/dev/sweet_spmi.c */
+ extern "C" int sweet_spmi_init(void);
+ extern "C" int sweet_spmi_read(unsigned sid, unsigned addr, uint8_t *out);
+@@ -343,8 +346,8 @@
+ {
+ 	unsigned mv = 0, soc = 0;
+ 	int ma = 0;
+-	bool external = true, charging = false, full = false;
+-	bool ok = river_battery_sample(&mv, &ma, &external, &charging, &full, &soc);
++	struct river_battery_observation sample;
++	bool ok = river_battery_observe(&sample);
+ 	if (!ok) {
+ 		/* A busy observer or failed/incomplete VI read does not establish a
+ 		 * new capacity, cable state or charging state. Preserve all last
+@@ -357,6 +360,14 @@
+ 		updateStatus();
+ 		return false;
+ 	}
++	mv = sample.mv; ma = sample.ma; soc = sample.soc;
++	bool external = sample.external, charging = sample.charging, full = sample.full;
++	putNumber("RiverChargerState", sample.state);
++	putNumber("RiverChargerError", sample.error);
++	putNumber("RiverChargerTemperatureStatus", sample.temperature);
++	putNumber("RiverChargerModes", sample.modes);
++	putNumber("RiverChargerCommand", sample.command);
++	putNumber("RiverPowerPath", sample.path);
+ 	int override_pct = -1;
+ 	unsigned percent = 0;
+ 	if (PE_parse_boot_argn("riverbattery_override", &override_pct, sizeof(override_pct)) &&
+@@ -368,7 +379,7 @@
+ 	fRiverHasSample = true;
+ 	putBool("SweetBatterySampleAvailable", true);
+ 	putBool("SweetBatterySampleStale", false);
+-	publish(percent, mv, ma, external, external, charging, full, true, true);
++	publish(percent, mv, ma, external, sample.capable, charging, full, true, true);
+ 	static unsigned river_logs;
+ 	if (river_logs++ % 10 == 0) {
+ 		IOLog("SWEET BATTERY: river %u%% %umV %dmA external=%d charging=%d full=%d\n",

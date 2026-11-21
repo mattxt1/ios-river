@@ -1,0 +1,14 @@
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -889,7 +889,9 @@
+ 	bool done = dsiDcsLong(cmd, sizeof(cmd));
+ #if defined(RIVER)
+ 	IOLockLock(fLock);
+-	if (done) fBlSent = level; /* failed DMA must remain eligible for retry */
++	/* A failed completion leaves the actual panel state unknown. Invalidate
++	 * even the old level so reverting to it still performs a transfer. */
++	fBlSent = done ? level : ~0u;
+ 	IOLockUnlock(fLock);
+ #endif
+ 	IOLockUnlock(fBlLock);

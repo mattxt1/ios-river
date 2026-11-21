@@ -1,5 +1,17 @@
 # River battery and charging status
 
+**November 19 candidate, patch0346 (not booted):** charger observation now
+reads errors, temperature status, enabled modes and enable-command state,
+with cable/state brackets around the VI/status reads. IOKit publishes raw
+`RiverCharger*`/`RiverPowerPath` fields and separates external power from
+enabled charge capability. Hard temperature/AFP or overvoltage blocks a
+capable/charging/full report; soft JEITA limits alone do not. Missing mode
+or enable bits prevents a charging claim. Nine read-failure positions and
+transition/fault/mode/command/suspend/DC cases pass host fault injection.
+The current estimator and fixed estimated temperature are unchanged. No
+charger writes or automatic enable policy were added. See
+[HARDWARE.md](HARDWARE.md) for scope, limits and device validation.
+
 Updated 2026-11-13. Source audit baseline: applied kernel in build `river-b90f2d1a5c76-Dw0M2o`, with battery implementation introduced by [patch0267](xnu/patches/0267-river-battery-jg30-power-source.patch). The source audit used host tests; subsequent device observations are recorded below. Host reproductions establish code defects; they do not establish which defect caused each percentage jump seen on the device.
 
 **Build/boot update, 2026-11-13:** full XNU build through0289–0291 passed

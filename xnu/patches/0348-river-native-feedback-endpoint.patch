@@ -1,0 +1,127 @@
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -59,7 +59,10 @@
+ static LCK_MTX_DECLARE(ri_qup2_lock, &ri_qup2_grp);
+ static bool ri_haptics_ok;
+ static uint64_t ri_vib_deadline;
+-static int ri_vib_request = -1; /* sysctl mailbox; only input worker touches QUP2 */
++static int ri_vib_request = -1; /* packed gain/duration; input worker owns AW8691 */
++static int ri_native_feedback;
++SYSCTL_INT(_debug, OID_AUTO, river_native_feedback, CTLFLAG_RD | CTLFLAG_LOCKED, &ri_native_feedback, 0, "River native hardware bridge mode");
++static void river_haptic_play(unsigned ms, unsigned gain);
+ void river_haptics_init(void);
+ void river_vibrate(unsigned ms);
+ static LCK_GRP_DECLARE(ri_speaker_grp, "river-speaker-control");
+@@ -3346,7 +3349,7 @@
+  for (;;) {
+   if (__atomic_exchange_n(&ri_torch_request, 0, __ATOMIC_ACQUIRE)) river_torch_pulse();
+   int request = __atomic_exchange_n(&ri_vib_request, -1, __ATOMIC_ACQUIRE);
+-  if (request >= 0) river_vibrate((unsigned)request);
++  if (request >= 0) river_haptic_play((unsigned)request & 0xffffu, (unsigned)request >> 16);
+   if (ri_vib_deadline && mach_absolute_time() >= ri_vib_deadline) river_vibrate(0);
+   uint8_t pon=0;
+   bool pok=ri_pon(&pon);
+@@ -3357,7 +3360,7 @@
+   }
+   int now[3]={!!(pon&1),vol_ok ? !(ri_rd(ri_key,0x1004)&1) : 0,!!(pon&2)};
+   for (int k=0;k<3;k++) if((k==1?vol_ok:pok) && now[k]!=keys[k]) {
+-   if (now[k]) river_vibrate(35);
++   if (now[k] && !ri_native_feedback) river_vibrate(35);
+    keys[k]=now[k]; sweet_hid_key(k,now[k]);
+   }
+   /* Novatek's INT is a per-frame pulse (Linux: IRQ_TYPE_EDGE_RISING), so a
+@@ -3390,7 +3393,7 @@
+      if (id<1 || id>10 || (state!=1 && state!=2)) continue;
+      unsigned x=(data[p+1]<<4)|(data[p+3]>>4),y=(data[p+2]<<4)|(data[p+3]&15);
+      if (x>=1080 || y>=2270) continue;
+-     if (!down[id-1]) river_vibrate(25);
++     if (!down[id-1] && !ri_native_feedback) river_vibrate(25);
+      seen[id-1]=true; sweet_hid_touch(id-1,1,x,y);
+     }
+     for(unsigned i=0;i<10;i++) {if(down[i]&&!seen[i]) sweet_hid_touch(i,0,0,0);down[i]=seen[i];}
+@@ -4158,6 +4161,9 @@
+ {
+  int enabled = 1;
+  (void)PE_parse_boot_argn("riverhaptics", &enabled, sizeof(enabled));
++ int native = 0;
++ (void)PE_parse_boot_argn("riverfeedback", &native, sizeof(native));
++ ri_native_feedback = native == 1;
+  if (!enabled) return;
+ 
+  if (!ri_gcc_vote || !ri_gcc_ahb) return;
+@@ -4259,18 +4265,20 @@
+  printf("RIVER HAPTICS: configuration/upload failed; haptics withheld\n");
+ }
+ 
+-void
+-river_vibrate(unsigned ms)
+-{
+- if (!ri_haptics_ok || !ri_qup2) return;
+- if (ms == 0) {
++static void
++river_haptic_play(unsigned ms, unsigned gain)
++{
++ if (!__atomic_load_n(&ri_haptics_ok, __ATOMIC_ACQUIRE) || !ri_qup2) return;
++ if (ms > 1000) ms = 1000;
++ if (gain > 0x28) gain = 0x28; /* never exceed the previously verified drive */
++ if (ms == 0 || gain == 0) {
+   if (!ri_aw_wr(0x04, 0x01)) __atomic_store_n(&ri_haptics_ok, false, __ATOMIC_RELEASE);
+   ri_vib_deadline = 0;
+   return;
+  }
+  if (!ri_aw_wr(0x07, 0x01)) goto play_failed;
+  if (!ri_aw_wr(0x08, 0x00)) goto play_failed;
+- if (!ri_aw_wr(0x39, ms > 50 ? 0x28 : 0x20)) goto play_failed;
++ if (!ri_aw_wr(0x39, (uint8_t)gain)) goto play_failed;
+  if (!ri_aw_wr(0x04, 0x20)) goto play_failed;
+  if (!ri_aw_wr(0x02, 0xff)) goto play_failed;
+  if (!ri_aw_wr(0x05, 0x01)) goto play_failed;
+@@ -4285,6 +4293,12 @@
+  __atomic_store_n(&ri_haptics_ok, false, __ATOMIC_RELEASE);
+ }
+ 
++void
++river_vibrate(unsigned ms)
++{
++ river_haptic_play(ms, ms > 50 ? 0x28 : 0x20);
++}
++
+ static int
+ river_vibrate_sysctl SYSCTL_HANDLER_ARGS
+ {
+@@ -4293,11 +4307,33 @@
+  if (error || !req->newptr) return error;
+  if (val < 0 || val > 1000) return EINVAL;
+  if (!__atomic_load_n(&ri_haptics_ok, __ATOMIC_ACQUIRE)) return ENXIO;
+- __atomic_store_n(&ri_vib_request, val, __ATOMIC_RELEASE);
++ unsigned gain = val > 50 ? 0x28u : 0x20u;
++ __atomic_store_n(&ri_vib_request, val ? (int)((gain << 16) | (unsigned)val) : 0, __ATOMIC_RELEASE);
+  return 0;
+ }
+ SYSCTL_PROC(_debug, OID_AUTO, river_vibrate, CTLTYPE_INT | CTLFLAG_RW | CTLFLAG_LOCKED,
+             NULL, 0, river_vibrate_sysctl, "I", "River haptic vibrate");
++/* Bounded native feedback endpoint. Read returns readiness only, without
++ * touching hardware. Write packs gain in bits16..21 and duration in bits0..15.
++ * The normal iOS UI runs as mobile: permit bounded feedback without root.
++ * No MMIO occurs on the caller; the existing worker serializes QUP2 access.
++ * Zero is stop; last request wins. This is a pulse approximation, not an
++ * Apple Core Haptics waveform/audio renderer or a playback acknowledgement. */
++static int
++river_haptic_sysctl SYSCTL_HANDLER_ARGS
++{
++ int value = ri_native_feedback && __atomic_load_n(&ri_haptics_ok, __ATOMIC_ACQUIRE);
++ int error = sysctl_handle_int(oidp, &value, 0, req);
++ if (error || !req->newptr) return error;
++ if (!ri_native_feedback || !__atomic_load_n(&ri_haptics_ok, __ATOMIC_ACQUIRE)) return ENXIO;
++ unsigned ms = (unsigned)value & 0xffffu, gain = (unsigned)value >> 16;
++ if (value < 0 || ms > 1000 || gain > 0x28 || (ms && !gain) || (!ms && gain)) return EINVAL;
++ __atomic_store_n(&ri_vib_request, value, __ATOMIC_RELEASE);
++ return 0;
++}
++SYSCTL_PROC(_debug, OID_AUTO, river_haptic, CTLTYPE_INT | CTLFLAG_RW | CTLFLAG_ANYBODY | CTLFLAG_LOCKED,
++            NULL, 0, river_haptic_sysctl, "I", "River bounded native feedback pulse (gain<<16 | ms), zero stops");
++
+ static bool
+ ri_cs35l41_rd(uint32_t reg, uint32_t *val)
+ {
